@@ -21,13 +21,13 @@ ex) int a; int b=10;
 |boolean|논리값|-|
 
 ### 조건문
-if(조건){}
+if(조건){}  
 switch{case 1:}
 
 ### 반복문
-for(반복조건){}
-while(조건) {}
-
+for(반복조건){}  
+while(조건) {}  
+  
 break, continue도 마찬가지로 작동
 
 ### 함수

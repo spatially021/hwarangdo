@@ -113,7 +113,7 @@ do{
 **예시**
 
 ```c++
-func int add(int a, int b){
+func add(int a, int b){
     return a + b;
 }
 

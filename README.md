@@ -225,7 +225,7 @@ hwaranggeom build main.hs
 
 ```c++
 class Main{
-    int main(){
+    public void main(){
         print("hello world");
     }
 }

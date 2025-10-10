@@ -85,10 +85,6 @@ for(int i=0; i<10; i++){
 while(조건){
     // 코드
 }
-
-do{
-    // 코드
-} while(조건);
 ```
 
 * `break`, `continue` 정상 동작
@@ -228,8 +224,9 @@ hwaranggeom build main.hs
 ### Hello World 예시
 
 ```c++
-func void main() {
-    string name = "HwarangGeom";
-    print("Hello, " + name);
+class Main{
+    int main(){
+        print("hello world");
+    }
 }
 ```

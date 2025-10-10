@@ -29,7 +29,7 @@ C/C++ 계열 문법을 기반으로 하되, 포인터와 GC 대신 **Rust의 소
 int a;
 int b = 10;
 float f = 3.14;
-string name = "HwarangGeom";
+string name = "Hwarang";
 boolean flag = true;
 ```
 
@@ -103,25 +103,25 @@ do{
 
 ### 함수
 
-* 두 가지 형태 지원:
+* **선택 가능한 두 가지 문법 형태**:
 
-  * 자료형 기반: `int sum(int a, int b) {}`
-  * `func` 키워드 기반: `func sum(int a, int b) {}`
-* 반환형 없는 함수는 `void`로 간주
-* 반환값이 있으면 해당 자료형으로 변환 가능
+  1. **자료형 기반**: 반환형을 명시
 
-**예시**
+     ```c++
+     int add(int a, int b) {
+         return a + b;
+     }
+     ```
+  2. **func 키워드 기반**: 반환형 생략
 
-```c++
-func add(int a, int b){
-    return a + b;
-}
-
-int result = add(5, 10);
-```
-
-* 매개변수는 값 전달(value) 또는 참조(reference) 가능
-* 향후 가변인자(varargs), 기본값(default value), 람다 지원 예정
+     ```c++
+     func add(int a, int b) {
+         return a + b;
+     }
+     ```
+* **주의:** 두 문법을 섞어서 쓰는 것은 허용되지 않음.
+* 반환값이 없으면 `void`로 간주됨.
+* 매개변수는 값 전달, 참조(borrow), 이동(move) 모두 가능.
 
 ---
 
@@ -151,15 +151,48 @@ map<string, int> scores;
 ### 소유권 / 메모리 관리
 
 * 포인터 없음
-* **소유권 기반 메모리 관리**:
+* **기본 동작:** 복사(copy)
 
-  * 기본적으로 이동(move) 또는 복사(copy)
-  * 참조는 빌림(borrow) 형태로 안전하게 사용
-* 예시:
+  * 대부분의 변수와 함수 매개변수는 기본적으로 복사됨.
+  * 작은 값형 자료형(int, float, char 등)에서는 거의 비용 없음.
+* **선택적 빌림(borrow)**
+
+  * 큰 데이터(문자열, 배열, 구조체 등)나 성능 최적화가 필요할 때 사용
+  * 참조 전달: `&` 또는 `ref` 키워드 사용
+  * 읽기 전용 참조는 안전하게 제한 가능
+* **선택적 이동(move)**
+
+  * 소유권을 함수나 변수로 이전하고 원본 사용 금지
+  * `move()` 또는 `&&` 키워드 사용
+* **이동 후 변수 재선언 가능**
+
+  * 이동된 변수와 동일 이름으로 다른 자료형 선언 가능
+  * 새 변수는 이전 값과 독립적
+
+**예시:**
 
 ```c++
-string a = "Hello";
-string b = move(a); // a는 더 이상 사용 불가
+// 기본: 복사
+func void print_copy(string name) {
+    print(name);
+}
+
+// 빌림: 참조
+func void print_borrow(string& name) {
+    print(name);
+}
+
+// 이동: 소유권 이전
+func void take_ownership(string name) {
+    print(name);
+}
+
+string s = "Hello";
+print_copy(s);        // s는 여전히 사용 가능
+print_borrow(s);      // s는 여전히 사용 가능
+take_ownership(move(s)); // s는 더 이상 사용 불가
+
+int s = 42;           // 이동 후 동일 이름으로 다른 자료형 선언 가능
 ```
 
 * GC 없음 → 모든 메모리 수명은 컴파일러가 추적
@@ -190,7 +223,7 @@ string b = move(a); // a는 더 이상 사용 불가
 
 ```bash
 # 소스 코드 컴파일
-hwarangsword build main.hs
+hwaranggeom build main.hs
 
 # 실행
 ./main

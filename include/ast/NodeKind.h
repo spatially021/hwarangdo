@@ -1,0 +1,38 @@
+#pragma once
+
+enum class NodeKind {
+    // Expressions
+    LITERAL_EXPR,
+    VAR_EXPR,
+    BINARY_EXPR,
+    UNARY_EXPR,
+    CALL_EXPR,
+    GROUP_EXPR,
+    ASSIGN_EXPR,
+    ACCESS_EXPR,
+    INDEX_EXPR,
+
+    // Statements
+    EXPR_STMT,
+    VAR_STMT,
+    BLOCK_STMT,
+    IF_STMT,
+    FOR_STMT,
+    WHILE_STMT,
+    SWITCH_STMT,
+    CASE_STMT,
+    RETURN_STMT,
+    BREAK_STMT,
+    CONTINUE_STMT,
+    EMPTY_STMT,
+
+    // Declarations
+    PROGRAM,
+    CLASS_DECL,
+    STRUCT_DECL,
+    ENUM_DECL,
+    INTERFACE_DECL,
+
+    // Types
+    TYPE_NODE,
+};

@@ -1,4 +1,4 @@
-# 화랑검 (HwarangSword)
+# 화랑검 (HwarangGeom)
 
 ## 개요
 
@@ -29,7 +29,7 @@ C/C++ 계열 문법을 기반으로 하되, 포인터와 GC 대신 **Rust의 소
 int a;
 int b = 10;
 float f = 3.14;
-string name = "Hwarang";
+string name = "HwarangGeom";
 boolean flag = true;
 ```
 
@@ -202,7 +202,7 @@ hwarangsword build main.hs
 
 ```c++
 func void main() {
-    string name = "HwarangSword";
+    string name = "HwarangGeom";
     print("Hello, " + name);
 }
 ```

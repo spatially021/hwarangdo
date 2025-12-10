@@ -1,0 +1,11 @@
+#complie
+find src -name "*.cpp" | xargs g++ -fsanitize=address -std=c++17 -Wall -Iinclude -o hgm || rm -f hgm
+
+
+#run
+ ./hgm testProject/main.hgm -a
+
+#args
+--lexer || -l = logging lexer
+--parser || -p = logging parser
+--all   =logging all process

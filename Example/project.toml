@@ -1,0 +1,20 @@
+[project]
+name = "Default"
+version = "0.0.0"
+build_number = 42
+entry = "Core"  # main 함수가 포함된 클래스 이름
+language_version = "0.1"
+
+[paths]
+src = "src"
+assets = "assets"
+library = "library"
+build = "build"
+
+[build]
+optimize = true
+debug = false
+target = "native"   # native / wasm / server
+auto_increment_version = true
+
+[dependencies]

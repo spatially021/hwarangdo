@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../include/Parser.h"
+#include <memory>
 #include <regex>
 #include <stdexcept>
 
@@ -124,4 +125,43 @@ bool Parser::isType() const {
     error(following(), "Expected type after access modifier");
   }
   return isTypeToken(peek().kind);
+}
+
+bool Parser::isFunc() const {
+  return (following().kind == TKind::IDENTIFIER &&
+          following(2).kind == TKind::LEFT_PAREN);
+}
+
+TypeNode::Ptr Parser::typeNodeConvertor(Token ty){
+TypeNode::Ptr node;
+  if (ty.kind == TKind::IDENTIFIER) {
+    node = make_shared<IdentifierTypeNode>(ty, ty.text);
+  } else {
+    switch (ty.kind) {
+    case TKind::INT:
+      node = make_shared<BuiltinTypeNode>(ty, BuiltinTypeNode::Category::Int);
+      break;
+    case TKind::FLOAT:
+      node = make_shared<BuiltinTypeNode>(ty, BuiltinTypeNode::Category::Float);
+      break;
+    case TKind::FIXED:
+      node = make_shared<BuiltinTypeNode>(ty, BuiltinTypeNode::Category::Fixed);
+      break;
+    case TKind::BOOL:
+      node = make_shared<BuiltinTypeNode>(ty, BuiltinTypeNode::Category::Bool);
+      break;
+    case TKind::CHAR:
+      node = make_shared<BuiltinTypeNode>(ty, BuiltinTypeNode::Category::CHAR);
+      break;
+    case TKind::STRING:
+      node = make_shared<BuiltinTypeNode>(ty, BuiltinTypeNode::Category::STRING);
+      break;
+      case TKind::VOID:
+      node=make_shared<BuiltinTypeNode>(ty,BuiltinTypeNode::Category::Void);
+      break;
+    default:
+      error(peek(), "unexpected type");
+    }
+  }
+  return node;
 }

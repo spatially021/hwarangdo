@@ -43,9 +43,9 @@ protected:
       {"public", TKind::PUBLIC},     {"protected", TKind::PROTECTED},
       {"private", TKind::PRIVATE},   {"internal", TKind::INTERNAL},
       {"impl", TKind::IMPL},         {"trait", TKind::TRAIT},
-      {"extends", TKind::EXTENDS},{"enum",TKind::ENUM},
-      {"try",TKind::TRY},{"catch",TKind::CATCH},
-      {"new",TKind::NEW},{"root",TKind::ROOT},
-      {"const",TKind::CONST}
-      };
+      {"extends", TKind::EXTENDS},   {"enum", TKind::ENUM},
+      {"try", TKind::TRY},           {"catch", TKind::CATCH},
+      {"new", TKind::NEW},           {"root", TKind::ROOT},
+      {"const", TKind::CONST},       {"", TKind::EMPTY},
+      {"default", TKind::DEFAULT},   {"match", TKind::MATCH}};
 };

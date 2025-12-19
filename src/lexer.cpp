@@ -190,6 +190,10 @@ Token Lexer::scan() {
       get();
       return {TKind::LESS_EQUAL, "<=", tempL, tempC};
     }
+    if (peek() == '<') {
+      get();
+      return {TKind::DOUBLE_ANGLEBUCKET, "<<", tempL, tempC};
+    }
     return {TKind::LESS, "<", tempL, tempC};
   }
 
@@ -211,14 +215,14 @@ Token Lexer::scan() {
     string str = "Expected expression '&' at line %d, column %d";
     throw runtime_error(str);
 
-    return {TKind::EMPTY,"&",tempL,tempC};
+    return {TKind::EMPTY, "&", tempL, tempC};
   }
 
-  if(c=='|'){
+  if (c == '|') {
     get();
-    if(peek()=='|'){
+    if (peek() == '|') {
       get();
-      return {TKind::OR,"||",tempL,tempC};
+      return {TKind::OR, "||", tempL, tempC};
     }
     string str = "Expected expression '|' at line %d, column %d";
     throw runtime_error(str);
@@ -226,11 +230,14 @@ Token Lexer::scan() {
     return {TKind::EMPTY, "|", tempL, tempC};
   }
 
-  if(c=='?') return {TKind::QUESTION,string(1,get()),tempL,tempC};
-  if (c=='\0') return {TKind::END,string(1,get()),tempL,tempC};
-  if(c=='^') return{TKind::CARET,string(1,get()),tempL,tempC};
+  if (c == '?')
+    return {TKind::QUESTION, string(1, get()), tempL, tempC};
+  if (c == '\0')
+    return {TKind::END, string(1, get()), tempL, tempC};
+  if (c == '^')
+    return {TKind::CARET, string(1, get()), tempL, tempC};
 
-  if(isIdentFirst(c)){
+  if (isIdentFirst(c)) {
     string ident;
     while (isIdentRest(peek())) {
       ident.push_back(get());
@@ -242,86 +249,86 @@ Token Lexer::scan() {
 
     return {TKind::IDENTIFIER, ident, tempL,
             tempC}; // 키워드가 아니면 일반 식별자
+  }
+
+  // 문자열
+  if (c == '\"') {
+    string str;
+    get(); // opening "
+    while (peek() != '\"' && peek() != '\0') {
+      char temp = get();
+      str.push_back(temp);
     }
-
-    // 문자열
-    if (c == '\"') {
-      string str;
-      get(); // opening "
-      while (peek() != '\"' && peek() != '\0') {
-        char temp = get();
-        str.push_back(temp);
-      }
-      if (peek() == '\0') {
-        throw runtime_error("Unterminated string literal");
-      }
-      get(); // closing "
-      return {TKind::LIT_STRING, str, tempL, tempC};
+    if (peek() == '\0') {
+      throw runtime_error("Unterminated string literal");
     }
+    get(); // closing "
+    return {TKind::LIT_STRING, str, tempL, tempC};
+  }
 
-    // 문자 리터럴
-    if (c == '\'') {
-      string ch;
-      get(); // opening '
-      char val = get();
-      if (val == '\\') { // escape
-        char esc = get();
-        if (!isEscapeChar(esc)) {
-          throw runtime_error("Invalid escape sequence in char literal");
-        }
-        ch = string("\\") + esc;
-      } else {
-        ch = string(1, val);
+  // 문자 리터럴
+  if (c == '\'') {
+    string ch;
+    get(); // opening '
+    char val = get();
+    if (val == '\\') { // escape
+      char esc = get();
+      if (!isEscapeChar(esc)) {
+        throw runtime_error("Invalid escape sequence in char literal");
       }
-      if (peek() != '\'') {
-        throw runtime_error("Unterminated character literal");
-      }
-      get(); // closing '
-      return {TKind::LIT_CHARACTOR, ch, tempL, tempC};
+      ch = string("\\") + esc;
+    } else {
+      ch = string(1, val);
     }
+    if (peek() != '\'') {
+      throw runtime_error("Unterminated character literal");
+    }
+    get(); // closing '
+    return {TKind::LIT_CHARACTOR, ch, tempL, tempC};
+  }
 
-    // 숫자 리터럴
-    if (isNumber(c)) {
-      string str;
-      bool isReal = false;
+  // 숫자 리터럴
+  if (isNumber(c)) {
+    string str;
+    bool isReal = false;
 
+    str.push_back(get());
+    while (isNumber(peek()))
       str.push_back(get());
+
+    if (peek() == '.') {
+      str.push_back(get());
+      isReal = true;
       while (isNumber(peek()))
         str.push_back(get());
-
-      if (peek() == '.') {
-        str.push_back(get());
-        isReal = true;
-        while (isNumber(peek()))
-          str.push_back(get());
-      }
-
-      if (peek() == 'e' || peek() == 'E') {
-        str.push_back(get());
-        if (peek() == '+' || peek() == '-')
-          str.push_back(get());
-        while (isNumber(peek()))
-          str.push_back(get());
-        isReal = true;
-      }
-
-      try {
-        if (isReal) {
-          stof(str);
-          return {TKind::LIT_FLOAT, str, tempL, tempC};
-        } else {
-          stoll(str);
-          return {TKind::LIT_INT, str, tempL, tempC};
-        }
-      } catch (const out_of_range &) {
-        throw runtime_error("Numeric literal out of range at line " +
-                            to_string(line));
-      }
     }
 
-    // 알 수 없는 토큰
-    throw runtime_error("Unexpected character '" + string(1, c) + "' at line " +
-                        to_string(line) + ", col " + to_string(col));
+    if (peek() == 'e' || peek() == 'E') {
+      str.push_back(get());
+      if (peek() == '+' || peek() == '-')
+        str.push_back(get());
+      while (isNumber(peek()))
+        str.push_back(get());
+      isReal = true;
+    }
+
+    try {
+      if (isReal) {
+        stof(str);
+        return {TKind::LIT_FLOAT, str, tempL, tempC};
+      } else {
+        stoll(str);
+        return {TKind::LIT_INT, str, tempL, tempC};
+      }
+    } catch (const out_of_range &) {
+      throw runtime_error("Numeric literal out of range at line " +
+                          to_string(line));
+    }
+  }
+
+  // 알 수 없는 토큰
+  throw runtime_error("Unexpected character '" + string(1, c) + "' at line " +
+                      to_string(line) + ", col " + to_string(col));
 }
 
 bool Lexer::isEscapeChar(char c) {

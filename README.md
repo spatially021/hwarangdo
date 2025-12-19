@@ -149,11 +149,11 @@ func foo(Vec3 a) {
 | public    | 모든 모듈/클래스에서 접근 가능               |
 | protected | 상속 관계에서만 접근 가능                    |
 | private   | 해당 클래스/struct 내부에서만 접근 가능      |
-| internal  | (선택적) 같은 모듈/패키지 내에서만 접근 가능 |
+| extern    | dll등의 함수 로드시 사용                     |
 
 ### 게임 엔진 특화 적용
 
-* 엔진 코어: `internal` / `protected`로 노출 제한
+* 엔진 코어: `protected`로 노출 제한
 * 게임 스크립트/엔티티: `public`으로 자유롭게 접근
 * struct + impl: 기본적으로 `private` 멤버, 필요한 경우 `public`으로 노출
 
@@ -268,11 +268,11 @@ trait Updatable {
 }
 
 class GameObject {
-    public virtual func update(&mut self, float dt) {}
+    public func update(&mut self, float dt) {}
 };
 
 class Player : GameObject, implements Updatable {
-    public override func update(&mut self, float dt) {
+    public func update(&mut self, float dt) {
         // ...
     }
 };
@@ -299,11 +299,35 @@ tak
 ```
 
 ## 메모
+
+### 키워드
 상수 키워드
 const
 전역변수
 root
 
+### 선언
 
-파일에서는 class,struct,impl,trait만 선언가능
+top-level에서는 class,struct,impl,trait만 선언가능
 그외의 변수 및 함수 선언 혹은 제어문 사용등은 불가능.
+
+
+### 배열 선언
+
+자료형 이름[크기]; 로 고정
+
+크기에 들어오는 값이 리터럴 혹은 컴파일 타임에서의 상수라면 크기를 검사하고 스택 배열로 선언 그렇지 않다면 힙 배열로 선언.
+
+### trait
+
+trait 이름{
+int sum(int a,int b);
+}
+
+### enum
+
+enum 이름{
+    열거형,
+    열거형2,
+    열거형3(int),
+}

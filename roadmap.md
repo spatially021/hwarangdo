@@ -1,51 +1,51 @@
 # 🚀 게임 개발용 언어 컴파일러 재작성 로드맵 (체크리스트)
 
 ## 1️⃣ 언어 스펙 확정
-- [ ] **문법(Grammar) 확정**
-  - [x] 변수 선언 문법 확정
-  - [x] 함수 선언 문법 (명시/묵시) 확정
-  - [x] 제어문 문법 확정
-  - [x] 블록 및 스코프 관련 문법 확정
-  - [x] 모듈/네임스페이스 구조 확정
-  - [ ] 매니저(엔진 구성 요소) 문법 정의
-- [x] **타입 시스템 정의**
-  - [x] 기본 타입 집합 확정
-  - [x] 함수 타입 정의
-  - [x] 배열/슬라이스 타입 확정
-  - [x] 구조체 타입 정의
-  - [x] 묵시적 반환 타입 추론 규칙 설계
-- [x] **소유권(Ownership) 모델 정의**
-  - [x] move/copy 규칙
-  - [x] borrow 규칙 (& / &mut)
-  - [x] mutable/immutable borrow 제한
-  - [x] 리소스/매니저 소유권 규칙
-- [ ] **런타임 모델(Execution Model) 개요 확정**
-  - [x] 메모리 관리 전략
-  - [ ] 매니저 초기화 모델
-  - [ ] 엔진 구조 설계(ECS 여부 등)
+- [x] **문법(Grammar) 확정**
+  - [o] 변수 선언 문법 확정
+  - [o] 함수 선언 문법 (명시/묵시) 확정
+  - [o] 제어문 문법 확정
+  - [o] 블록 및 스코프 관련 문법 확정
+  - [o] 모듈/네임스페이스 구조 확정
+  - [x] 매니저(엔진 구성 요소) 문법 정의
+- [o] **타입 시스템 정의**
+  - [o] 기본 타입 집합 확정
+  - [o] 함수 타입 정의
+  - [o] 배열/슬라이스 타입 확정
+  - [o] 구조체 타입 정의
+  - [o] 묵시적 반환 타입 추론 규칙 설계
+- [o] **소유권(Ownership) 모델 정의**
+  - [o] move/copy 규칙
+  - [o] borrow 규칙 (& / &mut)
+  - [o] mutable/immutable borrow 제한
+  - [o] 리소스/매니저 소유권 규칙
+- [x] **런타임 모델(Execution Model) 개요 확정**
+  - [o] 메모리 관리 전략
+  - [x] 매니저 초기화 모델
+  - [x] 엔진 구조 설계(ECS 여부 등)
 
 ## 2️⃣ 컴파일러 아키텍처 설계
-- [x] 전체 파이프라인 설계 (Lexer → Parser → AST → Semantic → IR → Backend)
-- [x] 디렉토리 구조 설계
-- [ ] 공용 컴포넌트 정의
-  - [x] Token
-  - [ ] Span/Location
-  - [ ] ErrorHandler
-  - [ ] SymbolTable
-  - [ ] ScopeManager
-  - [ ] Type 객체 구조
-- [ ] 프로젝트 구조 검증 코드 작성
+- [o] 전체 파이프라인 설계 (Lexer → Parser → AST → Semantic → IR → Backend)
+- [o] 디렉토리 구조 설계
+- [x] 공용 컴포넌트 정의
+  - [o] Token
+  - [x] Span/Location
+  - [x] ErrorHandler
+  - [x] SymbolTable
+  - [x] ScopeManager
+  - [x] Type 객체 구조
+- [x] 프로젝트 구조 검증 코드 작성
 
 ## 3️⃣ AST 재설계
-- [x] AST 기본 계층 구조
-  - [x] Expr / Stmt / Decl 구조
-- [ ] 새로운 노드 정의
-  - [ ] FunctionDecl (explicit/implicit variant)
-  - [ ] VarDecl
+- [o] AST 기본 계층 구조
+  - [o] Expr / Stmt / Decl 구조
+- [x] 새로운 노드 정의
+  - [x] FunctionDecl (explicit/implicit variant)
+  - [x] VarDecl
   - [x] StructDecl
-  - [ ] ArrayDecl / ArrayAccess
-  - [ ] BorrowExpr / MoveExpr
-  - [ ] ReturnStmt
+  - [x] ArrayDecl / ArrayAccess
+  - [x] BorrowExpr / MoveExpr
+  - [x] ReturnStmt
 - [x] NodeKind 재정리
 - [x] Visitor 패턴 기본 틀 생성
 

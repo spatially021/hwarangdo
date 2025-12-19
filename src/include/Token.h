@@ -57,8 +57,8 @@ enum class TKind {
   BOOL,   // bool
   NUL,    // null
 
-  CONST,//const
-  ROOT,//root
+  CONST, // const
+  ROOT,  // root
 
   LIT_INT,       // integer literal
   LIT_FLOAT,     // real number literal
@@ -76,8 +76,16 @@ enum class TKind {
 
   IF,
   ELSE,
+
   SWITCH,
+  MATCH,
   CASE,
+  DEFAULT,
+  DOUBLE_ANGLEBUCKET, //<<
+  UNDERBAR,//_
+  EQAUL_AGNLEBUCKET,//=>
+
+
   FOR,
   WHILE,
 

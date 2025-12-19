@@ -1,3 +1,6 @@
 class Main{
-    
+}
+
+public struct st{
+    int a;
 }

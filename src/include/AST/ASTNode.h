@@ -22,6 +22,7 @@ enum class NKind {
   NEW_EXPR,
   THIS_EXPR,
   SUPER_EXPR,
+  MATCH_EXPR,
 
   // Statements
   EXPR_STMT,
@@ -31,7 +32,6 @@ enum class NKind {
   FOR_STMT,
   WHILE_STMT,
   SWITCH_STMT,
-  CASE_STMT,
   DEFAULT_STMT,
   RETURN_STMT,
   BREAK_STMT,
@@ -43,7 +43,6 @@ enum class NKind {
   CATCH_STMT,
   ONEXIT_STMT,
 
-
   // Declarations
   CLASS_DECL,
   STRUCT_DECL,
@@ -54,7 +53,6 @@ enum class NKind {
   VAR_DECL,
   ARRAY_DECL,
 
-
   // Types
   TYPE_NODE,
   BUILT_IN_TYPE,
@@ -64,66 +62,75 @@ enum class NKind {
   FUNCTION_TYPE,
   GENERIC_TYPE,
 
+  //others
+  TRAIT_SIG,
+  MATCH_CASE,
+  SWITCH_CASE,
 
 };
 class ASTVisitor;
+class Expr;
+using ExprPtr = shared_ptr<Expr>;
 
-class ASTNode{
+class ASTNode {
 public:
-    NKind kind;
-    Token token;
-    
-    ASTNode(NKind k,Token t):kind(k),token(t){}
+  NKind kind;
+  Token token;
 
-    virtual ~ASTNode() = default;
-    virtual void accept(ASTVisitor *visitor) = 0;
+  ASTNode(NKind k, Token t) : kind(k), token(t) {}
+
+  virtual ~ASTNode() = default;
+  virtual void accept(ASTVisitor *visitor) = 0;
 };
-
 
 class TypeNode : public ASTNode {
 public:
   using Ptr = shared_ptr<TypeNode>;
-  
+
   virtual ~TypeNode() = default;
   TypeNode(NKind kind, Token t) : ASTNode(kind, t) {}
-  
 
   void accept(ASTVisitor *visitor) override { visitor->visit(this); }
 };
 
 class BuiltinTypeNode : public TypeNode {
 public:
-  enum class Category { Int, Float, Fixed, Bool,CHAR,STRING, Void };
+  enum class Category { Int, Float, Fixed, Bool, CHAR, STRING, Void };
   Category category;
   int bitWidth = 0; // int/uint/float 용
   int intBits = 0;  // fixed 전용
   int fracBits = 0; // fixed 전용
 
-  bool isSigned=true;
+  bool isSigned = true;
 
   BuiltinTypeNode(Token t, Category c)
       : TypeNode(NKind::BUILT_IN_TYPE, t), category(c) {}
   void accept(ASTVisitor *visitor) override { visitor->visit(this); }
-  void setSize(int i){
-    if(i==-1){
+  void setSize(int i) {
+    if (i == -1) {
       switch (category) {
 
       case Category::Int:
-      bitWidth=32;
+        bitWidth = 32;
       case Category::Float:
-      bitWidth=32;
+        bitWidth = 32;
       case Category::CHAR:
-      bitWidth=8;
+        bitWidth = 8;
       case Category::STRING:
-      bitWidth=8;
+        bitWidth = 8;
       default:
         break;
       }
-    }else bitWidth=i;}
-  void setSize(pair<int,int> i){
-    if(i.first==-1){
-      intBits=fracBits=16;
-    }else intBits=i.first;fracBits=i.second;}
+    } else
+      bitWidth = i;
+  }
+  void setSize(pair<int, int> i) {
+    if (i.first == -1) {
+      intBits = fracBits = 16;
+    } else
+      intBits = i.first;
+    fracBits = i.second;
+  }
 };
 
 class IdentifierTypeNode : public TypeNode {
@@ -139,15 +146,16 @@ public:
   TypeNode::Ptr target;
   bool isMutable = false; // &T vs &mut T
   ReferenceTypeNode(Token t, TypeNode::Ptr trg, bool mut = false)
-      : TypeNode(NKind::REFERENCE_TYPE, t), target(std::move(trg)), isMutable(mut) {}
+      : TypeNode(NKind::REFERENCE_TYPE, t), target(std::move(trg)),
+        isMutable(mut) {}
   void accept(ASTVisitor *visitor) override { visitor->visit(this); }
 };
 
 class ArrayTypeNode : public TypeNode {
 public:
   TypeNode::Ptr elementType;
-  optional<int> fixedSize; // nullopt => dynamic / slice
-  ArrayTypeNode(Token t, TypeNode::Ptr elem, optional<int> size = nullopt)
+  optional<ExprPtr> fixedSize; // nullopt => dynamic / slice
+  ArrayTypeNode(Token t, TypeNode::Ptr elem, optional<ExprPtr> size = nullopt)
       : TypeNode(NKind::ARRAY_TYPE, t), elementType(std::move(elem)),
         fixedSize(size) {}
   void accept(ASTVisitor *visitor) override { visitor->visit(this); }
@@ -168,7 +176,7 @@ public:
   string baseName;
   vector<TypeNode::Ptr> typeArgs;
   GenericTypeNode(Token t, const string &base, vector<TypeNode::Ptr> args)
-      : TypeNode(NKind::GENERIC_TYPE, t), baseName(base), typeArgs(std::move(args)) {
-  }
+      : TypeNode(NKind::GENERIC_TYPE, t), baseName(base),
+        typeArgs(std::move(args)) {}
   void accept(ASTVisitor *visitor) override { visitor->visit(this); }
 };

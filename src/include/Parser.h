@@ -14,9 +14,8 @@ using namespace std;
 class Parser{
 public:
 explicit Parser(const vector<Token> &tokens);
-vector<shared_ptr<ASTNode>> statements;
-
-vector<shared_ptr<ASTNode>> parse();
+vector<Stmt::Ptr> statements;
+vector<Stmt::Ptr> parse();
 
 private:
 
@@ -45,8 +44,9 @@ Expr::Ptr conditionExpr();
 
 // 함수 및 블록
 Stmt::Ptr expressionStmt();
-Stmt::Ptr varStmt();
+Stmt::Ptr declStmt();
 Stmt::Ptr blockStmt();
+Stmt::Ptr bodyStmt();
 Stmt::Ptr ifStmt();
 Stmt::Ptr forStmt();
 Stmt::Ptr whileStmt();
@@ -84,4 +84,5 @@ bool isValidSize(const std::string &s) const;
 bool isAccessModifier() const;
 bool isTypeToken(TKind k) const ;
 AModifier AModifierConvertor(Token t);
+TypeNode::Ptr typeNodeConvertor(Token t);
 };

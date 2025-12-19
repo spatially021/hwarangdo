@@ -645,7 +645,6 @@ Ptr Parser::statement() {
   case TokKind::FOR:
     return forStmt();
   case TokKind::IDENTIFIER:
-    // TODO: 객체 선언 구현하기
   case TokKind::PLUS:
   case TokKind::MINUS:
   case TokKind::DOUBLE_PLUS:

@@ -261,7 +261,6 @@ public:
       if (it != scopes[i].classes.end())
         return true;
     }
-    //TODO: 구조체 만들면 추가하기
 
     return false;
   }

@@ -3,13 +3,18 @@
 #include "ASTNode.h"
 #include "Expr.h"
 #include "Visitor.h"
+#include <algorithm>
 #include <memory>
+#include <vector>
 
-class Stmt:public ASTNode{
-    public:
-    using Ptr=std::shared_ptr<Stmt>;
-    Stmt(NKind kind,Token token) : ASTNode(kind,token) {}
-    void accept(ASTVisitor *visitor) override { visitor->visit(this); }
+class Decl;
+using DeclPtr = shared_ptr<Decl>;
+
+class Stmt : public ASTNode {
+public:
+  using Ptr = std::shared_ptr<Stmt>;
+  Stmt(NKind kind, Token token) : ASTNode(kind, token) {}
+  void accept(ASTVisitor *visitor) override { visitor->visit(this); }
 };
 
 class ExprStmt : public Stmt {
@@ -38,7 +43,8 @@ public:
   Stmt::Ptr thenBranch;
   Stmt::Ptr elseBranch;
 
-  IfStmt(Token token, Expr::Ptr cond, Stmt::Ptr thenB, Stmt::Ptr elseB)
+  IfStmt(Token token, Expr::Ptr cond, Stmt::Ptr thenB,
+         Stmt::Ptr elseB = nullptr)
       : Stmt(NKind::IF_STMT, token), condition(std::move(cond)),
         thenBranch(std::move(thenB)), elseBranch(std::move(elseB)) {}
 
@@ -51,8 +57,8 @@ public:
   Stmt::Ptr body;
 
   WhileStmt(Token token, Expr::Ptr c, Stmt::Ptr b)
-      : Stmt(NKind::WHILE_STMT, token), condition(std::move(c)), body(std::move(b)) {
-  }
+      : Stmt(NKind::WHILE_STMT, token), condition(std::move(c)),
+        body(std::move(b)) {}
 
   void accept(ASTVisitor *visitor) override { visitor->visit(this); }
 };
@@ -111,34 +117,21 @@ public:
   void accept(ASTVisitor *visitor) override { visitor->visit(this); }
 };
 
-class CaseStmt : public Stmt {
-public:
-  Expr::Ptr value;                   // case value
-  std::vector<Stmt::Ptr> statements; // the statements inside case
-
-  CaseStmt(Token token, Expr::Ptr v, std::vector<Stmt::Ptr> stmts)
-      : Stmt(NKind::CASE_STMT, token), value(std::move(v)),
-        statements(std::move(stmts)) {}
-
-  void accept(ASTVisitor *visitor) override { visitor->visit(this); }
-};
-
-class DefaultStmt : public Stmt {
-public:
-  std::vector<Stmt::Ptr> statements;
-
-  DefaultStmt(Token token, std::vector<Stmt::Ptr> stmts)
-      : Stmt(NKind::DEFAULT_STMT, token), statements(std::move(stmts)) {}
-
-  void accept(ASTVisitor *visitor) override { visitor->visit(this); }
-};
-
 class SwitchStmt : public Stmt {
 public:
+  class Case : public ASTNode {
+  public:
+    vector<Expr::Ptr> values;
+    Ptr body;
+    bool isDefault;
+    void accept(ASTVisitor *visitor) override { visitor->visit(this); }
+    Case(Token t, vector<Expr::Ptr> v, Ptr b, bool is = false)
+        : ASTNode(NKind::SWITCH_CASE, t), body(b), values(std::move(v)), isDefault(is) {}
+  };
   Expr::Ptr value;                // switch (value)
-  std::vector<Stmt::Ptr> clauses; // CaseStmt 또는 DefaultStmt 의 집합
+  std::vector<shared_ptr<Case>> clauses; // CaseStmt 또는 DefaultStmt 의 집합
 
-  SwitchStmt(Token token, Expr::Ptr val, std::vector<Stmt::Ptr> c)
+  SwitchStmt(Token token, Expr::Ptr val, std::vector<shared_ptr<Case>> c)
       : Stmt(NKind::SWITCH_STMT, token), value(std::move(val)),
         clauses(std::move(c)) {}
 
@@ -163,12 +156,11 @@ class TryCatchStmt : public Stmt {
 public:
   Stmt::Ptr tryBlock; // usually BlockStmt
   std::vector<std::shared_ptr<CatchClause>> catches;
-  Stmt::Ptr finallyBlock; // null이면 없음
 
   TryCatchStmt(Token token, Stmt::Ptr tryB,
-               std::vector<std::shared_ptr<CatchClause>> c, Stmt::Ptr finallyB)
+               std::vector<std::shared_ptr<CatchClause>> c)
       : Stmt(NKind::TRY_STMT, token), tryBlock(std::move(tryB)),
-        catches(std::move(c)), finallyBlock(std::move(finallyB)) {}
+        catches(std::move(c)) {}
 
   void accept(ASTVisitor *visitor) override { visitor->visit(this); }
 };
@@ -181,4 +173,16 @@ public:
       : Stmt(NKind::ONEXIT_STMT, token), body(std::move(body)) {}
 
   void accept(ASTVisitor *visitor) override { visitor->visit(this); }
+};
+
+class EmptyStmt : public Stmt {
+public:
+  EmptyStmt(Token t) : Stmt(NKind::EMPTY_STMT, t) {}
+  void accept(ASTVisitor *visitor) override { visitor->visit(this); }
+};
+
+class DeclStmt : public Stmt {
+public:
+  DeclPtr decl;
+  DeclStmt(Token t, DeclPtr d) : Stmt(NKind::DECL_STMT, t), decl(d) {}
 };

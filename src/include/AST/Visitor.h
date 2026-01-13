@@ -14,6 +14,8 @@ class IndexExpr;
 class PostfixExpr;
 class TernaryExpr;
 class ArrayAccessExpr;
+class ThisExpr;
+class SuperExpr;
 
 class ExprStmt;
 class VarStmt;
@@ -22,26 +24,26 @@ class IfStmt;
 class ForStmt;
 class WhileStmt;
 class SwitchStmt;
-class CaseStmt;
+class Case;
 class ReturnStmt;
 class BreakStmt;
 class ContinueStmt;
 class EmptyStmt;
+class DeclStmt;
 
-class Program;
 class ClassDecl;
 class StructDecl;
 class ImplDecl;
 class TraitDecl;
 class EnumDecl;
-class InterfaceDecl;
 class FuncDecl;
 class VarDecl;
 class ArrayDecl;
 
-
 class TypeNode;
 class ASTNode;
+class TraitSig;
+class Param;
 
 class ASTVisitor {
 public:
@@ -60,6 +62,8 @@ public:
   virtual void visit(PostfixExpr *expr) = 0;
   virtual void visit(ArrayAccessExpr *expr) = 0;
   virtual void visit(TernaryExpr *expr) = 0;
+  virtual void visit(ThisExpr *expr)=0;
+  virtual void visit(SuperExpr *expr)=0;
 
   // Statement visitor methods
   virtual void visit(ExprStmt *stmt) = 0;
@@ -68,10 +72,11 @@ public:
   virtual void visit(ForStmt *stmt) = 0;
   virtual void visit(WhileStmt *stmt) = 0;
   virtual void visit(SwitchStmt *stmt) = 0;
-  virtual void visit(CaseStmt *stmt) = 0;
+  virtual void visit(Case *stmt) = 0;
   virtual void visit(ReturnStmt *stmt) = 0;
   virtual void visit(BreakStmt *stmt) = 0;
   virtual void visit(ContinueStmt *stmt) = 0;
+  virtual void visit(DeclStmt *stmt) = 0;
   virtual void visit(EmptyStmt *stmt) = 0;
 
   // declare visitor methods
@@ -80,12 +85,14 @@ public:
   virtual void visit(EnumDecl *decl) = 0;
   virtual void visit(ImplDecl *decl)=0;
   virtual void visit(TraitDecl *decl)=0;
-  virtual void visit(InterfaceDecl *decl) = 0;
-  virtual void visit(Program *decl) = 0;
+
   virtual void visit(FuncDecl *decl) = 0;
   virtual void visit(VarDecl *decl) = 0;
   virtual void visit(ArrayDecl *decl) = 0;
 
   virtual void visit(TypeNode *decl) = 0;
   virtual void visit(ASTNode *node) = 0;
+
+  virtual void visit(TraitSig *sig) = 0;
+  virtual void visit(Param * param) = 0;
 };

@@ -1,5 +1,3 @@
-#pragma once
-
 #include "include/Parser.h"
 #include "include/AST/Decl.h"
 #include "include/AST/Stmt.h"
@@ -7,102 +5,70 @@
 #include <memory>
 #include <vector>
 
-using Ptr = shared_ptr<ASTNode>;
+using ptr = shared_ptr<ASTNode>;
 
 Parser::Parser(const vector<Token> &tokens) : tokens(tokens) {}
 
 vector<Stmt::Ptr> Parser::parse() {
   while (!isAtEnd()) {
-    if (check({TKind::CLASS, TKind::STRUCT, TKind::IMPL, TKind::TRAIT})) {
-      auto stmt = statement();
-      statements.push_back(stmt);
-    } else if (isAccessModifier()) {
-      if (following().kind == TKind::CLASS ||
-          following().kind == TKind::STRUCT ||
-          following().kind == TKind::IMPL || following().kind == TKind::TRAIT) {
-        auto stmt = statement();
-        statements.push_back(stmt);
-      } else {
-        error(peek(), "not allowed expression");
-      }
-    } else {
-      error(peek(), "not allowed expression");
-    }
+    Token t = peek();
+    auto decl = declaration(TOPLEVEL);
+    statements.push_back(make_shared<DeclStmt>(t, decl));
   }
-
   return statements;
 }
 
-Decl::Ptr Parser::declaration() {
+Decl::Ptr Parser::declaration(DeclContext context) {
+  DeclPrefix prefix = {};
+  prefix.startToken = peek();
+
+  ContextGuard _{contexts, context};
+
   if (isAccessModifier()) {
-
-    if (following().kind == TKind::CONST) {
-      if (isType() && !isFunc())
-        return varDecl();
-      else
-        error(following(), "invalid expression of const.");
-    }
-
-    if (check(TKind::CLASS, 1)) {
-      return classDecl();
-    }
-
-    if (check(TKind::STRUCT, 1)) {
-      return structDecl();
-    }
-
-    if (check(TKind::IMPL), 1)
-      return implDecl();
-
-    if (check(TKind::TRAIT), 1)
-      return traitDecl();
-
-    if (isType()) {
-      if (isFunc())
-        return functionDecl();
-      else
-        return varDecl();
-    }
-
-    if (check(TKind::VOID))
-      return functionDecl();
-    if (check(TKind::FUNC))
-      return functionDecl(true);
-
-    error(following(), "expect declaration after access modifier.");
-  } else {
-
-    if (following().kind == TKind::CONST) {
-      if (isType() && !isFunc())
-        return varDecl();
-      else
-        error(following(), "invalid expression of const.");
-    }
-    if (check(TKind::CLASS))
-      return classDecl();
-
-    if (check(TKind::STRUCT))
-      return structDecl();
-
-    if (check(TKind::IMPL))
-      return implDecl();
-
-    if (check(TKind::TRAIT))
-      return traitDecl();
-
-    if (isType()) {
-      if (isFunc())
-        return functionDecl();
-      else
-        return varDecl();
-    }
-
-    if (check(TKind::VOID))
-      return functionDecl();
-    if (check(TKind::FUNC))
-      return functionDecl(true);
+    prefix.modi = AModifierConvertor(advance());
   }
-  error(peek(), "Only declarations are allowed here.");
+  if (check(TKind::CONST)) {
+    prefix.isConst = true;
+    advance();
+  }
+
+  if (check(TKind::CLASS)) {
+    return classDecl(prefix);
+  }
+
+  if (check(TKind::STRUCT)) {
+    return structDecl(prefix);
+  }
+
+  if (check(TKind::IMPL)) {
+    return implDecl(prefix);
+  }
+
+  if (check(TKind::TRAIT)) {
+    return traitDecl(prefix);
+  }
+
+  if (check(TKind::ENUM)) {
+    return enumDecl(prefix);
+  }
+
+  if (check(TKind::FUNC)) {
+    return functionDecl(prefix, true);
+  }
+
+  if (check(TKind::VOID)) {
+    return functionDecl(prefix);
+  }
+
+  if (isType()) {
+    if (isFunc()) {
+      return functionDecl(prefix);
+    } else {
+      return varDecl(prefix);
+    }
+  }
+
+  error(peek(), "only declaration in top-level");
 }
 
 Stmt::Ptr Parser::statement() {
@@ -115,9 +81,6 @@ Stmt::Ptr Parser::statement() {
 
   case TKind::SWITCH:
     return switchStmt();
-  case TKind::CASE:
-  case TKind::DEFAULT:
-    return caseStmt();
   case TKind::FOR:
     return forStmt();
   case TKind::WHILE:
@@ -152,9 +115,16 @@ Stmt::Ptr Parser::statement() {
 
   case TKind::ONEXIT:
     return onexitStmt();
+
+  case TKind::THROW:
+    return throwStmt();
+
   default:
     return expressionStmt();
   }
 }
 
-Expr::Ptr Parser::expression() {}
+Expr::Ptr Parser::expression() {
+  Expr::Ptr expr=assignment();
+  return expr;
+}

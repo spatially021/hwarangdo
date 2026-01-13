@@ -1,5 +1,3 @@
-#pragma once
-
 #include "../include/Parser.h"
 #include <memory>
 #include <regex>
@@ -36,7 +34,7 @@ bool Parser::match(std::initializer_list<TKind> kinds) {
 
 bool Parser::check(std::initializer_list<TKind> kinds, size_t step) const {
   for (auto kind : kinds) {
-    if (check(kind,step)) {
+    if (check(kind, step)) {
       return true;
     }
   }
@@ -71,7 +69,7 @@ const Token &Parser::previous() const {
 
 const Token &Parser::following(size_t step) const {
   if (current + step < tokens.size()) {
-    return tokens[current+step];
+    return tokens[current + step];
   }
   throw runtime_error("No following token");
 }
@@ -83,8 +81,8 @@ bool Parser::isValidSize(const std::string &s) const {
 
   return std::regex_match(s, signedPattern) ||
          std::regex_match(s, unsignedPattern) ||
-         std::regex_match(s, fixedPattern)||
-         std::regex_match(s,unsignedFixedPattern);
+         std::regex_match(s, fixedPattern) ||
+         std::regex_match(s, unsignedFixedPattern);
 }
 
 inline bool Parser::isAccessModifier() const {
@@ -92,7 +90,7 @@ inline bool Parser::isAccessModifier() const {
   return k == TKind::PUBLIC || k == TKind::PRIVATE || k == TKind::PROTECTED;
 }
 
-AModifier Parser::AModifierConvertor(Token t){
+AModifier Parser::AModifierConvertor(Token t) {
   AModifier modi = AModifier::DEFAULT;
   if (t.kind == TKind::PUBLIC)
     modi = AModifier::PUBLIC;
@@ -128,12 +126,25 @@ bool Parser::isType() const {
 }
 
 bool Parser::isFunc() const {
-  return (following().kind == TKind::IDENTIFIER &&
-          following(2).kind == TKind::LEFT_PAREN);
+  if(isAccessModifier()){
+    if (isTypeToken(following().kind) || following().kind == TKind::VOID ||
+        following().kind == TKind::FUNC) {
+      return following(2).kind==TKind::IDENTIFIER && following(3).kind==TKind::LEFT_PAREN;
+    }
+    error(following(), "expect type after access modifier");
+  }
+
+  if (isTypeToken(peek().kind) || peek().kind == TKind::VOID ||
+      peek().kind == TKind::FUNC) {
+    return following().kind==TKind::IDENTIFIER&&following(2).kind==TKind::LEFT_PAREN;
+  }
+
+  return false;
+
 }
 
-TypeNode::Ptr Parser::typeNodeConvertor(Token ty){
-TypeNode::Ptr node;
+TypeNode::Ptr Parser::typeNodeConvertor(Token ty) {
+  TypeNode::Ptr node;
   if (ty.kind == TKind::IDENTIFIER) {
     node = make_shared<IdentifierTypeNode>(ty, ty.text);
   } else {
@@ -154,14 +165,35 @@ TypeNode::Ptr node;
       node = make_shared<BuiltinTypeNode>(ty, BuiltinTypeNode::Category::CHAR);
       break;
     case TKind::STRING:
-      node = make_shared<BuiltinTypeNode>(ty, BuiltinTypeNode::Category::STRING);
+      node =
+          make_shared<BuiltinTypeNode>(ty, BuiltinTypeNode::Category::STRING);
       break;
-      case TKind::VOID:
-      node=make_shared<BuiltinTypeNode>(ty,BuiltinTypeNode::Category::Void);
+    case TKind::VOID:
+      node = make_shared<BuiltinTypeNode>(ty, BuiltinTypeNode::Category::Void);
+      break;
+    case TKind::FUNC:
+      node=make_shared<BuiltinTypeNode>(ty,BuiltinTypeNode::Category::FUNC);
       break;
     default:
-      error(peek(), "unexpected type");
+      error(ty, "unexpected type");
     }
   }
   return node;
+}
+
+bool Parser::isAssign() const {
+  return check({TKind::EQUAL, TKind::PLUS_EQUAL, TKind::MINUS_EQUAL,
+                TKind::STAR_EQUAL, TKind::DOUBLE_STAR_EQUAL, TKind::SLASH_EQUAL,
+                TKind::PERCENT_EQUAL});
+}
+
+bool Parser::isAssginable(Expr::Ptr p) const {
+  switch (p->kind) {
+  case NKind::VAR_EXPR:
+  case NKind::ACCESS_EXPR:
+  case NKind::INDEX_EXPR:
+    return true;
+  default:
+    return false;
+  }
 }

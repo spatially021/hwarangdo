@@ -6,6 +6,8 @@
 #include <memory>
 #include <optional>
 
+class TypeSymbol;
+
 enum class NKind {
   // Expressions
   LITERAL_EXPR,
@@ -41,6 +43,7 @@ enum class NKind {
   DECL_STMT,
   TRY_STMT,
   CATCH_STMT,
+  THROW_STMT,
   ONEXIT_STMT,
 
   // Declarations
@@ -66,6 +69,8 @@ enum class NKind {
   TRAIT_SIG,
   MATCH_CASE,
   SWITCH_CASE,
+  RANGE,
+  PARAM,
 
 };
 class ASTVisitor;
@@ -91,11 +96,12 @@ public:
   TypeNode(NKind kind, Token t) : ASTNode(kind, t) {}
 
   void accept(ASTVisitor *visitor) override { visitor->visit(this); }
+    TypeSymbol* resolved;
 };
 
 class BuiltinTypeNode : public TypeNode {
 public:
-  enum class Category { Int, Float, Fixed, Bool, CHAR, STRING, Void };
+  enum class Category { Int, Float, Fixed, Bool, CHAR, STRING, Void ,FUNC};
   Category category;
   int bitWidth = 0; // int/uint/float 용
   int intBits = 0;  // fixed 전용

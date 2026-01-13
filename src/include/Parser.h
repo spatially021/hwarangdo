@@ -4,6 +4,7 @@
 #include "AST/Decl.h"
 #include "AST/Stmt.h"
 #include "Token.h"
+#include <cassert>
 #include <cstddef>
 #include <memory>
 #include <unordered_set>
@@ -11,11 +12,44 @@
 
 using namespace std;
 
+enum DeclContext {
+  TOPLEVEL,
+  BLOCK,
+  CLASSBODY,
+  IMPLBODY,
+};
+
+class ContextGuard {
+public:
+  ContextGuard(std::vector<DeclContext> &stack, DeclContext ctx)
+      : stack_(stack) {
+    stack_.push_back(ctx);
+  }
+
+  ~ContextGuard() {
+    assert(!stack_.empty());
+    stack_.pop_back();
+  }
+
+  ContextGuard(const ContextGuard&)=delete;
+  ContextGuard &operator=(const ContextGuard &)=delete;
+
+private:
+  std::vector<DeclContext> &stack_;
+};
+
+struct DeclPrefix {
+  AModifier modi = AModifier::DEFAULT;
+  bool isConst = false;
+  Token startToken;
+};
+
 class Parser{
 public:
 explicit Parser(const vector<Token> &tokens);
 vector<Stmt::Ptr> statements;
 vector<Stmt::Ptr> parse();
+vector<DeclContext> contexts;
 
 private:
 
@@ -23,7 +57,7 @@ const std::vector<Token> &tokens;
 size_t current = 0;
 
 // 문장 단위
-Decl::Ptr declaration(); // 변수 선언, 함수 선언 등
+Decl::Ptr declaration(DeclContext context); // 변수 선언, 함수 선언 등
 Stmt::Ptr statement();   // 일반 문장 (if, while, return, expression 등)
 
 // 표현식 단위
@@ -36,11 +70,11 @@ Expr::Ptr equality();
 Expr::Ptr comparison();
 Expr::Ptr term();
 Expr::Ptr factor();
+Expr::Ptr power();
 Expr::Ptr unary();
 Expr::Ptr primary();
 Expr::Ptr postfix();
 Expr::Ptr ternary();
-Expr::Ptr conditionExpr();
 
 // 함수 및 블록
 Stmt::Ptr expressionStmt();
@@ -51,19 +85,19 @@ Stmt::Ptr ifStmt();
 Stmt::Ptr forStmt();
 Stmt::Ptr whileStmt();
 Stmt::Ptr switchStmt();
-Stmt::Ptr caseStmt();
 Stmt::Ptr returnStmt();
 Stmt::Ptr tryStmt();
 Stmt::Ptr catchStmt();
 Stmt::Ptr onexitStmt();
+Stmt::Ptr throwStmt();
 
-Decl::Ptr classDecl();
-Decl::Ptr structDecl();
-Decl::Ptr implDecl();
-Decl::Ptr traitDecl();
-Decl::Ptr enumDecl();
-Decl::Ptr functionDecl(bool isDynamic = false);
-Decl::Ptr varDecl();
+Decl::Ptr classDecl(DeclPrefix prefix);
+Decl::Ptr structDecl(DeclPrefix prefix);
+Decl::Ptr implDecl(DeclPrefix prefix);
+Decl::Ptr traitDecl(DeclPrefix prefix);
+Decl::Ptr enumDecl(DeclPrefix prefix);
+Decl::Ptr functionDecl(DeclPrefix prefix,bool isDynamic = false);
+Decl::Ptr varDecl(DeclPrefix prefix);
 
 // 유틸리티
 bool match(std::initializer_list<TKind> kinds);
@@ -85,4 +119,6 @@ bool isAccessModifier() const;
 bool isTypeToken(TKind k) const ;
 AModifier AModifierConvertor(Token t);
 TypeNode::Ptr typeNodeConvertor(Token t);
+bool isAssign() const;
+bool isAssginable(Expr::Ptr p) const;
 };

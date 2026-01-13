@@ -17,6 +17,7 @@ enum class TKind {
   COLON,     //:
   COMMA,     //,
   DOT,       //.
+  DOUBLE_DOT,//..
 
   PLUS,        //+
   MINUS,       //-
@@ -33,9 +34,6 @@ enum class TKind {
   SLASH_EQUAL,       // /=
   PERCENT_EQUAL,     //%=
 
-  DOUBLE_PLUS,  //++
-  DOUBLE_MINUS, //--
-
   DOUBLE_EQUAL,  // ==
   BANG_EQUAL,    //!=
   LESS,          //<
@@ -46,6 +44,8 @@ enum class TKind {
   BANG, //!
   AND,  //&&
   OR,   //||
+
+  UNDERBAR,//_
 
   QUESTION, //?
 
@@ -62,7 +62,7 @@ enum class TKind {
 
   LIT_INT,       // integer literal
   LIT_FLOAT,     // real number literal
-  LIT_CHARACTOR, // charactor literal
+  LIT_CHARACTER, // charactor literal
   LIT_STRING,    // string literal
   LIT_BOOL,      // true,false
 
@@ -82,9 +82,7 @@ enum class TKind {
   CASE,
   DEFAULT,
   DOUBLE_ANGLEBUCKET, //<<
-  UNDERBAR,//_
   EQAUL_AGNLEBUCKET,//=>
-
 
   FOR,
   WHILE,
@@ -98,9 +96,6 @@ enum class TKind {
 
   CARET, //^
   BORROW,
-  MUT,
-  SHARE,
-  WEAK,
 
   CLASS,
   STRUCT,
@@ -110,6 +105,7 @@ enum class TKind {
 
   TRY,
   CATCH,
+  THROW,
 
   ONEXIT,
 
@@ -121,6 +117,9 @@ enum class TKind {
   IMPL,
   TRAIT,
   EXTENDS,
+
+  SUPER,
+  THIS,
 
   EMPTY,
 

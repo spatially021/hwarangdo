@@ -1,7 +1,6 @@
-#pragma once
-
 #include "../include/Parser.h"
 #include <memory>
+#include <optional>
 
 using Ptr = Stmt::Ptr;
 using namespace std;
@@ -15,7 +14,7 @@ Ptr Parser::expressionStmt() {
 
 Ptr Parser::declStmt() {
   Token t = peek();
-  Decl::Ptr decl = declaration();
+  Decl::Ptr decl = declaration(contexts.back());
   return make_shared<DeclStmt>(t, decl);
 }
 
@@ -49,6 +48,7 @@ Ptr Parser::blockStmt() {
 }
 
 Ptr Parser::bodyStmt() {
+  ContextGuard _{contexts,BLOCK};
   if (check(TKind::LEFT_BRACE)) {
     advance(); //{처리
     return blockStmt();
@@ -60,35 +60,16 @@ Ptr Parser::forStmt() {
   Token t = peek();
   advance(); // for 처리
   consume(TKind::LEFT_PAREN, "exepct '(' after for");
-  Expr::Ptr condition = nullptr, increment = nullptr;
-  Ptr init = nullptr;
-  if (check(TKind::SEMICOLON))
-    advance(); //;처리
-  else {
-    if (isType()) {
-      init = declStmt();
-    } else
-      init = expressionStmt();
-    consume(TKind::SEMICOLON, "expect ';' in for");
-  }
 
-  if (check(TKind::SEMICOLON))
-    advance(); //;처리
-  else {
-    condition = expression();
-    consume(TKind::SEMICOLON, "expect ';' in for");
-  }
-
-  if (check(TKind::SEMICOLON))
-    advance(); //;처리
-  else {
-    increment = expression();
-    consume(TKind::SEMICOLON, "expect ';' in for");
-  }
-
+  Ptr init=declStmt();
+  if(dynamic_pointer_cast<VarDecl>(init)->init!=nullptr) error(t, "in for statement initiate expression not available");
+  consume(TKind::SEMICOLON, "expect ';' after declare expression");
+  Expr::Ptr from=expression();
+  consume(TKind::DOUBLE_DOT, "range need '..'");
+  Expr::Ptr to=expression();
+  shared_ptr<ForStmt::Range> range=make_shared<ForStmt::Range>(from->token,from,to);
   Ptr body = bodyStmt();
-
-  return make_shared<ForStmt>(t, init, condition, increment, body);
+  return make_shared<ForStmt>(t,init,range,body);
 }
 
 Ptr Parser::whileStmt() {
@@ -109,7 +90,7 @@ Ptr Parser::switchStmt() {
   Expr::Ptr value = expression();
   consume(TKind::RIGHT_PAREN, "expect ')'");
   consume(TKind::LEFT_BRACE, "expect '{' after '(' in switch statement");
-  vector<shared_ptr<SwitchStmt::Case>> cases;
+  vector<shared_ptr<Case>> cases;
   while (!check(TKind::RIGHT_BRACE) && !isAtEnd()) {
     Token t = peek();
     if (check(TKind::CASE)) {
@@ -130,7 +111,7 @@ Ptr Parser::switchStmt() {
         body = bodyStmt();
       } else
         error(peek(), "expect '{' after '=>'");
-      cases.push_back(make_shared<SwitchStmt::Case>(t, values, body));
+      cases.push_back(make_shared<Case>(t, values, body));
     } else if (check(TKind::DEFAULT)) {
       advance(); // default 처리
       consume(TKind::EQAUL_AGNLEBUCKET, "expect '=>' after default");
@@ -140,7 +121,7 @@ Ptr Parser::switchStmt() {
         body = bodyStmt();
       else
         error(peek(), "expect '{' after '=>'");
-      cases.push_back(make_shared<SwitchStmt::Case>(t, values, body, true));
+      cases.push_back(make_shared<Case>(t, values, body, true));
     } else
       error(peek(), "in switch statement place only case or default");
   }
@@ -169,4 +150,35 @@ Ptr Parser::tryStmt() {
     catches.push_back(dynamic_pointer_cast<CatchClause>(catchStmt()));
 
   return make_shared<TryCatchStmt>(t, body, catches);
+}
+
+Ptr Parser::catchStmt(){
+  Token t=peek();
+  advance();//catch 처리
+  consume(TKind::LEFT_BRACE, "expect '(' after catch");
+  Token errorType=consume(TKind::IDENTIFIER, "expect error type after '('");
+  optional<string> name=nullopt;
+  if(!check(TKind::RIGHT_BRACE)) name=consume(TKind::IDENTIFIER, "expect error identifier after error type").text;
+  
+  consume(TKind::RIGHT_BRACE, "expect ')' end of catch()");
+  Ptr body=bodyStmt();
+
+  TypeNode::Ptr type=typeNodeConvertor(errorType);
+
+  return make_shared<CatchClause>(t, type, name, body);
+}
+
+Ptr Parser::onexitStmt(){
+  Token t=peek();
+  advance();//onexit 처리
+  consume(TKind::LEFT_BRACE, "expect '{' after onexit");
+  Ptr body=blockStmt();
+  return make_shared<OnexitStmt>(t,body); 
+}
+
+Ptr Parser::throwStmt(){
+  Token t=peek();
+  advance();//throw 처리
+  Expr::Ptr expr=expression();
+  return make_shared<ThrowStmt>(t,expr);
 }

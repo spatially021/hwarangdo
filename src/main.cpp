@@ -182,10 +182,6 @@ inline string tokenToString(TKind kind) {
     return "SLASH_EQUAL";
   case TKind::PERCENT_EQUAL:
     return "PERCENT_EQUAL";
-  case TKind::DOUBLE_PLUS:
-    return "DOUBLE_PLUS";
-  case TKind::DOUBLE_MINUS:
-    return "DOUBLE_MINUS";
   case TKind::DOUBLE_EQUAL:
     return "DOUBLE_EQUAL";
   case TKind::BANG_EQUAL:
@@ -224,7 +220,7 @@ inline string tokenToString(TKind kind) {
     return "LIT_INT";
   case TKind::LIT_FLOAT:
     return "LIT_FLOAT";
-  case TKind::LIT_CHARACTOR:
+  case TKind::LIT_CHARACTER:
     return "LIT_CHARACTOR";
   case TKind::LIT_STRING:
     return "LIT_STRING";
@@ -266,12 +262,6 @@ inline string tokenToString(TKind kind) {
     return "CARET";
   case TKind::BORROW:
     return "BORROW";
-  case TKind::MUT:
-    return "MUT";
-  case TKind::SHARE:
-    return "SHARE";
-  case TKind::WEAK:
-    return "WEAK";
   case TKind::CLASS:
     return "CLASS";
   case TKind::STRUCT:

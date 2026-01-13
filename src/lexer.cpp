@@ -85,17 +85,22 @@ Token Lexer::scan() {
     return {TKind::COLON, string(1, get()), tempL, tempC};
   if (c == ',')
     return {TKind::COMMA, string(1, get()), tempL, tempC};
-  if (c == '.')
-    return {TKind::DOT, string(1, get()), tempL, tempC};
+  if (c == '.') {
+    get();
+    if (peek() == '.') {
+      get();
+      return {TKind::DOUBLE_DOT, "..", tempL, tempC};
+    }
+    return {TKind::DOT, ".", tempL, tempC};
+  }
+  if (c == '_')
+    return {TKind::UNDERBAR, string(1, get()), tempL, tempC};
+
   if (c == '+') {
     get();
     if (peek() == '=') {
       get();
       return {TKind::PLUS_EQUAL, "+=", tempL, tempC};
-    }
-    if (peek() == '+') {
-      get();
-      return {TKind::DOUBLE_PLUS, "++", tempL, tempC};
     }
     return {TKind::PLUS, "+", tempL, tempC};
   }
@@ -104,10 +109,6 @@ Token Lexer::scan() {
     if (peek() == '=') {
       get();
       return {TKind::MINUS_EQUAL, "-=", tempL, tempC};
-    }
-    if (peek() == '-') {
-      get();
-      return {TKind::DOUBLE_MINUS, "--", tempL, tempC};
     }
     return {TKind::MINUS, "-", tempL, tempC};
   }
@@ -284,7 +285,7 @@ Token Lexer::scan() {
       throw runtime_error("Unterminated character literal");
     }
     get(); // closing '
-    return {TKind::LIT_CHARACTOR, ch, tempL, tempC};
+    return {TKind::LIT_CHARACTER, ch, tempL, tempC};
   }
 
   // 숫자 리터럴
@@ -297,6 +298,9 @@ Token Lexer::scan() {
       str.push_back(get());
 
     if (peek() == '.') {
+      if (peek(1) == '.') {
+        return {TKind::LIT_INT, str, tempL, tempC};
+      }
       str.push_back(get());
       isReal = true;
       while (isNumber(peek()))

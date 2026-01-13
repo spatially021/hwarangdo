@@ -2,81 +2,67 @@
 
 #include "ASTNode.h"
 #include "Visitor.h"
+#include <algorithm>
 #include <memory>
 #include <stdexcept>
 #include <string>
 
+class ValueSymbol;
+class Stmt;
+
 using namespace std;
 
-class Stmt;
 using StmtPtr = shared_ptr<Stmt>;
 class Expr : public ASTNode {
 public:
   using Ptr = shared_ptr<Expr>;
-  string evaluatedType = "null"; // ← 타입 검사 결과 저장
-
   Expr(NKind kind, Token token) : ASTNode(kind, token) {}
   void accept(ASTVisitor *visitor) override { visitor->visit(this); }
 };
 
 class LiteralExpr : public Expr {
+public:
   string value = "null";
-  LiteralExpr(NKind k, Token t, const string &v) : Expr(k, t) {
-    if (value != "null") {
-      switch (t.kind) {
-      case TKind::LIT_INT:
-        this->evaluatedType = "int";
-        break;
-      case TKind::LIT_BOOL:
-        evaluatedType = "bool";
-        break;
-      case TKind::LIT_CHARACTOR:
-        evaluatedType = "char";
-        break;
-      case TKind::LIT_FLOAT:
-        evaluatedType = "float";
-        break;
-      case TKind::LIT_STRING:
-        evaluatedType = "string";
-        break;
-      default:
-        string message = "Invalid TKind for literalExpr : " + t.text;
-        throw runtime_error(message);
-      }
-    }
-  }
+  LiteralExpr(Token t, const string &v)
+      : Expr(NKind::LITERAL_EXPR, t), value(v) {}
 
   void accept(ASTVisitor *visitor) override { visitor->visit(this); }
 };
 
 class VarExpr : public Expr {
+public:
   string name;
   VarExpr(Token t, const string &n) : Expr(NKind::VAR_EXPR, t), name(n) {}
   void accept(ASTVisitor *visitor) override { visitor->visit(this); }
+  ValueSymbol *resolved;
 };
 
 class UnaryExpr : public Expr {
+public:
   Token op;
   Ptr right;
-  UnaryExpr(Token t, Ptr p) : Expr(NKind::UNARY_EXPR, t), op(t), right(p) {}
+  UnaryExpr(Token t, Token o, Ptr p)
+      : Expr(NKind::UNARY_EXPR, t), op(o), right(p) {}
   void accept(ASTVisitor *visitor) override { visitor->visit(this); }
 };
 
 class BinaryExpr : public Expr {
+public:
   Ptr left, right;
   Token op;
-  BinaryExpr(Token t, Ptr l, Ptr r)
-      : Expr(NKind::BINARY_EXPR, t), left(l), right(r), op(t) {}
+  BinaryExpr(Token t, Ptr l, Token o, Ptr r)
+      : Expr(NKind::BINARY_EXPR, t), left(l), right(r), op(o) {}
   void accept(ASTVisitor *visitor) override { visitor->visit(this); }
 };
 
 class AssignExpr : public Expr {
 public:
-  std::string name;
+  Expr::Ptr target;
   Expr::Ptr value;
+  Token op;
 
-  AssignExpr(Token token, const std::string &name, Expr::Ptr value)
-      : Expr(NKind::ASSIGN_EXPR, token), name(name), value(value) {}
+  AssignExpr(Token token, Expr::Ptr t, Token o, Expr::Ptr v)
+      : Expr(NKind::ASSIGN_EXPR, token), target(t), value(v), op(o) {}
 
   void accept(ASTVisitor *visitor) override { visitor->visit(this); }
 };
@@ -84,12 +70,12 @@ public:
 class MemberExpr : public Expr {
 public:
   Expr::Ptr object;
-  std::string memberName;
-
-  MemberExpr(Expr::Ptr object, Token token, const std::string &name)
-      : Expr(NKind::ACCESS_EXPR, token), object(object), memberName(name) {}
+  string member;
+  MemberExpr(Token t, Expr::Ptr o, const std::string &m)
+      : Expr(NKind::ACCESS_EXPR, t), object(std::move(o)), member(m) {}
 
   void accept(ASTVisitor *visitor) override { visitor->visit(this); }
+  ValueSymbol *resolved;
 };
 
 class IndexExpr : public Expr {
@@ -97,8 +83,8 @@ public:
   Expr::Ptr object;
   Expr::Ptr index;
 
-  IndexExpr(Expr::Ptr object, Expr::Ptr index, Token token)
-      : Expr(NKind::INDEX_EXPR, token), object(object), index(index) {}
+  IndexExpr(Token t, Expr::Ptr o, Expr::Ptr i)
+      : Expr(NKind::INDEX_EXPR, t), object(o), index(i) {}
 
   void accept(ASTVisitor *visitor) override { visitor->visit(this); }
 };
@@ -108,9 +94,22 @@ public:
   Expr::Ptr callee;
   std::vector<Expr::Ptr> arguments;
 
-  CallExpr(Expr::Ptr callee, Token token, const std::vector<Expr::Ptr> &args)
-      : Expr(NKind::CALL_EXPR, token), callee(callee), arguments(args) {}
+  CallExpr(Token t, Expr::Ptr c, const std::vector<Expr::Ptr> &a)
+      : Expr(NKind::CALL_EXPR, t), callee(std::move(c)),
+        arguments(std::move(a)) {}
 
+  void accept(ASTVisitor *visitor) override { visitor->visit(this); }
+  ValueSymbol *resolved;
+};
+
+class TernaryExpr : public Expr {
+public:
+  Expr::Ptr conditon;
+  Expr::Ptr then;
+  Expr::Ptr else_;
+
+  TernaryExpr(Token t, Expr::Ptr c, Expr::Ptr th, Expr::Ptr e)
+      : Expr(NKind::TERNARY_EXPR, t), conditon(c), then(th), else_(e) {}
   void accept(ASTVisitor *visitor) override { visitor->visit(this); }
 };
 
@@ -130,6 +129,7 @@ public:
   ThisExpr(Token token) : Expr(NKind::THIS_EXPR, token) {}
 
   void accept(ASTVisitor *visitor) override { visitor->visit(this); }
+  ValueSymbol *resolved;
 };
 
 class SuperExpr : public Expr {
@@ -137,6 +137,7 @@ public:
   SuperExpr(Token token) : Expr(NKind::SUPER_EXPR, token) {}
 
   void accept(ASTVisitor *visitor) override { visitor->visit(this); }
+  ValueSymbol *resolved;
 };
 
 class MatchExpr : public Expr {

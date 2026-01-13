@@ -1,6 +1,133 @@
-class Main{
+// ================================
+// Trait 선언 (시그니처 전용)
+// ================================
+
+public trait Movable {
+    void move(int dx, int dy);
+    func length();
 }
 
-public struct st{
-    int a;
+// ================================
+// Enum 선언 (payload 포함, 단일 상속)
+// ================================
+
+public enum ResultCode {
+    OK,
+    InvalidArgument(int),
+    NotFound(int)
+}
+
+// ================================
+// Struct 선언 (필드만 허용)
+// ================================
+
+public struct Vec2 {
+    public int x;
+    public int y;
+}
+
+// ================================
+// Struct impl (메서드 구현 전용)
+// ================================
+
+impl Vec2 {
+
+    public void set(int nx, int ny) {
+        x = nx;
+        y = ny;
+    }
+
+    public func length() {
+        return x * x + y * y;
+    }
+
+    public int sum() {
+        return x + y;
+    }
+}
+
+// ================================
+// Class 선언 (class 상속 + trait 다중 상속)
+// ================================
+
+public class Entity : Movable {
+
+    // -------- 필드 선언 --------
+    protected int id;
+    private bool alive;
+    public Vec2 position;
+
+    // -------- 메서드 (명시적 반환 타입) --------
+    public int getId() {
+        return id;
+    }
+
+    // -------- 메서드 (void) --------
+    public void kill() {
+        alive = false;
+    }
+
+    // -------- 메서드 (func 기반 타입 추론) --------
+    public func isAlive() {
+        return alive;
+    }
+
+    // -------- 내부 class / struct --------
+    class InternalState {
+        int flags;
+    }
+
+    struct Snapshot {
+        int x;
+        int y;
+    }
+}
+
+// ================================
+// Class 상속 + trait 다중 상속
+// ================================
+
+public class Player extends Entity : Movable {
+
+    private int health;
+    public string name;
+
+    // -------- 명시적 반환 --------
+    public int getHealth() {
+        return health;
+    }
+
+    // -------- void 반환 --------
+    public void damage(int amount) {
+        health = health - amount;
+    }
+
+    // -------- func 반환 추론 --------
+    public func isDead() {
+        return health <= 0;
+    }
+
+    // -------- trait 시그니처 대응 --------
+    public void move(int dx, int dy) {
+        position.x = position.x + dx;
+        position.y = position.y + dy;
+    }
+
+    public func length() {
+        return position.length();
+    }
+}
+
+// ================================
+// 추가 impl (여러 impl 허용 검증)
+// ================================
+
+impl Player {
+
+    public ResultCode checkState() {
+        if (health <= 0) {
+            return InvalidArgument(health);
+        }
+        return OK;
+    }
 }

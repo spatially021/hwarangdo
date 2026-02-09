@@ -1,4 +1,5 @@
-#include "../include/Parser.h"
+#include "Parser.h"
+#include "util/Error.h"
 #include <memory>
 #include <regex>
 #include <stdexcept>
@@ -9,17 +10,8 @@ bool Parser::isAtEnd() const {
 const Token &Parser::consume(TKind kind, const string &message) {
   if (check(kind))
     return advance();
-  error(peek(), message);
+  Error::diagnostic(peek(), message);
   throw runtime_error("");
-}
-
-[[noreturn]]
-void Parser::error(const Token &token, const string &message) const {
-  string m = "[line ";
-  m += std::to_string(token.line);
-  m += "] Error at '" + token.text + "': " + message;
-
-  throw runtime_error(m);
 }
 
 bool Parser::match(std::initializer_list<TKind> kinds) {
@@ -120,27 +112,28 @@ bool Parser::isType() const {
   if (isAccessModifier()) {
     if (isTypeToken(following().kind))
       return true;
-    error(following(), "Expected type after access modifier");
+    Error::diagnostic(following(), "Expected type after access modifier");
   }
   return isTypeToken(peek().kind);
 }
 
 bool Parser::isFunc() const {
-  if(isAccessModifier()){
+  if (isAccessModifier()) {
     if (isTypeToken(following().kind) || following().kind == TKind::VOID ||
         following().kind == TKind::FUNC) {
-      return following(2).kind==TKind::IDENTIFIER && following(3).kind==TKind::LEFT_PAREN;
+      return following(2).kind == TKind::IDENTIFIER &&
+             following(3).kind == TKind::LEFT_PAREN;
     }
-    error(following(), "expect type after access modifier");
+    Error::diagnostic(following(), "expect type after access modifier");
   }
 
   if (isTypeToken(peek().kind) || peek().kind == TKind::VOID ||
       peek().kind == TKind::FUNC) {
-    return following().kind==TKind::IDENTIFIER&&following(2).kind==TKind::LEFT_PAREN;
+    return following().kind == TKind::IDENTIFIER &&
+           following(2).kind == TKind::LEFT_PAREN;
   }
 
   return false;
-
 }
 
 TypeNode::Ptr Parser::typeNodeConvertor(Token ty) {
@@ -172,10 +165,10 @@ TypeNode::Ptr Parser::typeNodeConvertor(Token ty) {
       node = make_shared<BuiltinTypeNode>(ty, BuiltinTypeNode::Category::Void);
       break;
     case TKind::FUNC:
-      node=make_shared<BuiltinTypeNode>(ty,BuiltinTypeNode::Category::FUNC);
+      node = make_shared<BuiltinTypeNode>(ty, BuiltinTypeNode::Category::FUNC);
       break;
     default:
-      error(ty, "unexpected type");
+      Error::diagnostic(ty, "unexpected type");
     }
   }
   return node;
@@ -190,8 +183,8 @@ bool Parser::isAssign() const {
 bool Parser::isAssginable(Expr::Ptr p) const {
   switch (p->kind) {
   case NKind::VAR_EXPR:
-  case NKind::ACCESS_EXPR:
-  case NKind::INDEX_EXPR:
+  case NKind::MEMBER_EXPR:
+  case NKind::ARRAY_ACCESS_EXPR:
     return true;
   default:
     return false;

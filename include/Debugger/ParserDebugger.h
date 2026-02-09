@@ -1,25 +1,19 @@
 #pragma once
 
-#include "../AST/Visitor.h"
-#include "SymbolTable.h"
-
-class Resolver : public ASTVisitor {
-
+#include "AST/Visitor.h"
+#include <cstddef>
+#include <string>
+class ParserDebugger :public ASTVisitor{
 public:
-  SymbolTable *table;
-
-  Resolver(SymbolTable *table);
-
+  std::size_t depth=0;
+  std::string ident();
   void visit(LiteralExpr *expr);
   void visit(BinaryExpr *expr);
   void visit(VarExpr *expr);
   void visit(UnaryExpr *expr);
   void visit(CallExpr *expr);
-  void visit(GroupExpr *expr);
   void visit(AssignExpr *expr);
-  void visit(AccessExpr *expr);
-  void visit(IndexExpr *expr);
-  void visit(PostfixExpr *expr);
+  void visit(MemberExpr *expr);
   void visit(ArrayAccessExpr *expr);
   void visit(TernaryExpr *expr);
   void visit(ThisExpr *expr);
@@ -45,17 +39,12 @@ public:
   void visit(EnumDecl *decl);
   void visit(ImplDecl *decl);
   void visit(TraitDecl *decl);
-
+  void visit(TraitSig *decl);
   void visit(FuncDecl *decl);
   void visit(VarDecl *decl);
   void visit(ArrayDecl *decl);
 
   void visit(TypeNode *decl);
   void visit(ASTNode *node);
-
-  void visit(TraitSig *sig);
   void visit(Param *param);
-
-  // util function
-  [[noreturn]] void error(const Token &token, const std::string &message) const;
 };

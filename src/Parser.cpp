@@ -1,13 +1,12 @@
-#include "include/Parser.h"
-#include "include/AST/Decl.h"
-#include "include/AST/Stmt.h"
-#include "include/Token.h"
+#include "Parser.h"
+#include "Token.h"
+#include "util/Error.h"
 #include <memory>
 #include <vector>
 
 using ptr = shared_ptr<ASTNode>;
 
-Parser::Parser(const vector<Token> &tokens) : tokens(tokens) {}
+Parser::Parser(const vector<Token> &t) : tokens(t) {}
 
 vector<Stmt::Ptr> Parser::parse() {
   while (!isAtEnd()) {
@@ -68,7 +67,7 @@ Decl::Ptr Parser::declaration(DeclContext context) {
     }
   }
 
-  error(peek(), "only declaration in top-level");
+  Error::diagnostic(peek(), "only declaration in top-level");
 }
 
 Stmt::Ptr Parser::statement() {
@@ -119,12 +118,17 @@ Stmt::Ptr Parser::statement() {
   case TKind::THROW:
     return throwStmt();
 
+  case TKind::IDENTIFIER:
+    if (following().kind == TKind::IDENTIFIER)
+      return declStmt();
+    else
+      return expressionStmt();
   default:
     return expressionStmt();
   }
 }
 
 Expr::Ptr Parser::expression() {
-  Expr::Ptr expr=assignment();
+  Expr::Ptr expr = assignment();
   return expr;
 }

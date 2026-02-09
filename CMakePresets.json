@@ -1,0 +1,73 @@
+{
+    "version": 6,
+    "configurePresets": [
+        {
+            "name": "base-debug",
+            "hidden": true,
+            "generator": "Ninja",
+            "binaryDir": "${sourceDir}/build/${presetName}",
+            "cacheVariables": {
+                "CMAKE_CXX_STANDARD": "20",
+                "CMAKE_BUILD_TYPE": "Debug",
+                "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+                "CMAKE_CXX_FLAGS": "-g3 -O0 -fno-omit-frame-pointer -fno-optimize-sibling-calls",
+                "CMAKE_C_FLAGS": "-g3 -O0 -fno-omit-frame-pointer -fno-optimize-sibling-calls"
+            }
+        },
+        {
+            "name": "debug",
+            "inherits": "base-debug",
+            "cacheVariables": {
+                "HGM_BUILD_MODE": "DEBUG"
+            }
+        },
+        {
+            "name": "debug-asan",
+            "inherits": "base-debug",
+            "cacheVariables": {
+                "CMAKE_CXX_FLAGS": "-g3 -O1 -fsanitize=address,undefined -fno-omit-frame-pointer -fno-optimize-sibling-calls",
+                "CMAKE_C_FLAGS": "-g3 -O1 -fsanitize=address,undefined -fno-omit-frame-pointer -fno-optimize-sibling-calls",
+                "CMAKE_EXE_LINKER_FLAGS": "-fsanitize=address,undefined",
+                "HGM_BUILD_MODE": "ASAN"
+            }
+        },
+        {
+            "name": "debug-ide",
+            "inherits": "base-debug",
+            "cacheVariables": {
+                "CMAKE_CXX_FLAGS": "-g3 -O0 -fno-inline -fno-omit-frame-pointer",
+                "HGM_BUILD_MODE": "IDE"
+            }
+        },
+        {
+            "name": "release",
+            "generator": "Ninja",
+            "binaryDir": "${sourceDir}/build/release",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Release",
+                "CMAKE_CXX_STANDARD": "20",
+                "CMAKE_CXX_FLAGS": "-O3 -DNDEBUG -flto",
+                "CMAKE_C_FLAGS": "-O3 -DNDEBUG -flto"
+            }
+        }
+    ],
+    "buildPresets": [
+        {
+            "name": "debug",
+            "configurePreset": "debug"
+        },
+        {
+            "name": "asan",
+            "configurePreset": "debug-asan"
+        },
+
+        {
+            "name": "ide",
+            "configurePreset": "debug-ide"
+        },
+        {
+            "name": "release",
+            "configurePreset": "release"
+        }
+    ]
+}

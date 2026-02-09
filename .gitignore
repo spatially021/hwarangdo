@@ -1,1 +1,10 @@
 .vscode
+testProject/
+*.sh
+build/
+logs/
+old/
+.cache/
+.build-meta/
+*.txt
+Makefile

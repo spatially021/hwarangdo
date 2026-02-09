@@ -3,27 +3,30 @@
 #include "ASTNode.h"
 #include "Expr.h"
 #include "Visitor.h"
-#include <algorithm>
 #include <memory>
 #include <optional>
+#include <utility>
 #include <vector>
 
 class Decl;
+class Scope;
+class TypeSymbol;
 using DeclPtr = shared_ptr<Decl>;
 
 class Stmt : public ASTNode {
 public:
   using Ptr = std::shared_ptr<Stmt>;
-  Stmt(NKind kind, Token token) : ASTNode(kind, token) {}
+  Stmt(NKind k, Token t) : ASTNode(k, t) {}
   void accept(ASTVisitor *visitor) override { visitor->visit(this); }
+  Scope *blockScope = nullptr;
 };
 
 class ExprStmt : public Stmt {
 public:
   Expr::Ptr expr;
 
-  ExprStmt(Token token, Expr::Ptr e)
-      : Stmt(NKind::EXPR_STMT, token), expr(std::move(e)) {}
+  ExprStmt(Token t, Expr::Ptr e)
+      : Stmt(NKind::EXPR_STMT, t), expr(std::move(e)) {}
 
   void accept(ASTVisitor *visitor) override { visitor->visit(this); }
 };
@@ -32,8 +35,8 @@ class BlockStmt : public Stmt {
 public:
   std::vector<Stmt::Ptr> statements;
 
-  BlockStmt(Token token, std::vector<Stmt::Ptr> stmts)
-      : Stmt(NKind::BLOCK_STMT, token), statements(std::move(stmts)) {}
+  BlockStmt(Token t, std::vector<Stmt::Ptr> stmts)
+      : Stmt(NKind::BLOCK_STMT, t), statements(std::move(stmts)) {}
 
   void accept(ASTVisitor *visitor) override { visitor->visit(this); }
 };
@@ -44,9 +47,9 @@ public:
   Stmt::Ptr thenBranch;
   Stmt::Ptr elseBranch;
 
-  IfStmt(Token token, Expr::Ptr cond, Stmt::Ptr thenB,
+  IfStmt(Token t, Expr::Ptr cond, Stmt::Ptr thenB,
          Stmt::Ptr elseB = nullptr)
-      : Stmt(NKind::IF_STMT, token), condition(std::move(cond)),
+      : Stmt(NKind::IF_STMT, t), condition(std::move(cond)),
         thenBranch(std::move(thenB)), elseBranch(std::move(elseB)) {}
 
   void accept(ASTVisitor *visitor) override { visitor->visit(this); }
@@ -57,8 +60,8 @@ public:
   Expr::Ptr condition;
   Stmt::Ptr body;
 
-  WhileStmt(Token token, Expr::Ptr c, Stmt::Ptr b)
-      : Stmt(NKind::WHILE_STMT, token), condition(std::move(c)),
+  WhileStmt(Token t, Expr::Ptr c, Stmt::Ptr b)
+      : Stmt(NKind::WHILE_STMT, t), condition(std::move(c)),
         body(std::move(b)) {}
 
   void accept(ASTVisitor *visitor) override { visitor->visit(this); }
@@ -71,15 +74,17 @@ public:
     Expr::Ptr from;
     Expr::Ptr to;
     Expr::Ptr step;
-    Range(Token t, Expr::Ptr f,Expr::Ptr to_,Expr::Ptr step={}):Expr(NKind::RANGE, t),from(std::move(f)),to(std::move(to_)){}
+    Range(Token t, Expr::Ptr f, Expr::Ptr to_, Expr::Ptr s = {})
+        : Expr(NKind::RANGE, t), from(std::move(f)), to(std::move(to_)),
+          step(std::move(s)) {}
     void accept(ASTVisitor *visitor) override { visitor->visit(this); }
   };
   Stmt::Ptr initializer; // VarDeclStmt or ExprStmt or null
   shared_ptr<Range> range;
   Stmt::Ptr body;
 
-  ForStmt(Token token, Stmt::Ptr init, shared_ptr<Range> r, Stmt::Ptr b)
-      : Stmt(NKind::FOR_STMT, token), initializer(std::move(init)),
+  ForStmt(Token t, Stmt::Ptr init, shared_ptr<Range> r, Stmt::Ptr b)
+      : Stmt(NKind::FOR_STMT, t), initializer(std::move(init)),
         range(std::move(r)), body(std::move(b)) {}
 
   void accept(ASTVisitor *visitor) override { visitor->visit(this); }
@@ -88,23 +93,23 @@ public:
 class ReturnStmt : public Stmt {
 public:
   Expr::Ptr value; // null이면 return;
-
-  ReturnStmt(Token token, Expr::Ptr v)
-      : Stmt(NKind::RETURN_STMT, token), value(std::move(v)) {}
+  ReturnStmt(Token t, Expr::Ptr v)
+      : Stmt(NKind::RETURN_STMT, t), value(std::move(v)) {}
 
   void accept(ASTVisitor *visitor) override { visitor->visit(this); }
+  TypeSymbol *resolved = nullptr;
 };
 
 class BreakStmt : public Stmt {
 public:
-  BreakStmt(Token token) : Stmt(NKind::BREAK_STMT, token) {}
+  BreakStmt(Token t) : Stmt(NKind::BREAK_STMT, t) {}
 
   void accept(ASTVisitor *visitor) override { visitor->visit(this); }
 };
 
 class ContinueStmt : public Stmt {
 public:
-  ContinueStmt(Token token) : Stmt(NKind::CONTINUE_STMT, token) {}
+  ContinueStmt(Token t) : Stmt(NKind::CONTINUE_STMT, t) {}
 
   void accept(ASTVisitor *visitor) override { visitor->visit(this); }
 };
@@ -122,29 +127,26 @@ public:
 
 class SwitchStmt : public Stmt {
 public:
-  
   Expr::Ptr value;                       // switch (value)
   std::vector<shared_ptr<Case>> clauses; // CaseStmt 또는 DefaultStmt 의 집합
 
-  SwitchStmt(Token token, Expr::Ptr val, std::vector<shared_ptr<Case>> c)
-      : Stmt(NKind::SWITCH_STMT, token), value(std::move(val)),
+  SwitchStmt(Token t, Expr::Ptr val, std::vector<shared_ptr<Case>> c)
+      : Stmt(NKind::SWITCH_STMT, t), value(std::move(val)),
         clauses(std::move(c)) {}
 
   void accept(ASTVisitor *visitor) override { visitor->visit(this); }
 };
 
-
-
 class CatchClause : public Stmt {
 public:
-  std::shared_ptr<TypeNode> type; // catch (e: ErrorType)
+  std::shared_ptr<TypeNode> type;      // catch (e: ErrorType)
   optional<std::string> exceptionName; // catch (e)
-  Stmt::Ptr body;                 // block or single stmt
+  Stmt::Ptr body;                      // block or single stmt
 
-  CatchClause(Token token, std::shared_ptr<TypeNode> t,
+  CatchClause(Token tok, std::shared_ptr<TypeNode> t,
               optional<std::string> name, Stmt::Ptr b)
-      : Stmt(NKind::CATCH_STMT, token), type(std::move(t)),
-        exceptionName(name) ,body(std::move(b)) {}
+      : Stmt(NKind::CATCH_STMT, tok), type(std::move(t)), exceptionName(name),
+        body(std::move(b)) {}
 
   void accept(ASTVisitor *visitor) override { visitor->visit(this); }
 };
@@ -154,9 +156,9 @@ public:
   Stmt::Ptr tryBlock; // usually BlockStmt
   std::vector<std::shared_ptr<CatchClause>> catches;
 
-  TryCatchStmt(Token token, Stmt::Ptr tryB,
+  TryCatchStmt(Token t, Stmt::Ptr tryB,
                std::vector<std::shared_ptr<CatchClause>> c)
-      : Stmt(NKind::TRY_STMT, token), tryBlock(std::move(tryB)),
+      : Stmt(NKind::TRY_STMT, t), tryBlock(std::move(tryB)),
         catches(std::move(c)) {}
 
   void accept(ASTVisitor *visitor) override { visitor->visit(this); }
@@ -166,8 +168,8 @@ class OnexitStmt : public Stmt {
 public:
   Stmt::Ptr body;
 
-  OnexitStmt(Token token, Stmt::Ptr body)
-      : Stmt(NKind::ONEXIT_STMT, token), body(std::move(body)) {}
+  OnexitStmt(Token t, Stmt::Ptr b)
+      : Stmt(NKind::ONEXIT_STMT, t), body(std::move(b)) {}
 
   void accept(ASTVisitor *visitor) override { visitor->visit(this); }
 };

@@ -1,4 +1,7 @@
-#include "../include/Parser.h"
+#include "AST/ASTNode.h"
+#include "AST/Decl.h"
+#include "Parser.h"
+#include "util/Error.h"
 #include <memory>
 #include <optional>
 #include <regex>
@@ -9,11 +12,13 @@ using Ptr = Decl::Ptr;
 Ptr Parser::classDecl(DeclPrefix prefix) {
 
   if (contexts.back() != CLASSBODY && contexts.back() != TOPLEVEL)
-    error(prefix.startToken, "class delaration can only declare in top-level "
-                             "or other class's block");
-  ContextGuard _{contexts,CLASSBODY};
+    Error::diagnostic(prefix.startToken,
+                      "class delaration can only declare in top-level "
+                      "or other class's block");
+  ContextGuard _{contexts, CLASSBODY};
 
-  if(prefix.isConst) error(previous(),"const can place only variation declaration");
+  if (prefix.isConst)
+    Error::diagnostic(previous(), "const can place only variation declaration");
 
   AModifier modi = prefix.modi;
   Token t = prefix.startToken;
@@ -23,13 +28,13 @@ Ptr Parser::classDecl(DeclPrefix prefix) {
   optional<string> base;
 
   if (check(TKind::EXTENDS)) {
-    advance();//extends 처리
+    advance(); // extends 처리
     base = advance().text;
   }
 
   vector<string> traits;
   if (check(TKind::COLON)) {
-    advance();//:처리
+    advance(); //: 처리
     while (!check(TKind::LEFT_BRACE) && !isAtEnd()) {
       traits.push_back(advance().text);
     }
@@ -49,35 +54,30 @@ Ptr Parser::classDecl(DeclPrefix prefix) {
 Ptr Parser::structDecl(DeclPrefix prefix) {
 
   if (contexts.back() != CLASSBODY && contexts.back() != TOPLEVEL)
-    error(prefix.startToken, "struct delaration can only declare in top-level "
-                             "or other class's block");
+    Error::diagnostic(prefix.startToken,
+                      "struct delaration can only declare in top-level "
+                      "or other class's block");
   ContextGuard _{contexts, BLOCK};
 
   if (prefix.isConst)
-    error(previous(), "const can place only variation declaration");
+    Error::diagnostic(previous(), "const can place only variation declaration");
   AModifier modi = prefix.modi;
   Token t = prefix.startToken;
   advance(); // struct 처리
 
   Token name = consume(TKind::IDENTIFIER, "expect struct name after 'struct'.");
-  vector<string> traits;
-  if (check(TKind::COLON)) {
-    advance();//:처리
-    while (!check(TKind::LEFT_BRACE) && !isAtEnd()) {
-      traits.push_back(advance().text);
-    }
-  }
 
   consume(TKind::LEFT_BRACE, "expect '{' before struct body");
   vector<shared_ptr<VarDecl>> fields;
   while (!check(TKind::RIGHT_BRACE) && !isAtEnd()) {
 
-    DeclPrefix p={};
-    p.startToken=peek();
-    
-    if(isAccessModifier()) p.modi=AModifierConvertor(advance());
-    if(check(TKind::CONST)){
-      p.isConst=true;
+    DeclPrefix p = {};
+    p.startToken = peek();
+
+    if (isAccessModifier())
+      p.modi = AModifierConvertor(advance());
+    if (check(TKind::CONST)) {
+      p.isConst = true;
       advance();
     }
 
@@ -86,26 +86,27 @@ Ptr Parser::structDecl(DeclPrefix prefix) {
       if (var) {
         fields.push_back(var);
       } else
-        error(peek(), "this expression is not allowed");
+        Error::diagnostic(peek(), "this expression is not allowed");
     } else
-      error(peek(), "only var or instance declare here");
+      Error::diagnostic(peek(), "only var or instance declare here");
   }
   consume(TKind::RIGHT_BRACE, "expect '}' after struct body");
 
-  return make_shared<StructDecl>(t, name.text, fields, traits, modi);
+  return make_shared<StructDecl>(t, name.text, fields, modi);
 }
 
 Ptr Parser::varDecl(DeclPrefix prefix) {
 
-  if(contexts.back()==TOPLEVEL)
-    error(prefix.startToken, "variation declaration cannot place in top-level");
+  if (contexts.back() == TOPLEVEL)
+    Error::diagnostic(prefix.startToken,
+                      "variation declaration cannot place in top-level");
 
   AModifier modi = prefix.modi;
   Token t = prefix.startToken;
 
   Token ty = advance(); // 자료형/객체인스턴스 처리
 
-  VarDecl::Size size={};
+  VarDecl::Size size = {};
 
   if (check(TKind::COLON)) {
     static const std::regex signedPattern(R"(^(\d+)$)");
@@ -114,21 +115,21 @@ Ptr Parser::varDecl(DeclPrefix prefix) {
     static const std::regex unsignedFixedPattern(R"(^[uU](\d+)\.(\d+)$)");
 
     if (ty.kind == TKind::IDENTIFIER)
-      error(peek(), "':' is only allowed built-in types");
-    advance();//:처리
+      Error::diagnostic(peek(), "':' is only allowed built-in types");
+    advance(); //: 처리
     if (isValidSize(peek().text)) {
       string s = peek().text;
       std::smatch match;
 
       if (ty.kind == TKind::FIXED) {
-        size.isFixed=true;
+        size.isFixed = true;
         if (std::regex_match(s, match, fixedPattern)) {
           size.size_f = {std::stoi(match[1].str()), std::stoi(match[2].str())};
         } else if (std::regex_match(s, match, unsignedFixedPattern)) {
           size.isSigned = false;
           size.size_f = {std::stoi(match[1].str()), std::stoi(match[2].str())};
         } else
-          error(peek(), "invalid size expression");
+          Error::diagnostic(peek(), "invalid size expression");
       } else {
         if (std::regex_match(s, match, signedPattern)) {
           size.size = std::stoi(match[1].str());
@@ -136,24 +137,23 @@ Ptr Parser::varDecl(DeclPrefix prefix) {
           size.isSigned = false;
           size.size = std::stoi(match[1].str());
         } else
-          error(peek(), "invalid size expression");
+          Error::diagnostic(peek(), "invalid size expression");
       }
     } else
-      error(peek(), "invalid size expression");
+      Error::diagnostic(peek(), "invalid size expression");
   }
-
 
   Token name = consume(TKind::IDENTIFIER, "expect var name after type-keyword");
 
   if (check(TKind::LEFT_BRACKET)) {
-    advance();//[처리
+    advance(); //[처리
     Expr::Ptr s = expression();
     consume(TKind::RIGHT_BRACKET, "expect ']' after array's size expression");
 
     Expr::Ptr init = nullptr;
 
     if (check(TKind::EQUAL)) {
-      advance();//=처리
+      advance(); //=처리
       init = expression();
     }
 
@@ -163,34 +163,38 @@ Ptr Parser::varDecl(DeclPrefix prefix) {
 
     auto aNode = make_shared<ArrayTypeNode>(t, node, s);
 
-    return make_shared<ArrayDecl>(t, name.text, aNode, size,init, !prefix.isConst, modi);
+    return make_shared<ArrayDecl>(t, name.text, aNode, size, init,
+                                  !prefix.isConst, modi);
   }
 
   Expr::Ptr init = nullptr;
 
   if (check(TKind::EQUAL)) {
-    advance();//=처리
+    advance(); //=처리
     init = expression();
   }
 
   consume(TKind::SEMICOLON, "expect ';' after expression.");
   TypeNode::Ptr node = typeNodeConvertor(ty);
-  return make_shared<VarDecl>(t, name.text, node,size, init, !prefix.isConst, modi);
+  return make_shared<VarDecl>(t, name.text, node, size, init, !prefix.isConst,
+                              modi);
 }
 
-Ptr Parser::functionDecl(DeclPrefix prefix,bool isDynamic) {
+Ptr Parser::functionDecl(DeclPrefix prefix, bool isDynamic) {
   if (contexts.back() == TOPLEVEL)
-    error(prefix.startToken, "function declaration cannot place in top-level");
+    Error::diagnostic(prefix.startToken,
+                      "function declaration cannot place in top-level");
   if (contexts.back() == BLOCK)
-    error(prefix.startToken, "function delcaration cannot place in block");
+    Error::diagnostic(prefix.startToken,
+                      "function delcaration cannot place in block");
 
   ContextGuard _{contexts, BLOCK};
 
   if (prefix.isConst)
-    error(previous(), "const can place only variation declaration");
+    Error::diagnostic(previous(), "const can place only variation declaration");
   AModifier modi = prefix.modi;
   Token t = prefix.startToken;
-  Token ty=advance();//자료형/객체/func/void처리
+  Token ty = advance(); // 자료형/객체/func/void처리
 
   Token name = consume(TKind::IDENTIFIER, "expect function's name");
 
@@ -201,24 +205,23 @@ Ptr Parser::functionDecl(DeclPrefix prefix,bool isDynamic) {
   while (!check(TKind::RIGHT_PAREN) && !isAtEnd()) {
     if (isType()) {
       Token type = advance();
-      Token name = consume(TKind::IDENTIFIER,
-                           "expect parameter name after parameter type");
+      Token n = consume(TKind::IDENTIFIER,
+                        "expect parameter name after parameter type");
       optional<Expr::Ptr> init;
       if (check(TKind::EQUAL)) {
-        advance();//=처리
+        advance(); //=처리
         init = expression();
       }
       TypeNode::Ptr returnType = typeNodeConvertor(type);
-      params.push_back(
-          make_shared<Param>(name.text, returnType, init));
+      params.push_back(make_shared<Param>(n.text, returnType, init));
       if (check(TKind::COMMA)) {
         if (!check(TKind::RIGHT_PAREN, 1))
-          advance();//,처리
+          advance(); //,처리
         else
-          error(following(), "after ',' need more parameter");
+          Error::diagnostic(following(), "after ',' need more parameter");
       }
     } else {
-      error(peek(), "expect parameter type before parameter name.");
+      Error::diagnostic(peek(), "expect parameter type before parameter name.");
     }
   }
 
@@ -237,22 +240,23 @@ Ptr Parser::functionDecl(DeclPrefix prefix,bool isDynamic) {
 
 Ptr Parser::implDecl(DeclPrefix prefix) {
   if (contexts.back() != CLASSBODY && contexts.back() != TOPLEVEL)
-    error(prefix.startToken, "class delaration can only declare in top-level "
-                             "or other class's block");
+    Error::diagnostic(prefix.startToken,
+                      "class delaration can only declare in top-level "
+                      "or other class's block");
 
   if (prefix.isConst)
-    error(previous(), "const can place only variation declaration");
+    Error::diagnostic(previous(), "const can place only variation declaration");
   ContextGuard _{contexts, IMPLBODY};
 
   AModifier modi = prefix.modi;
   Token t = prefix.startToken;
-  advance();//impl 처리
+  advance(); // impl 처리
 
   Token target =
       consume(TKind::IDENTIFIER, "expect implement target name after 'impl'");
   vector<string> traits;
   if (check(TKind::COLON)) {
-    advance();//:처리
+    advance(); //: 처리
     while (!check(TKind::LEFT_BRACE) && !isAtEnd()) {
       traits.push_back(advance().text);
     }
@@ -260,18 +264,19 @@ Ptr Parser::implDecl(DeclPrefix prefix) {
   consume(TKind::LEFT_BRACE, "expect '{' before impl body");
   vector<shared_ptr<FuncDecl>> methods;
 
-
   while (!check(TKind::RIGHT_BRACE) && !isAtEnd()) {
-    DeclPrefix p={};
-    p.startToken=peek();
-    if(isAccessModifier()) p.modi=AModifierConvertor(advance());
-    if(check(TKind::CONST))
-      error(peek(), "const can place only variation declaration");
+    DeclPrefix p = {};
+    p.startToken = peek();
+    if (isAccessModifier())
+      p.modi = AModifierConvertor(advance());
+    if (check(TKind::CONST))
+      Error::diagnostic(peek(), "const can place only variation declaration");
 
     if (isFunc()) {
-      methods.push_back(dynamic_pointer_cast<FuncDecl>(functionDecl(p,check(TKind::FUNC))));
+      methods.push_back(
+          dynamic_pointer_cast<FuncDecl>(functionDecl(p, check(TKind::FUNC))));
     } else
-      error(peek(), "only function declare in impl body");
+      Error::diagnostic(peek(), "only function declare in impl body");
   }
   consume(TKind::RIGHT_BRACE, "expect '}' after impl body");
 
@@ -280,7 +285,7 @@ Ptr Parser::implDecl(DeclPrefix prefix) {
 
 Ptr Parser::traitDecl(DeclPrefix prefix) {
   if (prefix.isConst)
-    error(previous(), "const can place only variation declaration");
+    Error::diagnostic(previous(), "const can place only variation declaration");
   AModifier modi = prefix.modi;
   Token t = prefix.startToken;
   advance(); // trait 처리
@@ -291,45 +296,46 @@ Ptr Parser::traitDecl(DeclPrefix prefix) {
   vector<shared_ptr<TraitSig>> traitSigs;
 
   while (!check(TKind::RIGHT_BRACE) && !isAtEnd()) {
-    Token t = peek();
+    Token tok = peek();
     if (isFunc()) {
       if (isAccessModifier())
-        error(peek(), "access modifier cannot place in function signiture");
+        Error::diagnostic(peek(),
+                          "access modifier cannot place in function signiture");
       Token ty = advance();
-      Token name =
+      Token sigName =
           consume(TKind::IDENTIFIER, "expect method name after method type");
       consume(TKind::LEFT_PAREN, "expect '(' after method name");
       vector<shared_ptr<Param>> params;
       while (!check(TKind::RIGHT_PAREN) && !isAtEnd()) {
         if (isType()) {
           Token type = advance();
-          Token name = consume(TKind::IDENTIFIER,
-                               "expect parameter name after parameter type");
+          Token n = consume(TKind::IDENTIFIER,
+                            "expect parameter name after parameter type");
           optional<Expr::Ptr> init;
           if (check(TKind::EQUAL)) {
-            advance();//=처리
+            advance(); //=처리
             init = expression();
           }
           TypeNode::Ptr returnType = typeNodeConvertor(type);
-          params.push_back(
-              make_shared<Param>(name.text, returnType, init));
+          params.push_back(make_shared<Param>(n.text, returnType, init));
           if (check(TKind::COMMA)) {
             if (!check(TKind::RIGHT_BRACE, 1))
-              advance();//,처리
+              advance(); //,처리
             else
-              error(following(), "after ',' need more parameter");
+              Error::diagnostic(following(), "after ',' need more parameter");
           }
         } else {
-          error(peek(), "expect parameter type before parameter name.");
+          Error::diagnostic(peek(),
+                            "expect parameter type before parameter name.");
         }
       }
       consume(TKind::RIGHT_PAREN, "expect ')' after parameter");
       consume(TKind::SEMICOLON, "expect ';' after method declare");
       TypeNode::Ptr returnType = typeNodeConvertor(ty);
       traitSigs.push_back(
-          make_shared<TraitSig>(t, returnType, name.text, params));
+          make_shared<TraitSig>(tok, returnType, sigName.text, params));
     } else
-      error(peek(), "expect function interface struct");
+      Error::diagnostic(peek(), "expect function interface struct");
   }
 
   consume(TKind::RIGHT_BRACE, "expect '}' after parameter");
@@ -338,7 +344,7 @@ Ptr Parser::traitDecl(DeclPrefix prefix) {
 
 Ptr Parser::enumDecl(DeclPrefix prefix) {
   if (prefix.isConst)
-    error(previous(), "const can place only variation declaration");
+    Error::diagnostic(previous(), "const can place only variation declaration");
   AModifier modi = prefix.modi;
   Token t = prefix.startToken;
   advance(); // enum 처리
@@ -346,32 +352,26 @@ Ptr Parser::enumDecl(DeclPrefix prefix) {
   optional<string> baseEnum = nullopt;
 
   if (check(TKind::COLON)) {
-    advance();//:처리
+    advance(); //: 처리
     baseEnum = consume(TKind::IDENTIFIER, "only enum type inherentale").text;
   }
 
   consume(TKind::LEFT_BRACE, "exepct '{' before enum body");
   vector<shared_ptr<EnumDecl::Variant>> variants;
   while (!check(TKind::RIGHT_BRACE) && !isAtEnd()) {
-    Token name = consume(TKind::IDENTIFIER, "expect name in enum body");
-    vector<TypeNode::Ptr> payloads;
+    Token n = consume(TKind::IDENTIFIER, "expect name in enum body");
     if (check(TKind::LEFT_PAREN)) {
-      advance();//(처리
-      while (!check(TKind::RIGHT_PAREN) && !isAtEnd()) {
-        if (isType()) {
-          Token ty = advance();
-          payloads.push_back(typeNodeConvertor(ty));
-          if (check(TKind::COMMA)) {
-            if (!check(TKind::RIGHT_BRACE, 1))
-              advance(); //,처리
-            else
-              error(following(), "after ',' need more parameter");
-          }
-        } else
-          error(peek(), "only type and object place here");
-      }
+      Token ty;
+      advance(); //(처리
+      if (isType()) {
+        ty = advance();
+      } else
+        Error::diagnostic(peek(), "only type and object place here");
       consume(TKind::RIGHT_PAREN, "expect ')' after payload");
-      variants.push_back(make_shared<EnumDecl::Variant>(name,name.text, payloads));
+      variants.push_back(
+          make_shared<EnumDecl::Variant>(n, n.text, typeNodeConvertor(ty)));
+    } else {
+      variants.push_back(make_shared<EnumDecl::Variant>(n, n.text));
     }
     if (check(TKind::COMMA)) {
       advance(); //,처리

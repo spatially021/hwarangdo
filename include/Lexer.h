@@ -2,6 +2,7 @@
 #include "Token.h"
 #include <string>
 #include <vector>
+#include <unordered_map>
 
 using namespace std;
 
@@ -15,7 +16,7 @@ public:
   void lexing();
 
 protected:
-  char peek(int offset = 0) const;
+  char peek(unsigned int offset = 0) const;
   char get();
   void skipWS();
   bool isIdentFirst(char c);

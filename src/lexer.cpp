@@ -1,5 +1,5 @@
-#include "include/Lexer.h"
-#include "include/Token.h"
+#include "Lexer.h"
+#include "Token.h"
 #include <cctype>
 #include <stdexcept>
 #include <string>
@@ -34,7 +34,7 @@ char Lexer::get() {
   return c;
 }
 
-char Lexer::peek(int offset) const {
+char Lexer::peek(unsigned int offset) const {
   if (pos + offset >= src.size())
     return '\0';
   return src[pos + offset];
@@ -247,6 +247,11 @@ Token Lexer::scan() {
     if (it != keyword_map.end()) {
       return {it->second, ident, tempL, tempC}; // 키워드인 경우 바로 반환
     }
+
+    if(ident=="true"||ident=="false"){
+      return {TKind::LIT_BOOL,ident,tempL,tempC};
+    }
+
 
     return {TKind::IDENTIFIER, ident, tempL,
             tempC}; // 키워드가 아니면 일반 식별자

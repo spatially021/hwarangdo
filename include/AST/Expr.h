@@ -2,12 +2,15 @@
 
 #include "ASTNode.h"
 #include "Visitor.h"
-#include <algorithm>
 #include <memory>
-#include <stdexcept>
 #include <string>
+#include <utility>
 
 class ValueSymbol;
+class TypeSymbol;
+class MethodSymbol;
+class EnumVariantSymbol;
+class Symbol;
 class Stmt;
 
 using namespace std;
@@ -16,8 +19,14 @@ using StmtPtr = shared_ptr<Stmt>;
 class Expr : public ASTNode {
 public:
   using Ptr = shared_ptr<Expr>;
-  Expr(NKind kind, Token token) : ASTNode(kind, token) {}
+  Expr(NKind k, Token t) : ASTNode(k, t) {}
   void accept(ASTVisitor *visitor) override { visitor->visit(this); }
+  TypeSymbol *resolvedType = nullptr;
+  enum class State {
+    RESOLVED,
+    NEED_CHECK,
+    UNKNOWN,
+  } state = Expr::State::RESOLVED;
 };
 
 class LiteralExpr : public Expr {
@@ -34,7 +43,7 @@ public:
   string name;
   VarExpr(Token t, const string &n) : Expr(NKind::VAR_EXPR, t), name(n) {}
   void accept(ASTVisitor *visitor) override { visitor->visit(this); }
-  ValueSymbol *resolved;
+  ValueSymbol *resolved = nullptr;
 };
 
 class UnaryExpr : public Expr {
@@ -61,8 +70,8 @@ public:
   Expr::Ptr value;
   Token op;
 
-  AssignExpr(Token token, Expr::Ptr t, Token o, Expr::Ptr v)
-      : Expr(NKind::ASSIGN_EXPR, token), target(t), value(v), op(o) {}
+  AssignExpr(Token tok, Expr::Ptr t, Token o, Expr::Ptr v)
+      : Expr(NKind::ASSIGN_EXPR, tok), target(t), value(v), op(o) {}
 
   void accept(ASTVisitor *visitor) override { visitor->visit(this); }
 };
@@ -72,34 +81,44 @@ public:
   Expr::Ptr object;
   string member;
   MemberExpr(Token t, Expr::Ptr o, const std::string &m)
-      : Expr(NKind::ACCESS_EXPR, t), object(std::move(o)), member(m) {}
+      : Expr(NKind::MEMBER_EXPR, t), object(std::move(o)), member(m) {}
 
   void accept(ASTVisitor *visitor) override { visitor->visit(this); }
-  ValueSymbol *resolved;
+  ValueSymbol *valeuResolved = nullptr;
+  EnumVariantSymbol *variantResolved = nullptr;
 };
 
-class IndexExpr : public Expr {
+class ArrayAccessExpr : public Expr {
 public:
   Expr::Ptr object;
   Expr::Ptr index;
 
-  IndexExpr(Token t, Expr::Ptr o, Expr::Ptr i)
-      : Expr(NKind::INDEX_EXPR, t), object(o), index(i) {}
+  ArrayAccessExpr(Token t, Expr::Ptr o, Expr::Ptr i)
+      : Expr(NKind::ARRAY_ACCESS_EXPR, t), object(o), index(i) {}
 
   void accept(ASTVisitor *visitor) override { visitor->visit(this); }
 };
 
 class CallExpr : public Expr {
 public:
-  Expr::Ptr callee;
+  Expr::Ptr receiver;
+  string methodName;
   std::vector<Expr::Ptr> arguments;
 
-  CallExpr(Token t, Expr::Ptr c, const std::vector<Expr::Ptr> &a)
-      : Expr(NKind::CALL_EXPR, t), callee(std::move(c)),
+  enum class CallType {
+    FUNC_CALL,
+    PAYLOAD_CALL,
+    UNRESOLVED,
+  } callType = CallExpr::CallType::UNRESOLVED;
+
+  CallExpr(Token t, Expr::Ptr r, const string n,
+           const std::vector<Expr::Ptr> &a)
+      : Expr(NKind::CALL_EXPR, t), receiver(std::move(r)), methodName(n),
         arguments(std::move(a)) {}
 
   void accept(ASTVisitor *visitor) override { visitor->visit(this); }
-  ValueSymbol *resolved;
+  MethodSymbol *methodResolved = nullptr;
+  EnumVariantSymbol *VariantResolved = nullptr;
 };
 
 class TernaryExpr : public Expr {
@@ -118,31 +137,31 @@ public:
   std::string typeName;
   std::vector<Expr::Ptr> args;
 
-  NewExpr(Token token, const std::string &typeName, std::vector<Expr::Ptr> args)
-      : Expr(NKind::NEW_EXPR, token), typeName(typeName), args(args) {}
+  NewExpr(Token t, const std::string &ty, std::vector<Expr::Ptr> a)
+      : Expr(NKind::NEW_EXPR, t), typeName(ty), args(a) {}
 
   void accept(ASTVisitor *visitor) override { visitor->visit(this); }
 };
 
 class ThisExpr : public Expr {
 public:
-  ThisExpr(Token token) : Expr(NKind::THIS_EXPR, token) {}
+  ThisExpr(Token t) : Expr(NKind::THIS_EXPR, t) {}
 
   void accept(ASTVisitor *visitor) override { visitor->visit(this); }
-  ValueSymbol *resolved;
+  TypeSymbol *resolved = nullptr;
 };
 
 class SuperExpr : public Expr {
 public:
-  SuperExpr(Token token) : Expr(NKind::SUPER_EXPR, token) {}
+  SuperExpr(Token t) : Expr(NKind::SUPER_EXPR, t) {}
 
   void accept(ASTVisitor *visitor) override { visitor->visit(this); }
-  ValueSymbol *resolved;
+  TypeSymbol *resolved = nullptr;
 };
 
 class MatchExpr : public Expr {
 public:
-  class Case : public ASTNode {
+  class Case : public ASTNode, public enable_shared_from_this<Case> {
   public:
     Ptr value;
     StmtPtr body;
@@ -153,7 +172,18 @@ public:
   Ptr value;
   vector<shared_ptr<Case>> cases;
 
-  MatchExpr(Token t, const string &name, Ptr v, vector<shared_ptr<Case>> c)
+  MatchExpr(Token t, Ptr v, vector<shared_ptr<Case>> c)
       : Expr(NKind::MATCH_EXPR, t), value(v), cases(c) {}
+  void accept(ASTVisitor *visitor) override { visitor->visit(this); }
+};
+
+class EnumVariantExpr : public Expr {
+public:
+  string name;
+  Expr::Ptr receiver;
+  Expr::Ptr payload;
+  EnumVariantExpr(Token t, string const &n, Expr::Ptr r, Expr::Ptr p)
+      : Expr(NKind::ENUM_VARIANT_EXPR, t), name(n), receiver(std::move(r)),
+        payload(std::move(p)) {}
   void accept(ASTVisitor *visitor) override { visitor->visit(this); }
 };

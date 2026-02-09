@@ -1,9 +1,9 @@
 #pragma once
 
-#include "../Token.h"
+#include "Token.h"
 #include "Visitor.h"
-#include <algorithm>
 #include <memory>
+#include <vector>
 #include <optional>
 
 class TypeSymbol;
@@ -17,14 +17,15 @@ enum class NKind {
   CALL_EXPR,
   GROUP_EXPR,
   ASSIGN_EXPR,
-  ACCESS_EXPR,
-  INDEX_EXPR,
+  MEMBER_EXPR,
+  ARRAY_ACCESS_EXPR,
   POSTFIX_EXPR,
   TERNARY_EXPR,
   NEW_EXPR,
   THIS_EXPR,
   SUPER_EXPR,
   MATCH_EXPR,
+  ENUM_VARIANT_EXPR,
 
   // Statements
   EXPR_STMT,
@@ -65,7 +66,7 @@ enum class NKind {
   FUNCTION_TYPE,
   GENERIC_TYPE,
 
-  //others
+  // others
   TRAIT_SIG,
   MATCH_CASE,
   SWITCH_CASE,
@@ -88,21 +89,32 @@ public:
   virtual void accept(ASTVisitor *visitor) = 0;
 };
 
-class TypeNode : public ASTNode {
+class TypeNode : public ASTNode, public enable_shared_from_this<TypeNode> {
 public:
-  using Ptr = shared_ptr<TypeNode>;
+
+using Ptr = shared_ptr<TypeNode>;
+
+  string type;
 
   virtual ~TypeNode() = default;
-  TypeNode(NKind kind, Token t) : ASTNode(kind, t) {}
+  TypeNode(NKind k, Token t) : ASTNode(k, t) { type = t.text; }
 
   void accept(ASTVisitor *visitor) override { visitor->visit(this); }
-    TypeSymbol* resolved;
+  TypeSymbol *resolved = nullptr;
 };
 
 class BuiltinTypeNode : public TypeNode {
 public:
-  enum class Category { Int, Float, Fixed, Bool, CHAR, STRING, Void ,FUNC};
-  Category category;
+  enum class Category {
+    Int,
+    Float,
+    Fixed,
+    Bool,
+    CHAR,
+    STRING,
+    Void,
+    FUNC
+  } category;
   int bitWidth = 0; // int/uint/float 용
   int intBits = 0;  // fixed 전용
   int fracBits = 0; // fixed 전용
@@ -144,7 +156,7 @@ public:
   string name; // ex: Player, Transform
   IdentifierTypeNode(Token t, const string &n)
       : TypeNode(NKind::IDENTIFIER_TYPE, t), name(n) {}
-  void accept(ASTVisitor *visitor) override { visitor->visit(this); }
+  void accept(ASTVisitor *visitor) override { visitor->visit(this) ;}
 };
 
 class ReferenceTypeNode : public TypeNode {
@@ -164,7 +176,7 @@ public:
   ArrayTypeNode(Token t, TypeNode::Ptr elem, optional<ExprPtr> size = nullopt)
       : TypeNode(NKind::ARRAY_TYPE, t), elementType(std::move(elem)),
         fixedSize(size) {}
-  void accept(ASTVisitor *visitor) override { visitor->visit(this); }
+  void accept(ASTVisitor *visitor) override { visitor->visit(this) ;}
 };
 
 class FunctionTypeNode : public TypeNode {
@@ -174,7 +186,7 @@ public:
   FunctionTypeNode(Token t, vector<TypeNode::Ptr> params, TypeNode::Ptr ret)
       : TypeNode(NKind::FUNCTION_TYPE, t), paramTypes(std::move(params)),
         returnType(std::move(ret)) {}
-  void accept(ASTVisitor *visitor) override { visitor->visit(this); }
+  void accept(ASTVisitor *visitor) override { visitor->visit(this) ;}
 };
 
 class GenericTypeNode : public TypeNode {

@@ -122,12 +122,19 @@ public class Player extends Entity : Movable {
 // 추가 impl (여러 impl 허용 검증)
 // ================================
 
-impl Player {
+struct Tester{
+    int health;
+}
+
+
+impl Tester {
 
     public ResultCode checkState() {
         if (health <= 0) {
-            return InvalidArgument(health);
+            return ResultCode.InvalidArgument(health);
         }
-        return OK;
+        return ResultCode.OK;
     }
 }
+
+

@@ -1,7 +1,13 @@
-#include "include/Color.h"
-#include "include/Lexer.h"
-#include "include/Parser.h"
-#include "include/Token.h"
+#include "Color.h"
+#include "Debugger/BuilderDebugger.h"
+#include "Debugger/ParserDebugger.h"
+#include "Debugger/ResolverDebugger.h"
+#include "Lexer.h"
+#include "Parser.h"
+#include "SemanticAnalyzer.h"
+#include "SemanticAnalyzer/Verifier.h"
+#include "Token.h"
+
 #include <fstream>
 #include <functional>
 #include <iostream>
@@ -26,20 +32,29 @@ int main(int argc, char *argv[]) {
     return 1;
   }
 
-  bool logLexer = false, logParser = false, logAnalyzer = false;
+  bool logLexer = false, logParser = false,
+       logBuilder = false, logResolver = false;
 
   std::unordered_map<std::string, std::function<void()>> longOptions = {
       {"--lexer", [&] { logLexer = true; }},
       {"--parser", [&] { logParser = true; }},
-      {"--analyzer", [&] { logAnalyzer = true; }},
-      {"--all", [&] { logLexer = logParser = logAnalyzer = true; }},
+      {"--builder", [&] { logBuilder = true; }},
+      {"--resolver", [&] { logResolver = true; }},
+      {"--all",
+       [&] {
+         logLexer = logParser  = logBuilder = logResolver = true;
+       }},
   };
 
   std::unordered_map<char, std::function<void()>> shortOptions = {
       {'l', [&] { logLexer = true; }},
       {'p', [&] { logParser = true; }},
-      {'n', [&] { logAnalyzer = true; }},
-      {'a', [&] { logLexer = logParser = logAnalyzer = true; }},
+      {'b', [&] { logBuilder = true; }},
+      {'r', [&] { logResolver = true; }},
+      {'a',
+       [&] {
+         logLexer = logParser  = logBuilder = logResolver = true;
+       }},
   };
 
   // ────────────────────────────────
@@ -95,40 +110,74 @@ int main(int argc, char *argv[]) {
     cout << "=========================" << endl;
   }
 
-  
+  Parser parser(lexer.tokenized);
 
-    Parser parser(lexer.tokenized);
+  try {
+    parser.parse();
+  } catch (std::runtime_error &e) {
+    cout << RED << "error occur while parsing\n" << RESET << e.what() << "\n";
+    return -1;
+  }
 
-    try {
-      parser.parse();
-    } catch (std::runtime_error &e) {
-      cout << RED << "error occur while parsing\n" << RESET << e.what() <<
-      "\n"; return -1;
+  if (logParser) {
+    ParserDebugger pd;
+    cout << "===== parsing result =====" << endl;
+
+    for (auto a : parser.statements)
+      a->accept(&pd);
+
+    cout << "=========================" << endl;
+  }
+
+  SemanticAnalyzer analyzer(parser.statements);
+  try {
+    analyzer.build();
+  } catch (std::runtime_error &e) {
+    cout << RED << "error occur while building\n" << RESET << e.what() << "\n";
+    return -1;
+  }
+
+  try{
+    analyzer.link();
+  } catch (std::runtime_error &e) {
+    cout << RED << "error occur while linking\n" << RESET << e.what() << "\n";
+    return -1;
+  }
+
+  try {
+    analyzer.resolve();
+  } catch (std::runtime_error &e) {
+    cout << RED << "error occur while resolving\n" << RESET << e.what() << "\n";
+    return -1;
+  }
+
+  if (logBuilder) {
+    cout << "===== Building result =====" << endl;
+
+    BuilderDebugger bd(analyzer.symbolTable.getCurrent());
+    bd.debug();
+    cout << "=========================" << endl;
+  }
+
+  if (logResolver) {
+    cout << "===== Resolving result =====" << endl;
+
+    ResolverDebugger rd(analyzer.symbolTable.getCurrent());
+    rd.debug();
+    cout << "=========================" << endl;
+}
+
+
+  Verifier veifier;
+
+  try{
+    for(auto s:parser.statements){
+      s->accept(&veifier);
     }
-
-  //   if (logParser) {
-  //     cout << "===== Parsing result =====" << endl;
-  //     std::cout << parser.statements.size() << " statements" << std::endl;
-
-  //     PrintVisitor visitor;
-
-  //     for (const auto &stmt : parser.statements)
-  //       stmt->accept(&visitor);
-
-  //     cout << "=========================" << endl;
-  //   }
-
-  //   SemanticAnalyzer analyzer(parser.program);
-  //   try {
-  //     analyzer.analyze();
-  //   } catch (std::runtime_error &e) {
-  //     cout << RED << "error occur while analying\n" << RESET << e.what() <<
-  //     "\n"; return -1;
-  //   }
-
-  //   if (logAnalyzer) {
-  //     cout << "===== finish analzying =====" << endl;
-  //   }
+  } catch (std::runtime_error &e) {
+    cout << RED << "error occur while verifing\n" << RESET << e.what() << "\n";
+    return -1;
+  }
 
   cout << "end compile\n";
   return 0;
@@ -287,15 +336,15 @@ inline string tokenToString(TKind kind) {
   case TKind::CONST:
     return "CONST";
   case TKind::ROOT:
-  return "ROOT";
+    return "ROOT";
   case TKind::NEW:
-  return "NEW";
+    return "NEW";
   case TKind::TRY:
-  return "TRY";
+    return "TRY";
   case TKind::CATCH:
-  return"CATCH";
+    return "CATCH";
   case TKind::ONEXIT:
-  return "ONEXIT";
+    return "ONEXIT";
   default:
     return "UNKNOWN";
   }

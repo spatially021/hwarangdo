@@ -1,28 +1,28 @@
 #pragma once
 
-#include "../AST/Visitor.h"
+#include "AST/Visitor.h"
 #include "Symbol.h"
 #include "SymbolTable.h"
-#include <cassert>
-#include <memory>
 
-class Builder : public ASTVisitor {
+class SymbolTable;
+
+class Resolver : public ASTVisitor {
+  using str = string const &;
+
 public:
-  SymbolTable *table;
-  TypeSymbol *current;
+  SymbolTable *table = nullptr;
+  TypeSymbol *currentType = nullptr;
+  MethodSymbol * currentMethod=nullptr;
 
-  Builder(SymbolTable *table);
+  Resolver(SymbolTable *table);
 
   void visit(LiteralExpr *expr);
   void visit(BinaryExpr *expr);
   void visit(VarExpr *expr);
   void visit(UnaryExpr *expr);
   void visit(CallExpr *expr);
-  void visit(GroupExpr *expr);
   void visit(AssignExpr *expr);
-  void visit(AccessExpr *expr);
-  void visit(IndexExpr *expr);
-  void visit(PostfixExpr *expr);
+  void visit(MemberExpr *expr);
   void visit(ArrayAccessExpr *expr);
   void visit(TernaryExpr *expr);
   void visit(ThisExpr *expr);
@@ -48,43 +48,27 @@ public:
   void visit(EnumDecl *decl);
   void visit(ImplDecl *decl);
   void visit(TraitDecl *decl);
-  void visit(TraitSig *decl);
+
   void visit(FuncDecl *decl);
   void visit(VarDecl *decl);
   void visit(ArrayDecl *decl);
 
   void visit(TypeNode *decl);
   void visit(ASTNode *node);
+
+  void visit(TraitSig *sig);
   void visit(Param *param);
 
   // util function
-  [[noreturn]] void error(const Token &token, const std::string &message) const;
-};
 
-class TypeContextGuard {
-public:
-  TypeContextGuard(TypeSymbol *&current, TypeSymbol *next)
-      : current_(current), prev_(current) {
-    current_ = next;
-  }
-
-  ~TypeContextGuard() { current_ = prev_; }
-  TypeContextGuard(const TypeContextGuard &) = delete;
-  TypeContextGuard &operator=(const TypeContextGuard &) = delete;
+  ValueSymbol *resolveValue(str name);
+  ValueSymbol *lookLocalValue(str name, Scope *localScope);
 
 private:
-  TypeSymbol *&current_;
-  TypeSymbol *prev_;
-};
+  Scope *currentSelf = nullptr;
+  Scope *currentBase = nullptr;
 
-class ScopeGuard {
-public:
-  ScopeGuard(SymbolTable &t) : table(t) { table.enter(); }
-  ~ScopeGuard() { table.exit(); }
-
-  ScopeGuard(const ScopeGuard &) = delete;
-  ScopeGuard &operator=(const ScopeGuard &) = delete;
-
-private:
-  SymbolTable &table;
+  void ResolveEnumVariant(CallExpr *expr);
+  void ResolveCall(CallExpr *expr);
+  bool isAssignable(TypeSymbol *from,TypeSymbol*to);
 };

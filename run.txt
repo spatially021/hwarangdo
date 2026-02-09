@@ -1,4 +1,7 @@
 #complie
+##release
+g++ src/*.cpp -Iinclude -std=c++17 -Wall -g -fsanitize=address -o build/hgm_debug
+##debug
 find src -name "*.cpp" | xargs g++ -fsanitize=address -std=c++17 -Wall -Iinclude -o hgm || rm -f hgm
 
 

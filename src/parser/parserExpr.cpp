@@ -1,4 +1,5 @@
-#include "../include/Parser.h"
+#include "Parser.h"
+#include "util/Error.h"
 #include <memory>
 
 using Ptr = Expr::Ptr;
@@ -10,7 +11,7 @@ Ptr Parser::assignment() {
     Token op = advance();
     Ptr right = expression();
     if (!isAssginable(left))
-      error(left->token, "Invalid assignment target");
+      Error::diagnostic(left->token, "Invalid assignment target");
     return make_shared<AssignExpr>(t, left, op, right);
   }
   return left;
@@ -101,8 +102,8 @@ Ptr Parser::power() {
 
 Ptr Parser::unary() {
   if (check({TKind::MINUS, TKind::PLUS, TKind::BANG})) {
-    Ptr left = postfix();
     Token op = advance();
+    Ptr left = postfix();
     return make_shared<UnaryExpr>(left->token, op, left);
   }
   return postfix();
@@ -119,19 +120,28 @@ Ptr Parser::postfix() {
     } else if (check(TKind::LEFT_PAREN)) {
       Token t = advance(); //(처리
       std::vector<Expr::Ptr> args;
-      while (!check(TKind::RIGHT_PAREN) && !isAtEnd()) {
-        args.push_back(ternary());
-        if (check(TKind::COMMA) && !check(TKind::RIGHT_PAREN, 1)) {
-          advance(); //,처리
-        }
+      if (!check(TKind::RIGHT_PAREN)) {
+        do {
+          args.push_back(ternary());
+        } while (match({TKind::COMMA}));
       }
+
       consume(TKind::RIGHT_PAREN, "expect ')' after arguments");
-      expr = make_shared<CallExpr>(t, expr, args);
+
+      if (expr->kind == NKind::MEMBER_EXPR) {
+        auto member = static_pointer_cast<MemberExpr>(expr);
+        expr = make_shared<CallExpr>(t, member->object, member->member, args);
+      } else if (expr->kind == NKind::VAR_EXPR) {
+        expr = make_shared<CallExpr>(
+            t, nullptr, static_pointer_cast<VarExpr>(expr)->name, args);
+      } else
+        Error::diagnostic(t, "expression is not callable");
+
     } else if (check(TKind::LEFT_BRACKET)) {
       Token t = advance(); //[처리
       Expr::Ptr index = ternary();
       consume(TKind::RIGHT_BRACKET, "expect ']' after index");
-      expr = make_shared<IndexExpr>(t, expr, index);
+      expr = make_shared<ArrayAccessExpr>(t, expr, index);
     } else
       break;
   }
@@ -157,9 +167,5 @@ Ptr Parser::primary() {
 
   if (check(TKind::THIS))
     return make_shared<ThisExpr>(advance());
-
-
-
-  error(peek(), "expect expression");
+  Error::diagnostic(peek(), "expect expression");
 }
-

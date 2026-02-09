@@ -1,19 +1,14 @@
 #pragma once
 
-#include <memory>
-
 class LiteralExpr;
 class VarExpr;
 class BinaryExpr;
 class UnaryExpr;
 class CallExpr;
-class GroupExpr;
 class AssignExpr;
-class AccessExpr;
-class IndexExpr;
-class PostfixExpr;
-class TernaryExpr;
+class MemberExpr;
 class ArrayAccessExpr;
+class TernaryExpr;
 class ThisExpr;
 class SuperExpr;
 
@@ -55,15 +50,12 @@ public:
   virtual void visit(VarExpr *expr) = 0;
   virtual void visit(UnaryExpr *expr) = 0;
   virtual void visit(CallExpr *expr) = 0;
-  virtual void visit(GroupExpr *expr) = 0;
   virtual void visit(AssignExpr *expr) = 0;
-  virtual void visit(AccessExpr *expr) = 0;
-  virtual void visit(IndexExpr *expr) = 0;
-  virtual void visit(PostfixExpr *expr) = 0;
+  virtual void visit(MemberExpr *expr) = 0;
   virtual void visit(ArrayAccessExpr *expr) = 0;
   virtual void visit(TernaryExpr *expr) = 0;
-  virtual void visit(ThisExpr *expr)=0;
-  virtual void visit(SuperExpr *expr)=0;
+  virtual void visit(ThisExpr *expr) = 0;
+  virtual void visit(SuperExpr *expr) = 0;
 
   // Statement visitor methods
   virtual void visit(ExprStmt *stmt) = 0;
@@ -83,8 +75,8 @@ public:
   virtual void visit(ClassDecl *decl) = 0;
   virtual void visit(StructDecl *decl) = 0;
   virtual void visit(EnumDecl *decl) = 0;
-  virtual void visit(ImplDecl *decl)=0;
-  virtual void visit(TraitDecl *decl)=0;
+  virtual void visit(ImplDecl *decl) = 0;
+  virtual void visit(TraitDecl *decl) = 0;
 
   virtual void visit(FuncDecl *decl) = 0;
   virtual void visit(VarDecl *decl) = 0;
@@ -94,5 +86,5 @@ public:
   virtual void visit(ASTNode *node) = 0;
 
   virtual void visit(TraitSig *sig) = 0;
-  virtual void visit(Param * param) = 0;
+  virtual void visit(Param *param) = 0;
 };

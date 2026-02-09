@@ -4,7 +4,6 @@
 #include "Expr.h"
 #include "Stmt.h"
 #include "Visitor.h"
-#include <algorithm>
 #include <memory>
 #include <optional>
 #include <string>
@@ -13,11 +12,10 @@
 class TypeSymbol;
 class ValueSymbol;
 class EnumVariantSymbol;
+class ImplSymbol;
+class MethodSymbol;
 
 using namespace std;
-/*
-
-*/
 enum class AModifier {
   PUBLIC,
   PROTECTED,
@@ -30,10 +28,11 @@ public:
   using Ptr = shared_ptr<Decl>;
   string name; // 대부분의 Decl은 이름을 갖음 (anonymous 경우 빈 문자열 허용)
   AModifier aModifier;
-  Decl(NKind kind, Token token, const string &n = "",
+  Decl(NKind k, Token t, const string &n = "",
        AModifier modi = AModifier::DEFAULT)
-      : ASTNode(kind, token), name(n) {}
+      : ASTNode(k, t), name(n), aModifier(modi) {}
   virtual void accept(ASTVisitor *visitor) override { visitor->visit(this); }
+  bool isExtended = false;
 };
 
 // Variable Declaration
@@ -60,7 +59,7 @@ public:
 
   void accept(ASTVisitor *visitor) override { visitor->visit(this); }
 
-  ValueSymbol *symbol;
+  ValueSymbol *symbol = nullptr;
 };
 
 class ArrayDecl : public Decl {
@@ -74,12 +73,13 @@ public:
             VarDecl::Size s, optional<Expr::Ptr> i = nullopt, bool m = true,
             AModifier modi = AModifier::DEFAULT)
       : Decl(NKind::ARRAY_DECL, t, n, modi), type(std::move(ty)), init(i),
-        size(s) {
+        isMutalbe(m), size(s) {
     aModifier = modi;
   }
   void accept(ASTVisitor *visitor) override { visitor->visit(this); }
 
-  ValueSymbol *symbol;
+  ValueSymbol *symbol = nullptr;
+  TypeSymbol *baseType = nullptr;
 };
 
 class Param : public ASTNode {
@@ -92,7 +92,7 @@ public:
       : ASTNode(NKind::PARAM, t->token), name(n), type(std::move(t)),
         defaultValue(d) {}
   void accept(ASTVisitor *visitor) override { visitor->visit(this); }
-  ValueSymbol *symbol;
+  ValueSymbol *symbol = nullptr;
 };
 
 // Function Declaration
@@ -112,24 +112,23 @@ public:
   }
 
   void accept(ASTVisitor *visitor) override { visitor->visit(this); }
-  ValueSymbol *symbol;
+  MethodSymbol *methodSymbol = nullptr;
+  ImplSymbol *isImpl = nullptr; // impl타입일 경우에만 할당
 };
 
 // Struct Declaration
 class StructDecl : public Decl {
 public:
   vector<shared_ptr<VarDecl>> fields;
-  vector<string> traits;
 
   StructDecl(Token t, const string &n, vector<shared_ptr<VarDecl>> f,
-             vector<string> tr = {}, AModifier modi = AModifier::DEFAULT)
-      : Decl(NKind::STRUCT_DECL, t, n, modi), fields(std::move(f)),
-        traits(std::move(tr)) {
+             AModifier modi = AModifier::DEFAULT)
+      : Decl(NKind::STRUCT_DECL, t, n, modi), fields(std::move(f)) {
     aModifier = modi;
   }
 
   void accept(ASTVisitor *visitor) override { visitor->visit(this); }
-  TypeSymbol *symbol;
+  TypeSymbol *symbol = nullptr;
 };
 
 // Class Declaration (extends StructDecl with inheritance/visibility)
@@ -149,7 +148,7 @@ public:
 
   void setBaseClass(const string &b) { baseClass = b; }
   void accept(ASTVisitor *visitor) override { visitor->visit(this); }
-  TypeSymbol *symbol;
+  TypeSymbol *symbol = nullptr;
 };
 
 // Enum Declaration
@@ -158,19 +157,10 @@ public:
   struct Variant {
     Token token;
     string name;
-    optional<vector<TypeNode::Ptr>>
-        payloads; // enum variant가 값(튜플 혹은 타입)을 가질 수 있음
-    bool hasPayLoad = false;
-    Variant(Token t, const string &n, vector<TypeNode::Ptr> p)
-        : token(t), name(n) {
-
-      if (p.size() == 0) {
-        payloads = nullopt;
-      } else {
-        hasPayLoad = true;
-        payloads = std::move(p);
-      }
-    }
+    optional<TypeNode::Ptr>
+        payload; // enum variant가 값(튜플 혹은 타입)을 가질 수 있음
+    Variant(Token t, const string &n, optional<TypeNode::Ptr> p = nullopt)
+        : token(t), name(n), payload(p) {}
   };
 
   vector<shared_ptr<Variant>> variants;
@@ -184,23 +174,21 @@ public:
   }
 
   void accept(ASTVisitor *visitor) override { visitor->visit(this); }
-  TypeSymbol *symbol;
+  TypeSymbol *symbol = nullptr;
 };
 
 class ImplDecl : public Decl {
 public:
   string target;
   vector<string> traits;
-  vector<shared_ptr<FuncDecl>> methods;
+  vector<shared_ptr<FuncDecl>> LinkedImplMethods;
 
   ImplDecl(Token t, const string &n, vector<string> tr,
            vector<shared_ptr<FuncDecl>> m, AModifier modi)
       : Decl(NKind::IMPL_DECL, t, n, modi), target(n), traits(std::move(tr)),
-        methods(std::move(m)) {}
+        LinkedImplMethods(std::move(m)) {}
 
   void accept(ASTVisitor *visitor) override { visitor->visit(this); }
-
-  TypeSymbol *resolved;
 };
 
 class TraitDecl : public Decl {
@@ -211,7 +199,7 @@ public:
             AModifier modi)
       : Decl(NKind::TRAIT_DECL, t, n, modi), traitSigs(std::move(tr)) {}
   void accept(ASTVisitor *visitor) override { visitor->visit(this); }
-  TypeSymbol *symbol;
+  TypeSymbol *symbol = nullptr;
 };
 
 class TraitSig : public ASTNode {
@@ -223,5 +211,5 @@ public:
            vector<shared_ptr<Param>> p)
       : ASTNode(NKind::TRAIT_SIG, t), type(ty), name(n), params(std::move(p)) {}
   void accept(ASTVisitor *visitor) override { visitor->visit(this); }
-  ValueSymbol *symbol;
+  MethodSymbol *symbol = nullptr;
 };

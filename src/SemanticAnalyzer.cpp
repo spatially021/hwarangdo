@@ -1,33 +1,47 @@
-#include "include/SemanticAnalyzer.h"
-#include "include/AST/Stmt.h"
+#include "SemanticAnalyzer.h"
+#include "AST/Stmt.h"
+#include "SemanticAnalyzer/Builder.h"
+#include "SemanticAnalyzer/Linker.h"
 
+#include <stdexcept>
 #include <vector>
 
 using std::vector;
 
-SemanticAnalyzer::SemanticAnalyzer(vector<Stmt::Ptr> s){
-    ast=std::move(s);
+SemanticAnalyzer::SemanticAnalyzer(vector<Stmt::Ptr> s) { ast = std::move(s); }
+
+void SemanticAnalyzer::build() {
+  Builder builder(&symbolTable);
+
+  try {
+    for (auto a : ast) {
+      a->accept(&builder);
+    }
+  } catch (std::runtime_error &e) {
+    throw e;
+  }
 }
 
-void SemanticAnalyzer::analye(){
+void SemanticAnalyzer::link() {
+  Linker linker(&symbolTable);
 
-    Builder builder(&symbolTable);
-    
-    for(auto a:ast){
-        a->accept(&builder);
+  try {
+    for (auto a : ast) {
+      a->accept(&linker);
     }
-
-    Resolver resolver(&symbolTable);
-    for(auto a:ast){
-        a->accept(&resolver);
-    }
-
+  } catch (std::runtime_error &e) {
+    throw e;
+  }
 }
 
-void SemanticAnalyzer::error(const Token &token, const std::string &message) const {
-  string m = "[line ";
-  m += std::to_string(token.line);
-  m += "] Error at '" + token.text + "': " + message;
+void SemanticAnalyzer::resolve() {
+  Resolver resolver(&symbolTable);
+  try {
 
-  throw runtime_error(m);
+    for (auto a : ast) {
+      a->accept(&resolver);
+    }
+  } catch (std::runtime_error &e) {
+    throw e;
+  }
 }

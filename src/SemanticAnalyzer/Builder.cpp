@@ -1,30 +1,32 @@
-#pragma once
-
-#include "../include/SemanticAnalyzer/Builder.h"
-
+#include "SemanticAnalyzer/Builder.h"
+#include "SemanticAnalyzer/Guard.h"
+#include "SemanticAnalyzer/Symbol.h"
+#include "util/Error.h"
 #include <memory>
 
-Builder::Builder(SymbolTable *symbol) : table(symbol) {}
+Builder::Builder(SymbolTable *symbol) : table(symbol) {
+  topLevel = make_unique<TypeSymbol>();
+  topLevel->name = "<top-level>";
+  currentType = topLevel.get();
+}
 
-void Builder::visit(LiteralExpr *expr) {}
-void Builder::visit(BinaryExpr *expr) {}
-void Builder::visit(VarExpr *expr) {}
-void Builder::visit(UnaryExpr *expr) {}
-void Builder::visit(CallExpr *expr) {}
-void Builder::visit(GroupExpr *expr) {}
-void Builder::visit(AssignExpr *expr) {}
-void Builder::visit(AccessExpr *expr) {}
-void Builder::visit(IndexExpr *expr) {}
-void Builder::visit(PostfixExpr *expr) {}
-void Builder::visit(ArrayAccessExpr *expr) {}
-void Builder::visit(TernaryExpr *expr) {}
-void Builder::visit(ThisExpr *expr) {}
-void Builder::visit(SuperExpr *expr) {}
+void Builder::visit(LiteralExpr *) {}
+void Builder::visit(BinaryExpr *) {}
+void Builder::visit(VarExpr *) {}
+void Builder::visit(UnaryExpr *) {}
+void Builder::visit(CallExpr *) {}
+void Builder::visit(AssignExpr *) {}
+void Builder::visit(MemberExpr *) {}
+void Builder::visit(ArrayAccessExpr *) {}
+void Builder::visit(TernaryExpr *) {}
+void Builder::visit(ThisExpr *) {}
+void Builder::visit(SuperExpr *) {}
 
 // Statement Builder::visitor methods
-void Builder::visit(ExprStmt *stmt) {}
+void Builder::visit(ExprStmt *) {}
 void Builder::visit(BlockStmt *stmt) {
   ScopeGuard _(*table);
+  stmt->blockScope = table->getCurrent();
   for (auto s : stmt->statements) {
     s->accept(this);
   }
@@ -35,8 +37,8 @@ void Builder::visit(IfStmt *stmt) {
     stmt->elseBranch->accept(this);
 }
 void Builder::visit(ForStmt *stmt) {
-  ScopeGuard _(*table);
   stmt->initializer->accept(this);
+  ScopeGuard _(*table);
   stmt->body->accept(this);
 }
 
@@ -49,13 +51,13 @@ void Builder::visit(SwitchStmt *stmt) {
 }
 void Builder::visit(Case *stmt) { stmt->body->accept(this); }
 
-void Builder::visit(ReturnStmt *stmt) {}
-void Builder::visit(BreakStmt *stmt) {}
-void Builder::visit(ContinueStmt *stmt) {}
+void Builder::visit(ReturnStmt *) {}
+void Builder::visit(BreakStmt *) {}
+void Builder::visit(ContinueStmt *) {}
 
 void Builder::visit(DeclStmt *stmt) { stmt->decl->accept(this); }
 
-void Builder::visit(EmptyStmt *stmt) {}
+void Builder::visit(EmptyStmt *) {}
 
 void Builder::visit(ClassDecl *decl) {
   auto symbol = make_unique<TypeSymbol>();
@@ -66,15 +68,16 @@ void Builder::visit(ClassDecl *decl) {
   auto raw = symbol.get();
 
   if (!table->add(std::move(symbol))) {
-    error(decl->token, "duplicated class name");
+    Error::diagnostic(decl->token, "duplicated class name");
   }
 
   decl->symbol = raw;
 
-  TypeContextGuard _(current, symbol.get());
+  TypeContextGuard _(currentType, raw);
   ScopeGuard __(*table);
 
-  symbol->memberScope = table->getCurrent();
+  raw->memberScope = table->getCurrent();
+
   for (auto a : decl->body) {
     a->accept(this);
   }
@@ -88,15 +91,15 @@ void Builder::visit(StructDecl *decl) {
   auto raw = symbol.get();
 
   if (!table->add(std::move(symbol))) {
-    error(decl->token, "duplicated struct name");
+    Error::diagnostic(decl->token, "duplicated struct name");
   }
 
   decl->symbol = raw;
 
-  TypeContextGuard _(current, symbol.get());
+  TypeContextGuard _(currentType, raw);
   ScopeGuard __(*table);
 
-  symbol->memberScope = table->getCurrent();
+  raw->memberScope = table->getCurrent();
   for (auto a : decl->fields) {
     a->accept(this);
   }
@@ -109,15 +112,15 @@ void Builder::visit(EnumDecl *decl) {
   symbol->decl = decl;
   symbol->kind = TypeSymbol::Kind::ENUM;
 
-  auto raw=symbol.get();
+  auto raw = symbol.get();
 
   if (!table->add(std::move(symbol))) {
-    error(decl->token, "duplicated enum name");
+    Error::diagnostic(decl->token, "duplicated enum name");
   }
 
   decl->symbol = raw;
 
-  TypeContextGuard _(current, symbol.get());
+  TypeContextGuard _(currentType, raw);
 
   int ordinal = 0;
   for (auto a : decl->variants) {
@@ -125,12 +128,17 @@ void Builder::visit(EnumDecl *decl) {
     v->variant = a.get();
     v->name = a->name;
     v->ordinal = ordinal++;
-    if (symbol->variantMap.count(v->name)) {
-      error(a->token, "duplicated enum variant name");
+    if (a->payload.has_value()) {
+      a->payload.value()->accept(this);
+      v->payloadType = a->payload.value()->resolved;
     }
-    EnumVariantSymbol *raw = v.get();
-    symbol->variants.push_back(std::move(v));
-    symbol->variantMap.insert({v->name, raw});
+
+    if (raw->variantMap.count(v->name)) {
+      Error::diagnostic(a->token, "duplicated enum variant name");
+    }
+    EnumVariantSymbol *r = v.get();
+    decl->symbol->variants.push_back(std::move(v));
+    decl->symbol->variantMap.emplace(r->name, r);
   }
 }
 
@@ -139,15 +147,18 @@ void Builder::visit(ImplDecl *decl) {
   symbol->targetName = decl->target;
   symbol->decl = decl;
 
-  ScopeGuard _(*table);
-  symbol->member = table->getCurrent();
+  auto raw = symbol.get();
 
-  for (auto a : decl->methods) {
+  ScopeGuard _(*table);
+  TypeContextGuard __(currentType, raw);
+
+  symbol->memberScope = table->getCurrent();
+  for (auto a : decl->LinkedImplMethods) {
     a->accept(this);
   }
 
   table->impls.push_back(std::move(symbol));
-  
+  table->implMap.emplace(decl, raw);
 }
 
 void Builder::visit(TraitDecl *decl) {
@@ -158,62 +169,83 @@ void Builder::visit(TraitDecl *decl) {
   auto raw = symbol.get();
 
   if (!table->add(std::move(symbol))) {
-    error(decl->token, "duplicated trait name");
+    Error::diagnostic(decl->token, "duplicated trait name");
   }
 
   decl->symbol = raw;
 
-  TypeContextGuard _(current, symbol.get());
+  TypeContextGuard _(currentType, raw);
   ScopeGuard __(*table);
 
-  symbol->memberScope = table->getCurrent();
+  raw->memberScope = table->getCurrent();
 
   for (auto a : decl->traitSigs) {
+    if (a == nullptr)
+      Error::internal("traitSig is nullptr");
     a->accept(this);
   }
 }
 
 void Builder::visit(TraitSig *sig) {
 
-  auto symbol = make_unique<ValueSymbol>();
+  auto symbol = make_unique<MethodSymbol>();
+
   symbol->name = sig->name;
-  symbol->kind = ValueSymbol::Kind::TRAITSIG;
-  symbol->node = sig;
+  symbol->decl=sig;
+  symbol->onwer = currentType;
   auto raw = symbol.get();
 
-  if (!table->add(std::move(symbol))) {
-    error(sig->token, "duplicated trait's method name");
+  ScopeGuard _(*table);
+
+  for (auto a : sig->params) {
+    auto s = make_unique<ValueSymbol>();
+    s->name = a->name;
+    s->kind = ValueSymbol::Kind::PARAM;
+    s->node = a.get();
+    auto r = s.get();
+    if (!table->add(std::move(s))) {
+      Error::diagnostic(a->token, "duplicated parameter name");
+    }
+    a->symbol = r;
+    a->type->accept(this);
   }
 
-  sig->symbol=raw;
+  if (!table->add(std::move(symbol))) {
+    Error::diagnostic(sig->token, "duplicated trait's method name");
+  }
 
+  sig->symbol = raw;
 }
 
 void Builder::visit(FuncDecl *decl) {
-  auto symbol = make_unique<ValueSymbol>();
+  auto symbol = make_unique<MethodSymbol>();
+
   symbol->name = decl->name;
-  symbol->kind = ValueSymbol::Kind::METHOD;
-  symbol->node = decl;
+  symbol->decl = decl;
+  symbol->onwer = currentType;
   auto raw = symbol.get();
 
   if (!table->add(std::move(symbol))) {
-    error(decl->token, "duplicated method name");
+    Error::diagnostic(decl->token, "duplicated method name");
   }
 
-  decl->symbol=raw;
+  decl->methodSymbol = raw;
 
   ScopeGuard _(*table);
+
+  raw->scope = table->getCurrent();
 
   for (auto &a : decl->params) {
     auto s = make_unique<ValueSymbol>();
     s->name = a->name;
     s->kind = ValueSymbol::Kind::PARAM;
     s->node = a.get();
-    auto r=s.get();
+    auto r = s.get();
     if (!table->add(std::move(s))) {
-      error(a->token, "duplicated parameter name");
+      Error::diagnostic(a->token, "duplicated parameter name");
     }
-    a->symbol=r;
+    a->symbol = r;
+    a->type->accept(this);
   }
 
   decl->body->accept(this);
@@ -226,8 +258,10 @@ void Builder::visit(VarDecl *decl) {
   symbol->node = decl;
   auto raw = symbol.get();
 
+  decl->type->accept(this);
+
   if (!table->add(std::move(symbol))) {
-    error(decl->token, "duplicated var name");
+    Error::diagnostic(decl->token, "duplicated var name");
   }
   decl->symbol = raw;
 }
@@ -240,19 +274,11 @@ void Builder::visit(ArrayDecl *decl) {
   auto raw = symbol.get();
 
   if (!table->add(std::move(symbol))) {
-    error(decl->token, "duplicated var name");
+    Error::diagnostic(decl->token, "duplicated var name");
   }
   decl->symbol = raw;
 }
 
-void Builder::visit(TypeNode *decl) {}
-void Builder::visit(ASTNode *node) {}
-void Builder::visit(Param *param) {}
-
-void Builder::error(const Token &token, const std::string &message) const {
-  string m = "[line ";
-  m += std::to_string(token.line);
-  m += "] Error at '" + token.text + "': " + message;
-
-  throw runtime_error(m);
-}
+void Builder::visit(TypeNode *) {}
+void Builder::visit(ASTNode *) {}
+void Builder::visit(Param *) {}

@@ -193,6 +193,10 @@ Token Lexer::scan() {
     }
     if (peek() == '<') {
       get();
+      if (peek() == '=') {
+        get();
+        return {TKind::DOUBLE_ANGLEBUCKET_EQAUL, "<<=", tempL, tempC};
+      }
       return {TKind::DOUBLE_ANGLEBUCKET, "<<", tempL, tempC};
     }
     return {TKind::LESS, "<", tempL, tempC};
@@ -204,6 +208,14 @@ Token Lexer::scan() {
       get();
       return {TKind::GREATER_EQUAL, ">=", tempL, tempC};
     }
+    if (peek() == '>') {
+      get();
+      if (peek() == '=') {
+        get();
+        return {TKind::DOUBLE_RIGHT_ANGLE_BUCKET_EQUAL, ">>=", tempL, tempC};
+      }
+      return {TKind::DOUBLE_RIGHT_ANGLE_BUCKET, ">>", tempL, tempC};
+    }
     return {TKind::GREATER, ">", tempL, tempC};
   }
 
@@ -213,10 +225,15 @@ Token Lexer::scan() {
       get();
       return {TKind::AND, "&&", tempL, tempC};
     }
-    string str = "Expected expression '&' at line %d, column %d";
-    throw runtime_error(str);
+    if (peek() == '=') {
+      get();
+      return {TKind::AMPERSAND_EQAUL, "&=", tempL, tempC};
+    }
+    return {TKind::AMPERSAND, "&", tempL, tempC};
+  }
 
-    return {TKind::EMPTY, "&", tempL, tempC};
+  if (c == '~') {
+    return {TKind::TILDE, string(1, get()), tempL, tempC};
   }
 
   if (c == '|') {
@@ -225,10 +242,11 @@ Token Lexer::scan() {
       get();
       return {TKind::OR, "||", tempL, tempC};
     }
-    string str = "Expected expression '|' at line %d, column %d";
-    throw runtime_error(str);
-
-    return {TKind::EMPTY, "|", tempL, tempC};
+    if (peek() == '=') {
+      get();
+      return {TKind::PIPE_EQUAL, "|=", tempL, tempC};
+    }
+    return {TKind::PIPE, "|", tempL, tempC};
   }
 
   if (c == '?')
@@ -248,10 +266,9 @@ Token Lexer::scan() {
       return {it->second, ident, tempL, tempC}; // 키워드인 경우 바로 반환
     }
 
-    if(ident=="true"||ident=="false"){
-      return {TKind::LIT_BOOL,ident,tempL,tempC};
+    if (ident == "true" || ident == "false") {
+      return {TKind::LIT_BOOL, ident, tempL, tempC};
     }
-
 
     return {TKind::IDENTIFIER, ident, tempL,
             tempC}; // 키워드가 아니면 일반 식별자

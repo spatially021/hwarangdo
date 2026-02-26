@@ -12,13 +12,13 @@ class Resolver : public ASTVisitor {
 public:
   SymbolTable *table = nullptr;
   TypeSymbol *currentType = nullptr;
-  MethodSymbol * currentMethod=nullptr;
+  MethodSymbol *currentMethod = nullptr;
 
   Resolver(SymbolTable *table);
 
   void visit(LiteralExpr *expr);
   void visit(BinaryExpr *expr);
-  void visit(VarExpr *expr);
+  void visit(NameExpr *expr);
   void visit(UnaryExpr *expr);
   void visit(CallExpr *expr);
   void visit(AssignExpr *expr);
@@ -27,6 +27,9 @@ public:
   void visit(TernaryExpr *expr);
   void visit(ThisExpr *expr);
   void visit(SuperExpr *expr);
+  void visit(MoveExpr *expr);
+  void visit(BorrowExpr *expr);
+  void visit(ReferenceExpr *expr);
 
   // Statement visitor methods
   void visit(ExprStmt *stmt);
@@ -70,5 +73,15 @@ private:
 
   void ResolveEnumVariant(CallExpr *expr);
   void ResolveCall(CallExpr *expr);
-  bool isAssignable(TypeSymbol *from,TypeSymbol*to);
+  bool isAssignable(TypeSymbol *from, TypeSymbol *to);
+  bool isBinaryOperatalbe(BinaryExpr::OperatorType op, TypeSymbol *left,
+                          TypeSymbol *right);
+
+  bool isCmpable(TypeSymbol *left, TypeSymbol *right);
+  TypeSymbol *binaryResult(BinaryExpr::OperatorType op, TypeSymbol *left,
+                           TypeSymbol *right);
+  bool isCastable(TypeSymbol *from, TypeSymbol *to);
+  TypeSymbol *casting(TypeSymbol *from, TypeSymbol *to);
+  [[noreturn]]
+  void unmatchSymbol(Symbol *symbol);
 };

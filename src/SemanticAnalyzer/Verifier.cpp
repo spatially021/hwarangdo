@@ -1,6 +1,7 @@
 #include "SemanticAnalyzer/Verifier.h"
 #include "AST/Decl.h"
 #include "AST/Expr.h"
+#include "Token.h"
 #include "util/Error.h"
 #include <cerrno>
 #include <string>
@@ -16,9 +17,11 @@ void Verifier::visit(BinaryExpr *expr) {
   if (expr->resolvedType == nullptr)
     unresolved(expr, "binaryExpr is unresolved");
 }
-void Verifier::visit(VarExpr *expr) {
-  if (expr->resolved == nullptr)
+void Verifier::visit(NameExpr *expr) {
+  if (expr->resolvedType == nullptr) {
     unresolved(expr, "varExpr is unresolved");
+  }
+
   if (expr->resolvedType == nullptr)
     unresolved(expr, "varExpr's type is unresolved");
 }
@@ -34,10 +37,10 @@ void Verifier::visit(CallExpr *expr) {
   if (expr->receiver != nullptr)
     expr->receiver->accept(this);
   if (expr->callType == CallExpr::CallType::FUNC_CALL) {
-    if (expr->methodResolved == nullptr)
+    if (expr->resolved == nullptr)
       unresolved(expr, "method is unresolved");
   } else if (expr->callType == CallExpr::CallType::PAYLOAD_CALL) {
-    if (expr->VariantResolved == nullptr)
+    if (expr->resolved == nullptr)
       unresolved(expr, "variant is unresolved");
   } else {
     unresolved(expr, "callExpr unresolved");
@@ -51,7 +54,7 @@ void Verifier::visit(AssignExpr *expr) {
 }
 void Verifier::visit(MemberExpr *expr) {
   expr->object->accept(this);
-  if (expr->resolvedType == nullptr)
+  if (expr->resolved == nullptr)
     unresolved(expr, "memberExpr is unresolved");
 }
 void Verifier::visit(ArrayAccessExpr *expr) {
@@ -77,6 +80,10 @@ void Verifier::visit(BlockStmt *stmt) {
     s->accept(this);
   }
 }
+void Verifier::visit(MoveExpr *) {}
+void Verifier::visit(BorrowExpr *) {}
+void Verifier::visit(ReferenceExpr *) {}
+
 void Verifier::visit(IfStmt *stmt) {
   stmt->accept(this);
   stmt->thenBranch->accept(this);
@@ -100,7 +107,7 @@ void Verifier::visit(SwitchStmt *stmt) {
 void Verifier::visit(Case *stmt) { stmt->body->accept(this); }
 void Verifier::visit(ReturnStmt *stmt) {
   if (stmt->value != nullptr) {
-    if (stmt->resolved == nullptr)
+    if (stmt->returnType == nullptr)
       unresolved(stmt, "returnStmt is unresolved");
   }
 }
@@ -162,5 +169,6 @@ void Verifier::visit(Param *param) {
 
 void Verifier::unresolved(ASTNode *node, const string &msg) {
   Error::internal(std::to_string(node->token.line) + ":" +
-                  std::to_string(node->token.col) + " " + msg);
+                  std::to_string(node->token.col) + " " + msg + "(" +
+                  node->token.text + ")");
 }

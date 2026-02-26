@@ -1,33 +1,37 @@
 #include "SemanticAnalyzer/Resolver.h"
 #include "AST/ASTNode.h"
+#include "AST/Decl.h"
 #include "AST/Expr.h"
+#include "AST/Stmt.h"
+#include "IR/MIR.h"
 #include "SemanticAnalyzer/Guard.h"
 #include "SemanticAnalyzer/Scope.h"
 #include "SemanticAnalyzer/Symbol.h"
 #include "SemanticAnalyzer/SymbolTable.h"
 #include "util/Error.h"
+#include <cassert>
+#include <cstddef>
 #include <memory>
 #include <string>
-#include <utility>
 
 Resolver::Resolver(SymbolTable *t) : table(t) {}
 
 void Resolver::visit(LiteralExpr *expr) {
   switch (expr->token.kind) {
   case TKind::LIT_INT:
-    expr->resolvedType = table->getType("int");
+    expr->resolvedType = table->getType("i32");
     break;
   case TKind::LIT_FLOAT:
-    expr->resolvedType = table->getType("float");
+    expr->resolvedType = table->getType("f32");
     break;
   case TKind::FIXED:
-    expr->resolvedType = table->getType("fixed");
+    expr->resolvedType = table->getType("fi16");
     break;
   case TKind::LIT_CHARACTER:
-    expr->resolvedType = table->getType("char");
+    expr->resolvedType = table->getType("c8");
     break;
   case TKind::LIT_STRING:
-    expr->resolvedType = table->getType("string");
+    expr->resolvedType = table->getType("string8");
     break;
   case TKind::LIT_BOOL:
     expr->resolvedType = table->getType("bool");
@@ -40,32 +44,26 @@ void Resolver::visit(BinaryExpr *expr) {
   expr->left->accept(this);
   expr->right->accept(this);
 
-  if (expr->left->state == Expr::State::UNKNOWN ||
-      expr->right->state == Expr::State::UNKNOWN ||
-      expr->left->state == Expr::State::NEED_CHECK ||
-      expr->right->state == Expr::State::NEED_CHECK) {
-    expr->resolvedType = table->getUnknown();
-    expr->state = Expr::State::UNKNOWN;
-  } else if (expr->left->resolvedType == expr->right->resolvedType) {
-    TKind kind = expr->op.kind;
-    if (kind == TKind::GREATER || kind == TKind::GREATER_EQUAL ||
-        kind == TKind::LESS || kind == TKind::LESS_EQUAL) {
-      expr->resolvedType = table->getType("bool");
-    } else
-      expr->resolvedType = expr->left->resolvedType;
+  if (isBinaryOperatalbe(expr->op, expr->left->resolvedType,
+                         expr->right->resolvedType)) {
+    expr->resolvedType = binaryResult(expr->op, expr->left->resolvedType,
+                                      expr->right->resolvedType);
   } else {
-    expr->resolvedType = table->getUnknown();
-    expr->state = Expr::State::NEED_CHECK;
+    Error::diagnostic(expr->token, "leftExpr and rightExpr cannot operate.");
   }
 }
-void Resolver::visit(VarExpr *expr) {
+
+void Resolver::visit(NameExpr *expr) {
   auto symbol = resolveValue(expr->name);
   if (!symbol) {
     auto temp = table->getType(expr->name);
     if (temp) {
       if (temp->kind == TypeSymbol::Kind::ENUM) {
         expr->resolvedType = temp;
+        expr->typeSymbol = temp;
         return;
+      } else {
+        Error::internal("expect enum");
       }
     }
 
@@ -80,8 +78,8 @@ void Resolver::visit(VarExpr *expr) {
   }
 
   expr->resolvedType = symbol->typeSymbol;
-  expr->resolved = symbol;
 }
+
 void Resolver::visit(UnaryExpr *expr) {
   expr->right->accept(this);
   if (expr->right->resolvedType == table->getUnknown()) {
@@ -92,14 +90,16 @@ void Resolver::visit(UnaryExpr *expr) {
   if (expr->op.kind == TKind::BANG) {
     if (expr->right->resolvedType == table->getType("bool"))
       expr->resolvedType = expr->right->resolvedType;
-    else
+    else if (expr->right->resolvedType == table->getType("int")) {
+      expr->resolvedType = expr->right->resolvedType;
+    } else
       Error::diagnostic(expr->token, "bad operand type " +
                                          expr->right->resolvedType->name +
                                          " for unary operator '!'");
   } else if (expr->op.kind == TKind::PLUS || expr->op.kind == TKind::MINUS) {
-    auto type = expr->right->resolvedType;
-    if (table->isNumberic(type))
-      expr->resolvedType = type;
+
+    if (table->isNumberic(expr->right->resolvedType))
+      expr->resolvedType = expr->right->resolvedType;
     else
       Error::diagnostic(expr->token,
                         "bad operand type " + expr->right->resolvedType->name +
@@ -108,93 +108,91 @@ void Resolver::visit(UnaryExpr *expr) {
 }
 
 void Resolver::ResolveEnumVariant(CallExpr *expr) {
-  if (expr->arguments.size() > 1)
-    Error::diagnostic(expr->token, "in variant only one payload allowed");
-  if (expr->arguments.size() == 1) {
-    expr->arguments[0]->accept(this);
-    expr->VariantResolved->payloadType = expr->arguments[0]->resolvedType;
+
+  auto variant = static_cast<EnumVariantSymbol *>(expr->resolved);
+  if (!variant) {
+    Error::internal("casting fail enum variant");
   }
 
-  auto variant = expr->VariantResolved;
+  if (expr->arguments.size() > 1)
+    Error::diagnostic(expr->token, "in variant only one payload allowed");
 
   if (expr->arguments.size() == 1) {
+    expr->arguments[0]->accept(this);
     if (variant->payloadType == nullptr)
-      Error::diagnostic(expr->token, "this variant need payload");
-    else if (variant->payloadType != expr->arguments[0]->resolvedType)
+      Error::diagnostic(expr->token, "this variant does not take payload");
+    else if (!isAssignable(variant->payloadType,
+                           expr->arguments[0]->resolvedType))
       Error::diagnostic(expr->token, "incorrect payload type");
   } else {
     if (variant->payloadType != nullptr)
       Error::diagnostic(expr->token, expr->methodName + " needs payload");
   }
-
   expr->resolvedType = expr->receiver->resolvedType;
 }
 void Resolver::ResolveCall(CallExpr *expr) {
   for (auto a : expr->arguments)
     a->accept(this);
 
-  auto method = expr->methodResolved;
-
-  auto funcDecl = dynamic_cast<FuncDecl *>(method->decl);
-  if (!funcDecl) {
-    Error::internal("method declaration is not FuncDecl");
-    return;
-  }
+  auto method = static_cast<MethodSymbol *>(expr->resolved);
+  auto funcDecl = static_cast<FuncDecl *>(method->decl);
 
   if (expr->arguments.size() != funcDecl->params.size())
     Error::diagnostic(expr->token, "mismatch argument count");
 
-  expr->resolvedType = method->returnType;
+  for (size_t i = 0; i < expr->arguments.size(); ++i) {
+
+    auto symbol = static_cast<TypeSymbol *>(expr->arguments[i]->resolvedType);
+    if (!symbol) {
+      unmatchSymbol(symbol);
+    }
+    if (!isAssignable(symbol, funcDecl->params[i]->symbol->typeSymbol)) {
+      Error::diagnostic(expr->token, "unmatched argument type");
+    }
+    if (funcDecl->params[i]->isBorrow &&
+        expr->arguments[i]->kind != NKind::BORROW_EXPR) {
+    }
+  }
+
+  expr->resolved = method->returnType;
 }
 
 void Resolver::visit(CallExpr *expr) {
   if (expr->callType == CallExpr::CallType::UNRESOLVED) {
     if (expr->receiver != nullptr) {
       expr->receiver->accept(this);
-      if (expr->receiver->resolvedType->kind == TypeSymbol::Kind::ENUM) {
-        auto symbol = expr->receiver->resolvedType;
-        auto it_p = symbol->variantMap.find(expr->methodName);
-        if (it_p == symbol->variantMap.end())
-          Error::diagnostic(expr->token,
-                            expr->methodName + "is not enum variant");
+      auto re = dynamic_cast<TypeSymbol *>(expr->receiver->resolvedType);
+      if (!re) {
+        unmatchSymbol(expr->receiver->resolvedType);
+      }
+
+      if (re->kind == TypeSymbol::Kind::ENUM) {
+        auto it = re->variantMap.find(expr->methodName);
+        if (it == re->variantMap.end()) {
+          Error::diagnostic(expr->token, "unknown variant name");
+        }
         expr->callType = CallExpr::CallType::PAYLOAD_CALL;
-        expr->VariantResolved = it_p->second;
+        expr->resolved = static_cast<EnumVariantSymbol *>(it->second);
+
         ResolveEnumVariant(expr);
       } else {
         expr->callType = CallExpr::CallType::FUNC_CALL;
 
-        Scope *scope = nullptr;
-
-        if (expr->receiver != nullptr) {
-          if (!expr->receiver->resolvedType) {
-            Error::diagnostic(expr->token, "invalid call receiver");
-          }
-
-          scope = expr->receiver->resolvedType->memberScope;
-          if (!scope) {
-            Error::diagnostic(expr->token, "type has no members");
-          }
-        } else {
-          scope = currentType->memberScope;
-          if (!scope) {
-            Error::internal("scope is null");
-          }
+        auto scope = expr->receiver->resolvedType->memberScope;
+        if (!scope) {
+          Error::diagnostic(expr->token, "type has no members");
         }
 
         auto it = scope->method.find(expr->methodName);
         if (it == scope->method.end()) {
           Error::diagnostic(expr->token,
-                            "'" + expr->methodName + "' is not a method");
+                            "unknwon method name : " + expr->methodName);
         }
 
-        MethodSymbol *method = it->second.get();
-        if (!method) {
-          Error::diagnostic(expr->token, "'" + expr->methodName +
-                                             "' is not a method member");
-        }
-        expr->methodResolved = method;
+        expr->resolved = static_cast<MethodSymbol *>(it->second.get());
         ResolveCall(expr);
       }
+    } else {
     }
   }
 }
@@ -202,34 +200,26 @@ void Resolver::visit(CallExpr *expr) {
 void Resolver::visit(AssignExpr *expr) {
   expr->target->accept(this);
   expr->value->accept(this);
-  if (expr->value->state == Expr::State::UNKNOWN ||
-      expr->value->state == Expr::State::NEED_CHECK) {
-    expr->resolvedType = table->getUnknown();
-    expr->state = Expr::State::UNKNOWN;
-  } else if (expr->target->resolvedType == expr->value->resolvedType)
-    expr->resolvedType = expr->target->resolvedType;
-  else {
-    expr->resolvedType = table->getUnknown();
-    expr->state = Expr::State::NEED_CHECK;
+  if (!isAssignable(expr->target->resolvedType, expr->value->resolvedType)) {
+    Error::diagnostic(expr->token, "unmatched assign type");
   }
 }
 void Resolver::visit(MemberExpr *expr) {
   expr->object->accept(this);
 
-  if (!expr->object->resolvedType)
-    Error::diagnostic(expr->token, "invalid member access on null type");
+  auto symbol = static_cast<TypeSymbol *>(expr->object->resolvedType);
 
-  if (expr->object->resolvedType->kind == TypeSymbol::Kind::ENUM) {
-    auto it = expr->object->resolvedType->variantMap.find(expr->member);
-    if (it == expr->object->resolvedType->variantMap.end()) {
+  if (symbol->kind == TypeSymbol::Kind::ENUM) {
+    auto it = symbol->variantMap.find(expr->member);
+    if (it == symbol->variantMap.end()) {
       Error::diagnostic(expr->token, expr->member + " is not " +
                                          expr->object->resolvedType->name +
                                          "'s variant");
     }
-    expr->variantResolved = it->second;
-    expr->resolvedType = expr->object->resolvedType;
+    expr->resolved = it->second;
   } else {
-    auto scope = expr->object->resolvedType->memberScope;
+    auto s = static_cast<TypeSymbol *>(expr->object->resolvedType);
+    auto scope = s->memberScope;
     if (!scope)
       Error::diagnostic(expr->token, "type has no members");
 
@@ -242,17 +232,16 @@ void Resolver::visit(MemberExpr *expr) {
     if (!member)
       Error::diagnostic(expr->token, "member '" + expr->member + "' is null");
 
-    expr->valeuResolved = member;
-    expr->resolvedType = member->typeSymbol;
+    expr->resolved = member;
   }
 }
 
 void Resolver::visit(ArrayAccessExpr *expr) {
   expr->object->accept(this);
   expr->index->accept(this);
-  if (expr->index->resolvedType != table->getType("int"))
+  if (!table->isInt(expr->index->resolvedType))
     Error::diagnostic(expr->token, "array index must be integer type");
-  auto arr = expr->object->resolvedType;
+  auto arr = static_cast<TypeSymbol *>(expr->object->resolvedType);
   if (arr->decl->kind != NKind::ARRAY_DECL)
     Error::diagnostic(expr->token, "type is not indexable");
   expr->resolvedType = static_cast<ArrayDecl *>(arr->decl)->baseType;
@@ -262,18 +251,41 @@ void Resolver::visit(TernaryExpr *expr) {
   expr->conditon->accept(this);
   expr->then->accept(this);
   expr->else_->accept(this);
-  if (expr->then->resolvedType != expr->else_->resolvedType)
-    expr->resolvedType = table->getUnknown();
-  else
-    expr->resolvedType = expr->then->resolvedType;
+  if (!isCastable(expr->then->resolvedType, expr->else_->resolvedType)) {
+    Error::diagnostic(expr->token, "unmatch then to else type");
+  }
 }
 void Resolver::visit(ThisExpr *expr) {
   expr->resolved = currentType;
   expr->resolvedType = currentType;
 }
 void Resolver::visit(SuperExpr *expr) {
+  if (currentType->base == nullptr) {
+    Error::diagnostic(expr->token, "this class has no baseClass");
+  }
   expr->resolved = currentType->base;
   expr->resolvedType = currentType->base;
+}
+
+void Resolver::visit(MoveExpr *expr) {
+  if (expr->target->kind == NKind::VAR_EXPR) {
+    expr->target->accept(this);
+    expr->resolvedType = expr->target->resolvedType;
+  } else {
+    Error::diagnostic(expr->token, "ownership move can only variable");
+  }
+}
+void Resolver::visit(BorrowExpr *expr) {
+  expr->target->accept(this);
+  expr->resolvedType = expr->target->resolvedType;
+}
+void Resolver::visit(ReferenceExpr *expr) {
+  if (expr->target->kind == NKind::VAR_EXPR) {
+    expr->target->accept(this);
+    expr->resolvedType = expr->target->resolvedType;
+  } else {
+    Error::diagnostic(expr->token, "reference can only variable");
+  }
 }
 
 // Statement Resolver::visitor methods
@@ -285,10 +297,8 @@ void Resolver::visit(BlockStmt *stmt) {
 }
 void Resolver::visit(IfStmt *stmt) {
   stmt->condition->accept(this);
-  if (stmt->condition->resolvedType != table->getType("bool")) {
-    if (stmt->condition->resolvedType != table->getUnknown()) {
-      Error::diagnostic(stmt->condition->token, "condition is not bool type");
-    }
+  if (!table->isBool(stmt->condition->resolvedType)) {
+    Error::diagnostic(stmt->condition->token, "condition is not bool type");
   }
 
   stmt->thenBranch->accept(this);
@@ -302,8 +312,7 @@ void Resolver::visit(ForStmt *stmt) {
 }
 void Resolver::visit(WhileStmt *stmt) {
   stmt->condition->accept(this);
-  if (stmt->condition->resolvedType != table->getType("bool") &&
-      stmt->condition->resolvedType != table->getUnknown())
+  if (!table->isBool(stmt->condition->resolvedType))
     Error::diagnostic(stmt->condition->token, "condition is not bool type");
   stmt->body->accept(this);
 }
@@ -319,9 +328,9 @@ void Resolver::visit(ReturnStmt *stmt) {
     if (stmt->value->resolvedType == nullptr) {
       Error::internal("return value is nullptr");
     }
-    stmt->resolved = stmt->value->resolvedType;
+    stmt->returnType = static_cast<TypeSymbol *>(stmt->value->resolvedType);
   } else {
-    stmt->resolved = table->getType("void");
+    stmt->returnType = table->getType("void");
   }
   currentMethod->returns.push_back(stmt);
 }
@@ -335,6 +344,8 @@ void Resolver::visit(ClassDecl *decl) {
   auto symbol = decl->symbol;
   if (decl->baseClass.has_value()) {
     symbol->base = table->getType(decl->baseClass.value());
+    symbol->isInhereted = true;
+    symbol->base->isInhereted = true;
   }
 
   ScopeGuard _(*table, decl->symbol->memberScope);
@@ -429,7 +440,7 @@ void Resolver::visit(FuncDecl *decl) {
     rt->accept(this);
     auto type = rt->resolved;
     for (auto r : symbol->returns) {
-      if (!isAssignable(type, r->resolved)) {
+      if (!isAssignable(type, r->returnType)) {
         Error::diagnostic(r->token, "unmatched return type");
       }
     }
@@ -437,9 +448,9 @@ void Resolver::visit(FuncDecl *decl) {
     if (symbol->returns.empty()) {
       symbol->returnType = table->getType("void");
     } else {
-      auto rt = symbol->returns[0]->resolved;
+      auto rt = symbol->returns[0]->returnType;
       for (auto r : symbol->returns) {
-        if (!isAssignable(rt, r->resolved)) {
+        if (!isAssignable(rt, r->returnType)) {
           Error::diagnostic(r->token, "unmatched return type");
         }
       }
@@ -497,3 +508,99 @@ bool Resolver::isAssignable(TypeSymbol *from, TypeSymbol *to) {
 
   return false;
 }
+
+bool Resolver::isBinaryOperatalbe(BinaryExpr::OperatorType op, TypeSymbol *left,
+                                  TypeSymbol *right) {
+
+  assert(left != nullptr);
+  assert(right != nullptr);
+
+  switch (op) {
+  case BinaryExpr::OperatorType::B_AND:
+  case BinaryExpr::OperatorType::B_OR:
+  case BinaryExpr::OperatorType::B_XOR:
+  case BinaryExpr::OperatorType::LSH:
+  case BinaryExpr::OperatorType::RSH:
+    return table->isInt(left) && table->isInt(right);
+
+  case BinaryExpr::OperatorType::LS:
+  case BinaryExpr::OperatorType::LSE:
+  case BinaryExpr::OperatorType::GR:
+  case BinaryExpr::OperatorType::GRE:
+  case BinaryExpr::OperatorType::ADD:
+  case BinaryExpr::OperatorType::SUB:
+  case BinaryExpr::OperatorType::MUL:
+  case BinaryExpr::OperatorType::DIV:
+  case BinaryExpr::OperatorType::REM:
+  case BinaryExpr::OperatorType::POW:
+    return table->isNumberic(left) && table->isNumberic(right);
+
+  case BinaryExpr::OperatorType::AND:
+  case BinaryExpr::OperatorType::OR:
+    return table->isBool(left) && table->isBool(right);
+
+  case BinaryExpr::OperatorType::EQ:
+  case BinaryExpr::OperatorType::NT:
+    return isCmpable(left, right);
+    break;
+  }
+  return false;
+}
+
+bool Resolver::isCmpable(TypeSymbol *left, TypeSymbol *right) {
+
+  if (table->isNumberic(left) && table->isNumberic(right))
+    return true;
+
+  if (table->isBool(left) && table->isBool(right))
+    return true;
+
+  if (left->kind == TypeSymbol::Kind::ENUM &&
+      right->kind == TypeSymbol::Kind::ENUM)
+    return left == right;
+
+  return left == right;
+}
+
+TypeSymbol *Resolver::binaryResult(BinaryExpr::OperatorType op,
+                                   TypeSymbol *left, TypeSymbol *right) {
+  assert(left != nullptr);
+  assert(right != nullptr);
+
+  switch (op) {
+  case BinaryExpr::OperatorType::B_AND:
+  case BinaryExpr::OperatorType::B_OR:
+  case BinaryExpr::OperatorType::B_XOR:
+  case BinaryExpr::OperatorType::LSH:
+  case BinaryExpr::OperatorType::RSH:
+  case BinaryExpr::OperatorType::LS:
+  case BinaryExpr::OperatorType::LSE:
+  case BinaryExpr::OperatorType::GR:
+  case BinaryExpr::OperatorType::GRE:
+  case BinaryExpr::OperatorType::ADD:
+  case BinaryExpr::OperatorType::SUB:
+  case BinaryExpr::OperatorType::MUL:
+  case BinaryExpr::OperatorType::DIV:
+  case BinaryExpr::OperatorType::REM:
+  case BinaryExpr::OperatorType::POW:
+    return casting(left, right);
+
+  case BinaryExpr::OperatorType::AND:
+  case BinaryExpr::OperatorType::OR:
+  case BinaryExpr::OperatorType::EQ:
+  case BinaryExpr::OperatorType::NT:
+    return table->getType("bool");
+    break;
+  }
+  return nullptr;
+}
+
+[[noreturn]]
+void Resolver::unmatchSymbol(Symbol *symbol) {
+  Error::internal(symbol->name + ": unmatched symbol");
+}
+
+bool Resolver::isCastable(TypeSymbol *from, TypeSymbol *to) {
+  return from == to;
+}
+TypeSymbol *Resolver::casting(TypeSymbol *left, TypeSymbol *) { return left; }

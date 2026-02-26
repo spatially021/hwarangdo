@@ -1,11 +1,14 @@
 #pragma once
 
-#include "Symbol.h"
+#include "SemanticAnalyzer/Symbol.h"
 #include <memory>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 using std::string;
+using std::unique_ptr;
+using std::unordered_map;
 using std::vector;
 
 class Scope {

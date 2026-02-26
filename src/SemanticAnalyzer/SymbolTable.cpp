@@ -1,52 +1,51 @@
 #include "SemanticAnalyzer/SymbolTable.h"
+#include "AST/ASTNode.h"
+#include "BuiltInType.h"
 #include "SemanticAnalyzer/Scope.h"
+#include "SemanticAnalyzer/Symbol.h"
 #include "util/Error.h"
 #include <cassert>
+#include <memory>
 
 using scopePtr = shared_ptr<Scope>;
 
 SymbolTable::SymbolTable() {
   topLevel = make_unique<Scope>();
   current = topLevel.get();
+  for (const auto &entry : builtinEntries) {
+    std::unique_ptr<TypeSymbol> symbol;
 
+    switch (entry.category) {
+    case BuiltinCategory::Int:
+      symbol = std::make_unique<IntType>(entry.type);
+      break;
+
+    case BuiltinCategory::Float:
+      symbol = std::make_unique<FloatType>(entry.type);
+      break;
+
+    case BuiltinCategory::Char:
+      symbol = std::make_unique<CharType>(entry.type);
+      break;
+
+    case BuiltinCategory::String:
+      symbol = std::make_unique<StringType>(entry.type);
+      break;
+
+    default:
+      continue;
+    }
+
+    add(std::move(symbol));
+  }
   auto symbol = make_unique<TypeSymbol>();
-  symbol->name = "int";
-  symbol->kind = TypeSymbol::Kind::BUILTIN;
-  add(std::move(symbol));
-
-  symbol = make_unique<TypeSymbol>();
-  symbol->name = "float";
-  symbol->kind = TypeSymbol::Kind::BUILTIN;
-  add(std::move(symbol));
-
-  symbol = make_unique<TypeSymbol>();
-  symbol->name = "fixed";
-  symbol->kind = TypeSymbol::Kind::BUILTIN;
-  add(std::move(symbol));
-
-  symbol = make_unique<TypeSymbol>();
-  symbol->name = "char";
-  symbol->kind = TypeSymbol::Kind::BUILTIN;
-  add(std::move(symbol));
-
-  symbol = make_unique<TypeSymbol>();
-  symbol->name = "string";
-  symbol->kind = TypeSymbol::Kind::BUILTIN;
-  add(std::move(symbol));
-
-  symbol = make_unique<TypeSymbol>();
-  symbol->name = "bool";
-  symbol->kind = TypeSymbol::Kind::BUILTIN;
-  add(std::move(symbol));
-
-  symbol = make_unique<TypeSymbol>();
   symbol->name = "void";
-  symbol->kind = TypeSymbol::Kind::BUILTIN;
+  symbol->kind = TypeSymbol::Kind::VOID;
   add(std::move(symbol));
 
   symbol = make_unique<TypeSymbol>();
   symbol->name = "func";
-  symbol->kind = TypeSymbol::Kind::BUILTIN;
+  symbol->kind = TypeSymbol::Kind::FUNC;
   add(std::move(symbol));
 
   unknown = make_unique<TypeSymbol>();
@@ -146,3 +145,30 @@ bool SymbolTable::isValue(const string &name) {
 }
 
 TypeSymbol *SymbolTable::getUnknown() { return this->unknown.get(); }
+
+bool SymbolTable::isInt(TypeSymbol *symbol) {
+  if (symbol->kind == TypeSymbol::Kind::PRIMITIVE) {
+    auto p = static_cast<PrimtiveType *>(symbol);
+    return p->primtiveKind == PrimtiveType::PrimtiveKind::INT;
+  } else
+    return false;
+}
+
+bool SymbolTable::isBool(TypeSymbol *symbol) {
+  return getType("bool") == symbol;
+}
+
+TypeSymbol *SymbolTable::getCommonNumbericType(TypeSymbol *left,
+                                               TypeSymbol *right) {
+  assert(isNumberic(left));
+  assert(isNumberic(right));
+
+  if (isInt(left) && isInt(right)) {
+    return getType("int");
+  }
+
+  if (left == getType("float") && right == getType("float")) {
+    return getType("float");
+  }
+  return nullptr;
+}

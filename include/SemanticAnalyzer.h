@@ -8,8 +8,8 @@
 
 class SemanticAnalyzer {
 public:
-  vector<Stmt::Ptr> ast;
-  SemanticAnalyzer(std::vector<Stmt::Ptr> s);
+  vector<StmtPtr> ast;
+  SemanticAnalyzer(std::vector<StmtPtr> s);
   SymbolTable symbolTable;
 
   void build();

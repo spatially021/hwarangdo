@@ -3,6 +3,9 @@
 #include "SemanticAnalyzer/Symbol.h"
 #include <string>
 
+struct Token;
+class Symbol;
+
 class Error {
   using str = const std::string &;
 

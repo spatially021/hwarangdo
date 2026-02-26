@@ -12,11 +12,11 @@ enum class TKind {
   LEFT_BRACKET,  //[
   RIGHT_BRACKET, //]
 
-  SEMICOLON, //;
-  COLON,     //:
-  COMMA,     //,
-  DOT,       //.
-  DOUBLE_DOT,//..
+  SEMICOLON,  //;
+  COLON,      //:
+  COMMA,      //,
+  DOT,        //.
+  DOUBLE_DOT, //..
 
   PLUS,        //+
   MINUS,       //-
@@ -25,13 +25,18 @@ enum class TKind {
   SLASH,       // /
   PERCENT,     // %
 
-  EQUAL,             //=
-  PLUS_EQUAL,        //+=
-  MINUS_EQUAL,       //-=
-  STAR_EQUAL,        // *=
-  DOUBLE_STAR_EQUAL, //**=
-  SLASH_EQUAL,       // /=
-  PERCENT_EQUAL,     //%=
+  EQUAL,                           //=
+  PLUS_EQUAL,                      //+=
+  MINUS_EQUAL,                     //-=
+  STAR_EQUAL,                      // *=
+  DOUBLE_STAR_EQUAL,               //**=
+  SLASH_EQUAL,                     // /=
+  PERCENT_EQUAL,                   //%=
+  CARET_EQUAL,                     // ^=
+  AMPERSAND_EQAUL,                 //&=
+  PIPE_EQUAL,                      //|=
+  DOUBLE_ANGLEBUCKET_EQAUL,        //<<=
+  DOUBLE_RIGHT_ANGLE_BUCKET_EQUAL, //>>=
 
   DOUBLE_EQUAL,  // ==
   BANG_EQUAL,    //!=
@@ -44,7 +49,7 @@ enum class TKind {
   AND,  //&&
   OR,   //||
 
-  UNDERBAR,//_
+  UNDERBAR, //_
 
   QUESTION, //?
 
@@ -81,7 +86,7 @@ enum class TKind {
   CASE,
   DEFAULT,
   DOUBLE_ANGLEBUCKET, //<<
-  EQAUL_AGNLEBUCKET,//=>
+  EQAUL_AGNLEBUCKET,  //=>
 
   FOR,
   WHILE,
@@ -93,8 +98,11 @@ enum class TKind {
   FUNC,
   VOID, // void
 
-  CARET, //^
-  BORROW,
+  CARET,                     //^
+  AMPERSAND,                 //&
+  TILDE,                     //~
+  PIPE,                      //|
+  DOUBLE_RIGHT_ANGLE_BUCKET, //>>
 
   CLASS,
   STRUCT,
@@ -122,10 +130,11 @@ enum class TKind {
 
   EMPTY,
 
-};
-struct Token{
-  TKind kind=TKind::EMPTY;
-  string text;
-  int line,col;
-};
+  SIZE, // built-in type size token
 
+};
+struct Token {
+  TKind kind = TKind::EMPTY;
+  string text;
+  int line, col;
+};

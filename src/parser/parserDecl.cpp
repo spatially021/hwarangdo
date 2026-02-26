@@ -1,10 +1,11 @@
 #include "AST/ASTNode.h"
 #include "AST/Decl.h"
 #include "Parser.h"
+#include "Token.h"
 #include "util/Error.h"
+#include <cassert>
 #include <memory>
 #include <optional>
-#include <regex>
 #include <string>
 
 using Ptr = Decl::Ptr;
@@ -105,42 +106,33 @@ Ptr Parser::varDecl(DeclPrefix prefix) {
   Token t = prefix.startToken;
 
   Token ty = advance(); // 자료형/객체인스턴스 처리
-
-  VarDecl::Size size = {};
-
+  Token size = {};
   if (check(TKind::COLON)) {
-    static const std::regex signedPattern(R"(^(\d+)$)");
-    static const std::regex unsignedPattern(R"(^[uU](\d+)$)");
-    static const std::regex fixedPattern(R"(^(\d+)\.(\d+)$)");
-    static const std::regex unsignedFixedPattern(R"(^[uU](\d+)\.(\d+)$)");
 
     if (ty.kind == TKind::IDENTIFIER)
       Error::diagnostic(peek(), "':' is only allowed built-in types");
     advance(); //: 처리
-    if (isValidSize(peek().text)) {
-      string s = peek().text;
-      std::smatch match;
-
-      if (ty.kind == TKind::FIXED) {
-        size.isFixed = true;
-        if (std::regex_match(s, match, fixedPattern)) {
-          size.size_f = {std::stoi(match[1].str()), std::stoi(match[2].str())};
-        } else if (std::regex_match(s, match, unsignedFixedPattern)) {
-          size.isSigned = false;
-          size.size_f = {std::stoi(match[1].str()), std::stoi(match[2].str())};
-        } else
-          Error::diagnostic(peek(), "invalid size expression");
-      } else {
-        if (std::regex_match(s, match, signedPattern)) {
-          size.size = std::stoi(match[1].str());
-        } else if (std::regex_match(s, match, unsignedPattern)) {
-          size.isSigned = false;
-          size.size = std::stoi(match[1].str());
-        } else
-          Error::diagnostic(peek(), "invalid size expression");
-      }
-    } else
-      Error::diagnostic(peek(), "invalid size expression");
+    Token temp = consume(TKind::SIZE, "expect size value");
+    assert(temp.text != "");
+    switch (ty.kind) {
+    case TKind::INT:
+      if (!(temp.text[0] == 'i' || temp.text[0] == 'u'))
+        Error::diagnostic(temp, "unmatch bitwidth type");
+      break;
+    case TKind::FLOAT:
+      if (temp.text[0] != 'f')
+        Error::diagnostic(temp, "unmatch bitwidth type");
+      break;
+    case TKind::FIXED:
+      break;
+    case TKind::CHAR:
+    case TKind::STRING:
+      if (temp.text[0] != 'c')
+        Error::diagnostic(temp, "unmatch bitwidth type");
+      break;
+    default:
+      Error::diagnostic(ty, "unexpected type");
+    }
   }
 
   Token name = consume(TKind::IDENTIFIER, "expect var name after type-keyword");
@@ -159,12 +151,11 @@ Ptr Parser::varDecl(DeclPrefix prefix) {
 
     consume(TKind::SEMICOLON, "expect ';' after expression");
 
-    TypeNode::Ptr node = typeNodeConvertor(ty);
-
+    TypeNode::Ptr node = typeNodeConvertor(ty, size);
     auto aNode = make_shared<ArrayTypeNode>(t, node, s);
 
-    return make_shared<ArrayDecl>(t, name.text, aNode, size, init,
-                                  !prefix.isConst, modi);
+    return make_shared<ArrayDecl>(t, name.text, aNode, init, !prefix.isConst,
+                                  modi);
   }
 
   Expr::Ptr init = nullptr;
@@ -175,9 +166,8 @@ Ptr Parser::varDecl(DeclPrefix prefix) {
   }
 
   consume(TKind::SEMICOLON, "expect ';' after expression.");
-  TypeNode::Ptr node = typeNodeConvertor(ty);
-  return make_shared<VarDecl>(t, name.text, node, size, init, !prefix.isConst,
-                              modi);
+  TypeNode::Ptr node = typeNodeConvertor(ty, size);
+  return make_shared<VarDecl>(t, name.text, node, init, !prefix.isConst, modi);
 }
 
 Ptr Parser::functionDecl(DeclPrefix prefix, bool isDynamic) {
@@ -203,6 +193,11 @@ Ptr Parser::functionDecl(DeclPrefix prefix, bool isDynamic) {
   vector<shared_ptr<Param>> params;
 
   while (!check(TKind::RIGHT_PAREN) && !isAtEnd()) {
+    bool isBorrow = false;
+    if (check(TKind::TILDE)) {
+      isBorrow = true;
+      advance(); //~처리
+    }
     if (isType()) {
       Token type = advance();
       Token n = consume(TKind::IDENTIFIER,
@@ -213,7 +208,7 @@ Ptr Parser::functionDecl(DeclPrefix prefix, bool isDynamic) {
         init = expression();
       }
       TypeNode::Ptr returnType = typeNodeConvertor(type);
-      params.push_back(make_shared<Param>(n.text, returnType, init));
+      params.push_back(make_shared<Param>(n.text, returnType, init, isBorrow));
       if (check(TKind::COMMA)) {
         if (!check(TKind::RIGHT_PAREN, 1))
           advance(); //,처리

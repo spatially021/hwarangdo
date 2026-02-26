@@ -3,7 +3,6 @@
 #include "Scope.h"
 #include "Symbol.h"
 #include <memory>
-#include <unordered_map>
 
 class SymbolTable {
   using scopePtr = shared_ptr<Scope>;
@@ -30,6 +29,10 @@ public:
   bool isMethod(str name);
 
   bool isNumberic(TypeSymbol *symbol);
+  bool isInt(TypeSymbol *symbol);
+  bool isBool(TypeSymbol *symbol);
+
+  TypeSymbol *getCommonNumbericType(TypeSymbol *left, TypeSymbol *right);
 
   Scope *getCurrent();
 

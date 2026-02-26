@@ -2,6 +2,7 @@
 
 #include "AST/ASTNode.h"
 #include "AST/Decl.h"
+#include "AST/Expr.h"
 #include "AST/Stmt.h"
 #include "Token.h"
 #include <cassert>
@@ -64,8 +65,12 @@ private:
   Expr::Ptr assignment();
   Expr::Ptr logicalOr();
   Expr::Ptr logicalAnd();
+  Expr::Ptr bitOr();
+  Expr::Ptr bitXor();
+  Expr::Ptr bitAnd();
   Expr::Ptr equality();
   Expr::Ptr comparison();
+  Expr::Ptr shift();
   Expr::Ptr term();
   Expr::Ptr factor();
   Expr::Ptr power();
@@ -114,7 +119,7 @@ private:
   bool isAccessModifier() const;
   bool isTypeToken(TKind k) const;
   AModifier AModifierConvertor(Token t);
-  TypeNode::Ptr typeNodeConvertor(Token t);
+  TypeNode::Ptr typeNodeConvertor(Token t, Token size = {});
   bool isAssign() const;
   bool isAssginable(Expr::Ptr p) const;
 };

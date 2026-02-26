@@ -5,10 +5,10 @@
 #include "AST/Stmt.h"
 #include "AST/Visitor.h"
 
-class Verifier:public ASTVisitor{
+class Verifier : public ASTVisitor {
   void visit(LiteralExpr *expr);
   void visit(BinaryExpr *expr);
-  void visit(VarExpr *expr);
+  void visit(NameExpr *expr);
   void visit(UnaryExpr *expr);
   void visit(CallExpr *expr);
   void visit(AssignExpr *expr);
@@ -17,6 +17,9 @@ class Verifier:public ASTVisitor{
   void visit(TernaryExpr *expr);
   void visit(ThisExpr *expr);
   void visit(SuperExpr *expr);
+  void visit(MoveExpr *expr);
+  void visit(BorrowExpr *expr);
+  void visit(ReferenceExpr *expr);
 
   // Statement visitor methods
   void visit(ExprStmt *stmt);
@@ -47,5 +50,5 @@ class Verifier:public ASTVisitor{
   void visit(ASTNode *node);
   void visit(Param *param);
 
-  void unresolved(ASTNode *node,const string & msg );
+  void unresolved(ASTNode *node, const string &msg);
 };

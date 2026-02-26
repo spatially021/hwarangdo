@@ -1,7 +1,7 @@
 #include "Parser.h"
+#include "Token.h"
 #include "util/Error.h"
 #include <memory>
-#include <regex>
 #include <stdexcept>
 
 bool Parser::isAtEnd() const {
@@ -65,19 +65,8 @@ const Token &Parser::following(size_t step) const {
   }
   throw runtime_error("No following token");
 }
-bool Parser::isValidSize(const std::string &s) const {
-  static const std::regex signedPattern(R"(^\d+$)");
-  static const std::regex unsignedPattern(R"(^[uU]\d+$)");
-  static const std::regex fixedPattern(R"(^\d+\.\d+$)");
-  static const std::regex unsignedFixedPattern(R"(^[uU]\d+\.\d+$)");
 
-  return std::regex_match(s, signedPattern) ||
-         std::regex_match(s, unsignedPattern) ||
-         std::regex_match(s, fixedPattern) ||
-         std::regex_match(s, unsignedFixedPattern);
-}
-
-inline bool Parser::isAccessModifier() const {
+bool Parser::isAccessModifier() const {
   auto k = peek().kind;
   return k == TKind::PUBLIC || k == TKind::PRIVATE || k == TKind::PROTECTED;
 }
@@ -136,30 +125,35 @@ bool Parser::isFunc() const {
   return false;
 }
 
-TypeNode::Ptr Parser::typeNodeConvertor(Token ty) {
+TypeNode::Ptr Parser::typeNodeConvertor(Token ty, Token size) {
   TypeNode::Ptr node;
   if (ty.kind == TKind::IDENTIFIER) {
     node = make_shared<IdentifierTypeNode>(ty, ty.text);
   } else {
     switch (ty.kind) {
     case TKind::INT:
-      node = make_shared<BuiltinTypeNode>(ty, BuiltinTypeNode::Category::Int);
+      node = make_shared<BuiltinTypeNode>(ty, BuiltinTypeNode::Category::Int,
+                                          size);
       break;
     case TKind::FLOAT:
-      node = make_shared<BuiltinTypeNode>(ty, BuiltinTypeNode::Category::Float);
+      node = make_shared<BuiltinTypeNode>(ty, BuiltinTypeNode::Category::Float,
+                                          size);
       break;
     case TKind::FIXED:
-      node = make_shared<BuiltinTypeNode>(ty, BuiltinTypeNode::Category::Fixed);
+      node = make_shared<BuiltinTypeNode>(ty, BuiltinTypeNode::Category::Fixed,
+                                          size);
       break;
     case TKind::BOOL:
-      node = make_shared<BuiltinTypeNode>(ty, BuiltinTypeNode::Category::Bool);
+      node = make_shared<BuiltinTypeNode>(ty, BuiltinTypeNode::Category::Bool,
+                                          size);
       break;
     case TKind::CHAR:
-      node = make_shared<BuiltinTypeNode>(ty, BuiltinTypeNode::Category::CHAR);
+      node = make_shared<BuiltinTypeNode>(ty, BuiltinTypeNode::Category::CHAR,
+                                          size);
       break;
     case TKind::STRING:
-      node =
-          make_shared<BuiltinTypeNode>(ty, BuiltinTypeNode::Category::STRING);
+      node = make_shared<BuiltinTypeNode>(ty, BuiltinTypeNode::Category::STRING,
+                                          size);
       break;
     case TKind::VOID:
       node = make_shared<BuiltinTypeNode>(ty, BuiltinTypeNode::Category::Void);
@@ -177,7 +171,9 @@ TypeNode::Ptr Parser::typeNodeConvertor(Token ty) {
 bool Parser::isAssign() const {
   return check({TKind::EQUAL, TKind::PLUS_EQUAL, TKind::MINUS_EQUAL,
                 TKind::STAR_EQUAL, TKind::DOUBLE_STAR_EQUAL, TKind::SLASH_EQUAL,
-                TKind::PERCENT_EQUAL});
+                TKind::PERCENT_EQUAL, TKind::AMPERSAND_EQAUL, TKind::PIPE_EQUAL,
+                TKind::CARET_EQUAL, TKind::DOUBLE_ANGLEBUCKET_EQAUL,
+                TKind::DOUBLE_RIGHT_ANGLE_BUCKET_EQUAL});
 }
 
 bool Parser::isAssginable(Expr::Ptr p) const {

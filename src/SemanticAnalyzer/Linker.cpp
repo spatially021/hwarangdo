@@ -1,4 +1,5 @@
 #include "SemanticAnalyzer/Linker.h"
+#include "AST/Stmt.h"
 #include "SemanticAnalyzer/Guard.h"
 #include "SemanticAnalyzer/Symbol.h"
 #include "SemanticAnalyzer/SymbolTable.h"
@@ -8,7 +9,7 @@ Linker::Linker(SymbolTable *t) : table(t) {}
 
 void Linker::visit(LiteralExpr *) {}
 void Linker::visit(BinaryExpr *) {}
-void Linker::visit(VarExpr *) {}
+void Linker::visit(NameExpr *) {}
 void Linker::visit(UnaryExpr *) {}
 void Linker::visit(CallExpr *) {}
 void Linker::visit(AssignExpr *) {}
@@ -17,6 +18,9 @@ void Linker::visit(ArrayAccessExpr *) {}
 void Linker::visit(TernaryExpr *) {}
 void Linker::visit(ThisExpr *) {}
 void Linker::visit(SuperExpr *) {}
+void Linker::visit(MoveExpr *) {}
+void Linker::visit(BorrowExpr *) {}
+void Linker::visit(ReferenceExpr *) {}
 
 // Statement Linker::visitor methods
 void Linker::visit(ExprStmt *) {}

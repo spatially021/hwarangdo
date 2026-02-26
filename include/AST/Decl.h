@@ -1,8 +1,6 @@
 #pragma once
 
 #include "ASTNode.h"
-#include "Expr.h"
-#include "Stmt.h"
 #include "Visitor.h"
 #include <memory>
 #include <optional>
@@ -14,6 +12,11 @@ class ValueSymbol;
 class EnumVariantSymbol;
 class ImplSymbol;
 class MethodSymbol;
+class Expr;
+class Stmt;
+using StmtPtr = shared_ptr<Stmt>;
+
+using ExprPtr = shared_ptr<Expr>;
 
 using namespace std;
 enum class AModifier {
@@ -39,21 +42,14 @@ public:
 class VarDecl : public Decl {
 public:
   TypeNode::Ptr type; // 반드시 존재 (타입 추론이면 placeholder)
-  struct Size {
-  public:
-    int size = -1;
-    pair<int, int> size_f = {-1, -1};
-    bool isSigned = false;
-    bool isFixed = false;
-  } size;
-  optional<Expr::Ptr> init; // 초기화 식 (없을 수 있음)
-  bool isMutable = true;    // let vs var 등
 
-  VarDecl(Token t, const string &n, TypeNode::Ptr ty, Size s,
-          optional<Expr::Ptr> i = nullopt, bool mut = true,
+  optional<ExprPtr> init; // 초기화 식 (없을 수 있음)
+  bool isMutable = true;  // let vs var 등
+  VarDecl(Token t, const string &n, TypeNode::Ptr ty,
+          optional<ExprPtr> i = nullopt, bool mut = true,
           AModifier modi = AModifier::DEFAULT)
-      : Decl(NKind::VAR_DECL, t, n, modi), type(std::move(ty)), size(s),
-        init(i), isMutable(mut) {
+      : Decl(NKind::VAR_DECL, t, n, modi), type(std::move(ty)), init(i),
+        isMutable(mut) {
     aModifier = modi;
   }
 
@@ -65,15 +61,13 @@ public:
 class ArrayDecl : public Decl {
 public:
   shared_ptr<ArrayTypeNode> type;
-  optional<Expr::Ptr> init;
+  optional<ExprPtr> init;
   bool isMutalbe = true;
-  VarDecl::Size size;
-
   ArrayDecl(Token t, const string &n, shared_ptr<ArrayTypeNode> ty,
-            VarDecl::Size s, optional<Expr::Ptr> i = nullopt, bool m = true,
+            optional<ExprPtr> i = nullopt, bool m = true,
             AModifier modi = AModifier::DEFAULT)
       : Decl(NKind::ARRAY_DECL, t, n, modi), type(std::move(ty)), init(i),
-        isMutalbe(m), size(s) {
+        isMutalbe(m) {
     aModifier = modi;
   }
   void accept(ASTVisitor *visitor) override { visitor->visit(this); }
@@ -86,11 +80,13 @@ class Param : public ASTNode {
 public:
   string name;
   TypeNode::Ptr type; // param의 타입 (이름은 param에만 있음)
-  optional<Expr::Ptr> defaultValue;
+  optional<ExprPtr> defaultValue;
+  bool isBorrow = false;
 
-  Param(const string &n, TypeNode::Ptr t, optional<Expr::Ptr> d = nullopt)
+  Param(const string &n, TypeNode::Ptr t, optional<ExprPtr> d = nullopt,
+        bool b = false)
       : ASTNode(NKind::PARAM, t->token), name(n), type(std::move(t)),
-        defaultValue(d) {}
+        defaultValue(d), isBorrow(b) {}
   void accept(ASTVisitor *visitor) override { visitor->visit(this); }
   ValueSymbol *symbol = nullptr;
 };
@@ -100,11 +96,11 @@ class FuncDecl : public Decl {
 public:
   vector<shared_ptr<Param>> params;   // 이름 포함된 파라미터
   optional<TypeNode::Ptr> returnType; // 반환 타입 (void면 BuiltinTypeNode void)
-  Stmt::Ptr body;
+  StmtPtr body;
   bool isExtern = false; // 외부 함수 여부 (DLL/FFI 등)
 
   FuncDecl(Token t, const string &n, vector<shared_ptr<Param>> p,
-           optional<TypeNode::Ptr> ret, Stmt::Ptr b,
+           optional<TypeNode::Ptr> ret, StmtPtr b,
            AModifier modi = AModifier::DEFAULT)
       : Decl(NKind::FUNC_DECL, t, n, modi), params(std::move(p)),
         returnType(std::move(ret)), body(std::move(b)) {

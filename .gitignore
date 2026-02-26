@@ -8,3 +8,6 @@ old/
 .build-meta/
 *.txt
 Makefile
+.VSCodeCounter/
+*.hgm
+Example/

@@ -1,7 +1,7 @@
 #pragma once
 
 #include "ASTNode.h"
-#include "Expr.h"
+#include "SemanticAnalyzer/Symbol.h"
 #include "Visitor.h"
 #include <memory>
 #include <optional>
@@ -9,9 +9,12 @@
 #include <vector>
 
 class Decl;
+class Expr;
 class Scope;
+class Range;
 class TypeSymbol;
 using DeclPtr = shared_ptr<Decl>;
+using ExprPtr = shared_ptr<Expr>;
 
 class Stmt : public ASTNode {
 public:
@@ -23,9 +26,9 @@ public:
 
 class ExprStmt : public Stmt {
 public:
-  Expr::Ptr expr;
+  ExprPtr expr;
 
-  ExprStmt(Token t, Expr::Ptr e)
+  ExprStmt(Token t, ExprPtr e)
       : Stmt(NKind::EXPR_STMT, t), expr(std::move(e)) {}
 
   void accept(ASTVisitor *visitor) override { visitor->visit(this); }
@@ -43,12 +46,11 @@ public:
 
 class IfStmt : public Stmt {
 public:
-  Expr::Ptr condition;
+  ExprPtr condition;
   Stmt::Ptr thenBranch;
   Stmt::Ptr elseBranch;
 
-  IfStmt(Token t, Expr::Ptr cond, Stmt::Ptr thenB,
-         Stmt::Ptr elseB = nullptr)
+  IfStmt(Token t, ExprPtr cond, Stmt::Ptr thenB, Stmt::Ptr elseB = nullptr)
       : Stmt(NKind::IF_STMT, t), condition(std::move(cond)),
         thenBranch(std::move(thenB)), elseBranch(std::move(elseB)) {}
 
@@ -57,10 +59,10 @@ public:
 
 class WhileStmt : public Stmt {
 public:
-  Expr::Ptr condition;
+  ExprPtr condition;
   Stmt::Ptr body;
 
-  WhileStmt(Token t, Expr::Ptr c, Stmt::Ptr b)
+  WhileStmt(Token t, ExprPtr c, Stmt::Ptr b)
       : Stmt(NKind::WHILE_STMT, t), condition(std::move(c)),
         body(std::move(b)) {}
 
@@ -69,16 +71,6 @@ public:
 
 class ForStmt : public Stmt {
 public:
-  class Range : public Expr {
-  public:
-    Expr::Ptr from;
-    Expr::Ptr to;
-    Expr::Ptr step;
-    Range(Token t, Expr::Ptr f, Expr::Ptr to_, Expr::Ptr s = {})
-        : Expr(NKind::RANGE, t), from(std::move(f)), to(std::move(to_)),
-          step(std::move(s)) {}
-    void accept(ASTVisitor *visitor) override { visitor->visit(this); }
-  };
   Stmt::Ptr initializer; // VarDeclStmt or ExprStmt or null
   shared_ptr<Range> range;
   Stmt::Ptr body;
@@ -92,12 +84,12 @@ public:
 
 class ReturnStmt : public Stmt {
 public:
-  Expr::Ptr value; // null이면 return;
-  ReturnStmt(Token t, Expr::Ptr v)
+  ExprPtr value; // null이면 return;
+  ReturnStmt(Token t, ExprPtr v)
       : Stmt(NKind::RETURN_STMT, t), value(std::move(v)) {}
 
   void accept(ASTVisitor *visitor) override { visitor->visit(this); }
-  TypeSymbol *resolved = nullptr;
+  TypeSymbol *returnType = nullptr;
 };
 
 class BreakStmt : public Stmt {
@@ -116,21 +108,21 @@ public:
 
 class Case : public ASTNode {
 public:
-  vector<Expr::Ptr> values;
+  vector<ExprPtr> values;
   Stmt::Ptr body;
   bool isDefault;
   void accept(ASTVisitor *visitor) override { visitor->visit(this); }
-  Case(Token t, vector<Expr::Ptr> v, Stmt::Ptr b, bool is = false)
+  Case(Token t, vector<ExprPtr> v, Stmt::Ptr b, bool is = false)
       : ASTNode(NKind::SWITCH_CASE, t), values(std::move(v)), body(b),
         isDefault(is) {}
 };
 
 class SwitchStmt : public Stmt {
 public:
-  Expr::Ptr value;                       // switch (value)
+  ExprPtr value;                         // switch (value)
   std::vector<shared_ptr<Case>> clauses; // CaseStmt 또는 DefaultStmt 의 집합
 
-  SwitchStmt(Token t, Expr::Ptr val, std::vector<shared_ptr<Case>> c)
+  SwitchStmt(Token t, ExprPtr val, std::vector<shared_ptr<Case>> c)
       : Stmt(NKind::SWITCH_STMT, t), value(std::move(val)),
         clauses(std::move(c)) {}
 
@@ -189,7 +181,7 @@ public:
 
 class ThrowStmt : public Stmt {
 public:
-  Expr::Ptr expr;
-  ThrowStmt(Token t, Expr::Ptr ex) : Stmt(NKind::THROW_STMT, t), expr(ex) {}
+  ExprPtr expr;
+  ThrowStmt(Token t, ExprPtr ex) : Stmt(NKind::THROW_STMT, t), expr(ex) {}
   void accept(ASTVisitor *visitor) override { visitor->visit(this); }
 };

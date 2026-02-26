@@ -68,7 +68,7 @@ Ptr Parser::forStmt() {
   Expr::Ptr from=expression();
   consume(TKind::DOUBLE_DOT, "range need '..'");
   Expr::Ptr to=expression();
-  shared_ptr<ForStmt::Range> range=make_shared<ForStmt::Range>(from->token,from,to);
+  shared_ptr<Range> range=make_shared<Range>(from->token,from,to);
   Ptr body = bodyStmt();
   return make_shared<ForStmt>(t,init,range,body);
 }

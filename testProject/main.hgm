@@ -1,140 +1,102 @@
-// ================================
-// Trait 선언 (시그니처 전용)
-// ================================
+////////////////////////////////////////////////////////////
+// Trait 정의
+////////////////////////////////////////////////////////////
 
-public trait Movable {
-    void move(int dx, int dy);
-    func length();
+trait Movable {
+    func move(int dx, int dy);
 }
 
-// ================================
-// Enum 선언 (payload 포함, 단일 상속)
-// ================================
-
-public enum ResultCode {
-    OK,
-    InvalidArgument(int),
-    NotFound(int)
+trait Drawable {
+    func draw();
 }
 
-// ================================
-// Struct 선언 (필드만 허용)
-// ================================
+////////////////////////////////////////////////////////////
+// Struct
+////////////////////////////////////////////////////////////
 
-public struct Vec2 {
-    public int x;
-    public int y;
+struct Vec2 {
+    int x;
+    int y;
 }
 
-// ================================
-// Struct impl (메서드 구현 전용)
-// ================================
+////////////////////////////////////////////////////////////
+// Enum
+////////////////////////////////////////////////////////////
 
-impl Vec2 {
+enum State {
+    Idle,
+    Moving(int),
+    Dead
+}
 
-    public void set(int nx, int ny) {
-        x = nx;
-        y = ny;
-    }
+////////////////////////////////////////////////////////////
+// Base Class
+////////////////////////////////////////////////////////////
 
-    public func length() {
-        return x * x + y * y;
-    }
+class Entity {
+    int id;
 
-    public int sum() {
-        return x + y;
+    func update() {
+        id = id + 1;
     }
 }
 
-// ================================
-// Class 선언 (class 상속 + trait 다중 상속)
-// ================================
+////////////////////////////////////////////////////////////
+// Trait 다중 상속 클래스
+////////////////////////////////////////////////////////////
 
-public class Entity : Movable {
+class Player : Movable Drawable {
 
-    // -------- 필드 선언 --------
-    protected int id;
-    private bool alive;
-    public Vec2 position;
+    Vec2 position;
+    State state;
 
-    // -------- 메서드 (명시적 반환 타입) --------
-    public int getId() {
-        return id;
-    }
-
-    // -------- 메서드 (void) --------
-    public void kill() {
-        alive = false;
-    }
-
-    // -------- 메서드 (func 기반 타입 추론) --------
-    public func isAlive() {
-        return alive;
-    }
-
-    // -------- 내부 class / struct --------
-    class InternalState {
-        int flags;
-    }
-
-    struct Snapshot {
-        int x;
-        int y;
-    }
-}
-
-// ================================
-// Class 상속 + trait 다중 상속
-// ================================
-
-public class Player extends Entity : Movable {
-
-    private int health;
-    public string name;
-
-    // -------- 명시적 반환 --------
-    public int getHealth() {
-        return health;
-    }
-
-    // -------- void 반환 --------
-    public void damage(int amount) {
-        health = health - amount;
-    }
-
-    // -------- func 반환 추론 --------
-    public func isDead() {
-        return health <= 0;
-    }
-
-    // -------- trait 시그니처 대응 --------
-    public void move(int dx, int dy) {
+    func move(int dx, int dy) {
         position.x = position.x + dx;
         position.y = position.y + dy;
+        state = State.Moving(1);
     }
 
-    public func length() {
-        return position.length();
-    }
-}
-
-// ================================
-// 추가 impl (여러 impl 허용 검증)
-// ================================
-
-struct Tester{
-    int health;
-}
-
-
-impl Tester {
-
-    public ResultCode checkState() {
-        if (health <= 0) {
-            return ResultCode.InvalidArgument(health);
-        }
-        return ResultCode.OK;
+    func draw() {
+        position.x = position.x + 1;
     }
 }
 
+////////////////////////////////////////////////////////////
+// 단일 상속
+////////////////////////////////////////////////////////////
 
+class Actor extends Entity {
+    int id;
+    func update() {
+        id = id + 2;
+    }
+}
+
+////////////////////////////////////////////////////////////
+// extends + trait 다중 상속
+////////////////////////////////////////////////////////////
+
+class NPC extends Actor : Movable {
+
+    Vec2 pos;
+
+    func move(int dx, int dy) {
+        pos.x = pos.x + dx;
+        pos.y = pos.y + dy;
+    }
+
+    func update() {
+        id = id + 3;
+    }
+}
+
+////////////////////////////////////////////////////////////
+// trait 상속 확인용 클래스
+////////////////////////////////////////////////////////////
+
+class Enemy : Movable {
+
+    func move(int dx, int dy) {
+        int temp = dx + dy;
+    }
+}

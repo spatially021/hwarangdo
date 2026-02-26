@@ -1,8 +1,10 @@
 #pragma once
 
 #include "ASTNode.h"
+#include "Token.h"
 #include "Visitor.h"
 #include <memory>
+#include <stdexcept>
 #include <string>
 #include <utility>
 
@@ -12,6 +14,7 @@ class MethodSymbol;
 class EnumVariantSymbol;
 class Symbol;
 class Stmt;
+struct HIRValue;
 
 using namespace std;
 
@@ -27,6 +30,7 @@ public:
     NEED_CHECK,
     UNKNOWN,
   } state = Expr::State::RESOLVED;
+  HIRValue *hirValue = nullptr;
 };
 
 class LiteralExpr : public Expr {
@@ -38,12 +42,14 @@ public:
   void accept(ASTVisitor *visitor) override { visitor->visit(this); }
 };
 
-class VarExpr : public Expr {
+class NameExpr : public Expr {
 public:
   string name;
-  VarExpr(Token t, const string &n) : Expr(NKind::VAR_EXPR, t), name(n) {}
+  NameExpr(Token t, const string &n) : Expr(NKind::VAR_EXPR, t), name(n) {}
   void accept(ASTVisitor *visitor) override { visitor->visit(this); }
-  ValueSymbol *resolved = nullptr;
+
+  TypeSymbol *typeSymbol = nullptr;
+  ValueSymbol *valueSymbol = nullptr;
 };
 
 class UnaryExpr : public Expr {
@@ -58,9 +64,100 @@ public:
 class BinaryExpr : public Expr {
 public:
   Ptr left, right;
-  Token op;
+  enum class OperatorType {
+    ADD,
+    SUB,
+    MUL,
+    DIV,
+    REM,
+    POW,
+
+    B_AND,
+    B_OR,
+    B_XOR,
+
+    AND,
+    OR,
+
+    EQ,
+    NT,
+    LS,  // less
+    LSE, // less eq
+    GR,  // greater
+    GRE, // greate equal
+
+    LSH,
+    RSH,
+
+  } op;
+  Token opRaw;
   BinaryExpr(Token t, Ptr l, Token o, Ptr r)
-      : Expr(NKind::BINARY_EXPR, t), left(l), right(r), op(o) {}
+      : Expr(NKind::BINARY_EXPR, t), left(l), right(r), opRaw(o) {
+    switch (o.kind) {
+    case TKind::DOUBLE_EQUAL:
+      op = OperatorType::EQ;
+      break;
+    case TKind::BANG_EQUAL:
+      op = OperatorType::NT;
+      break;
+    case TKind::LESS:
+      op = OperatorType::LS;
+      break;
+    case TKind::GREATER:
+      op = OperatorType::GR;
+      break;
+    case TKind::LESS_EQUAL:
+      op = OperatorType::LSE;
+      break;
+    case TKind::GREATER_EQUAL:
+      op = OperatorType::GRE;
+      break;
+    case TKind::AND:
+      op = OperatorType::AND;
+      break;
+    case TKind::OR:
+      op = OperatorType::OR;
+      break;
+    case TKind::DOUBLE_ANGLEBUCKET:
+      op = OperatorType::LSH;
+      break;
+    case TKind::CARET:
+      op = OperatorType::B_XOR;
+      break;
+    case TKind::AMPERSAND:
+      op = OperatorType::B_AND;
+      break;
+    case TKind::PIPE:
+      op = OperatorType::B_OR;
+      break;
+    case TKind::DOUBLE_RIGHT_ANGLE_BUCKET:
+      op = OperatorType::RSH;
+      break;
+    case TKind::PLUS:
+      op = OperatorType::ADD;
+      break;
+    case TKind::MINUS:
+      op = OperatorType::SUB;
+      break;
+    case TKind::SLASH:
+      op = OperatorType::DIV;
+      break;
+    case TKind::PERCENT:
+      op = OperatorType::REM;
+      break;
+    case TKind::STAR:
+      op = OperatorType::MUL;
+      break;
+    case TKind::DOUBLE_STAR:
+      op = OperatorType::POW;
+      break;
+    default:
+      throw runtime_error("[line : " + to_string(o.line) +
+                          ", col : " + to_string(o.col) +
+                          "] unexpected token kind in binary operator");
+      break;
+    }
+  }
   void accept(ASTVisitor *visitor) override { visitor->visit(this); }
 };
 
@@ -84,8 +181,7 @@ public:
       : Expr(NKind::MEMBER_EXPR, t), object(std::move(o)), member(m) {}
 
   void accept(ASTVisitor *visitor) override { visitor->visit(this); }
-  ValueSymbol *valeuResolved = nullptr;
-  EnumVariantSymbol *variantResolved = nullptr;
+  ValueSymbol *resolved = nullptr;
 };
 
 class ArrayAccessExpr : public Expr {
@@ -117,8 +213,7 @@ public:
         arguments(std::move(a)) {}
 
   void accept(ASTVisitor *visitor) override { visitor->visit(this); }
-  MethodSymbol *methodResolved = nullptr;
-  EnumVariantSymbol *VariantResolved = nullptr;
+  Symbol *resolved = nullptr;
 };
 
 class TernaryExpr : public Expr {
@@ -185,5 +280,37 @@ public:
   EnumVariantExpr(Token t, string const &n, Expr::Ptr r, Expr::Ptr p)
       : Expr(NKind::ENUM_VARIANT_EXPR, t), name(n), receiver(std::move(r)),
         payload(std::move(p)) {}
+  void accept(ASTVisitor *visitor) override { visitor->visit(this); }
+};
+class Range : public Expr {
+public:
+  ExprPtr from;
+  ExprPtr to;
+  ExprPtr step;
+  Range(Token t, ExprPtr f, ExprPtr to_, ExprPtr s = {})
+      : Expr(NKind::RANGE, t), from(std::move(f)), to(std::move(to_)),
+        step(std::move(s)) {}
+  void accept(ASTVisitor *visitor) override { visitor->visit(this); }
+};
+
+class MoveExpr : public Expr {
+public:
+  ExprPtr target;
+  MoveExpr(Token t, ExprPtr e) : Expr(NKind::MOVE_EXPR, t), target(e) {}
+  void accept(ASTVisitor *visitor) override { visitor->visit(this); }
+};
+
+class BorrowExpr : public Expr {
+public:
+  ExprPtr target;
+  BorrowExpr(Token t, ExprPtr e) : Expr(NKind::BORROW_EXPR, t), target(e) {}
+  void accept(ASTVisitor *visitor) override { visitor->visit(this); }
+};
+
+class ReferenceExpr : public Expr {
+public:
+  ExprPtr target;
+  ReferenceExpr(Token t, ExprPtr e)
+      : Expr(NKind::REFERENCE_EXPR, t), target(e) {}
   void accept(ASTVisitor *visitor) override { visitor->visit(this); }
 };

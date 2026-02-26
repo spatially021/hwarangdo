@@ -35,7 +35,9 @@
             "name": "debug-ide",
             "inherits": "base-debug",
             "cacheVariables": {
-                "CMAKE_CXX_FLAGS": "-g3 -O0 -fno-inline -fno-omit-frame-pointer",
+                "CMAKE_CXX_FLAGS": "-g3 -O0 -fsanitize=address -fno-omit-frame-pointer",
+                "CMAKE_C_FLAGS": "-g3 -O0 -fsanitize=address -fno-omit-frame-pointer",
+                "CMAKE_EXE_LINKER_FLAGS": "-fsanitize=address",
                 "HGM_BUILD_MODE": "IDE"
             }
         },
@@ -60,7 +62,6 @@
             "name": "asan",
             "configurePreset": "debug-asan"
         },
-
         {
             "name": "ide",
             "configurePreset": "debug-ide"

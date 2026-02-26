@@ -1,4 +1,6 @@
 #include "SemanticAnalyzer/Builder.h"
+#include "AST/ASTNode.h"
+#include "AST/Expr.h"
 #include "SemanticAnalyzer/Guard.h"
 #include "SemanticAnalyzer/Symbol.h"
 #include "util/Error.h"
@@ -12,7 +14,7 @@ Builder::Builder(SymbolTable *symbol) : table(symbol) {
 
 void Builder::visit(LiteralExpr *) {}
 void Builder::visit(BinaryExpr *) {}
-void Builder::visit(VarExpr *) {}
+void Builder::visit(NameExpr *) {}
 void Builder::visit(UnaryExpr *) {}
 void Builder::visit(CallExpr *) {}
 void Builder::visit(AssignExpr *) {}
@@ -21,6 +23,9 @@ void Builder::visit(ArrayAccessExpr *) {}
 void Builder::visit(TernaryExpr *) {}
 void Builder::visit(ThisExpr *) {}
 void Builder::visit(SuperExpr *) {}
+void Builder::visit(MoveExpr *) {}
+void Builder::visit(BorrowExpr *) {}
+void Builder::visit(ReferenceExpr *) {}
 
 // Statement Builder::visitor methods
 void Builder::visit(ExprStmt *) {}
@@ -125,7 +130,6 @@ void Builder::visit(EnumDecl *decl) {
   int ordinal = 0;
   for (auto a : decl->variants) {
     auto v = make_unique<EnumVariantSymbol>();
-    v->variant = a.get();
     v->name = a->name;
     v->ordinal = ordinal++;
     if (a->payload.has_value()) {
@@ -191,7 +195,7 @@ void Builder::visit(TraitSig *sig) {
   auto symbol = make_unique<MethodSymbol>();
 
   symbol->name = sig->name;
-  symbol->decl=sig;
+  symbol->decl = sig;
   symbol->onwer = currentType;
   auto raw = symbol.get();
 
@@ -279,6 +283,10 @@ void Builder::visit(ArrayDecl *decl) {
   decl->symbol = raw;
 }
 
-void Builder::visit(TypeNode *) {}
+void Builder::visit(TypeNode *type) {
+  auto temp = dynamic_cast<BuiltinTypeNode *>(type);
+  if (temp) {
+  }
+}
 void Builder::visit(ASTNode *) {}
 void Builder::visit(Param *) {}

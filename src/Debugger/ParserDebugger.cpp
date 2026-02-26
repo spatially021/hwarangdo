@@ -1,6 +1,7 @@
 #include "Debugger/ParserDebugger.h"
 #include "AST/ASTNode.h"
 #include "AST/Decl.h"
+#include "AST/Expr.h"
 #include "AST/Stmt.h"
 #include <iostream>
 #include <string>
@@ -14,10 +15,10 @@ void ParserDebugger::visit(LiteralExpr *expr) { cout << " " << expr->value; }
 void ParserDebugger::visit(BinaryExpr *expr) {
   cout << " ";
   expr->left->accept(this);
-  cout << " " << expr->op.text;
+  cout << " " << expr->opRaw.text;
   expr->right->accept(this);
 }
-void ParserDebugger::visit(VarExpr *expr) { cout << " " << expr->name; }
+void ParserDebugger::visit(NameExpr *expr) { cout << " " << expr->name; }
 void ParserDebugger::visit(UnaryExpr *expr) {
   cout << " " << expr->op.text;
   expr->right->accept(this);
@@ -56,6 +57,18 @@ void ParserDebugger::visit(TernaryExpr *expr) {
 }
 void ParserDebugger::visit(ThisExpr *) { cout << "this"; }
 void ParserDebugger::visit(SuperExpr *) { cout << "super"; }
+void ParserDebugger::visit(MoveExpr *expr) {
+  cout << "^";
+  expr->target->accept(this);
+}
+void ParserDebugger::visit(BorrowExpr *expr) {
+  cout << "~";
+  expr->target->accept(this);
+}
+void ParserDebugger::visit(ReferenceExpr *expr) {
+  cout << "&";
+  expr->target->accept(this);
+}
 
 void ParserDebugger::visit(ExprStmt *stmt) {
   cout << ident();
@@ -195,7 +208,7 @@ void ParserDebugger::visit(ArrayDecl *decl) {
 void ParserDebugger::visit(TypeNode *decl) { cout << decl->type; }
 void ParserDebugger::visit(ASTNode *) {}
 void ParserDebugger::visit(Param *param) {
-  cout<<" ";
+  cout << " ";
   param->type->accept(this);
   cout << " " << param->name;
   if (param->defaultValue.has_value()) {

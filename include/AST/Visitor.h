@@ -1,7 +1,7 @@
 #pragma once
 
 class LiteralExpr;
-class VarExpr;
+class NameExpr;
 class BinaryExpr;
 class UnaryExpr;
 class CallExpr;
@@ -11,6 +11,9 @@ class ArrayAccessExpr;
 class TernaryExpr;
 class ThisExpr;
 class SuperExpr;
+class MoveExpr;
+class BorrowExpr;
+class ReferenceExpr;
 
 class ExprStmt;
 class VarStmt;
@@ -47,7 +50,7 @@ public:
   // Expression visitor methods
   virtual void visit(LiteralExpr *expr) = 0;
   virtual void visit(BinaryExpr *expr) = 0;
-  virtual void visit(VarExpr *expr) = 0;
+  virtual void visit(NameExpr *expr) = 0;
   virtual void visit(UnaryExpr *expr) = 0;
   virtual void visit(CallExpr *expr) = 0;
   virtual void visit(AssignExpr *expr) = 0;
@@ -56,6 +59,9 @@ public:
   virtual void visit(TernaryExpr *expr) = 0;
   virtual void visit(ThisExpr *expr) = 0;
   virtual void visit(SuperExpr *expr) = 0;
+  virtual void visit(MoveExpr *expr) = 0;
+  virtual void visit(BorrowExpr *expr) = 0;
+  virtual void visit(ReferenceExpr *expr) = 0;
 
   // Statement visitor methods
   virtual void visit(ExprStmt *stmt) = 0;

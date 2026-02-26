@@ -3,13 +3,13 @@
 #include "AST/Visitor.h"
 #include <cstddef>
 #include <string>
-class ParserDebugger :public ASTVisitor{
+class ParserDebugger : public ASTVisitor {
 public:
-  std::size_t depth=0;
+  std::size_t depth = 0;
   std::string ident();
   void visit(LiteralExpr *expr);
   void visit(BinaryExpr *expr);
-  void visit(VarExpr *expr);
+  void visit(NameExpr *expr);
   void visit(UnaryExpr *expr);
   void visit(CallExpr *expr);
   void visit(AssignExpr *expr);
@@ -18,6 +18,9 @@ public:
   void visit(TernaryExpr *expr);
   void visit(ThisExpr *expr);
   void visit(SuperExpr *expr);
+  void visit(MoveExpr *expr);
+  void visit(BorrowExpr *expr);
+  void visit(ReferenceExpr *expr);
 
   // Statement visitor methods
   void visit(ExprStmt *stmt);

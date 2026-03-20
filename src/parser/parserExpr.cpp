@@ -1,12 +1,14 @@
+#include "AST/ASTNode.h"
 #include "AST/Expr.h"
 #include "Parser.h"
 #include "Token.h"
 #include "util/Error.h"
 #include <memory>
+#include <string>
 
 using Ptr = Expr::Ptr;
 
-Ptr Parser::assignment() {
+Ptr Parser::assignment() { // 대입 연산 처리
   Token t = peek();
   Ptr left = ternary();
   if (isAssign()) {
@@ -19,7 +21,7 @@ Ptr Parser::assignment() {
   return left;
 }
 
-Ptr Parser::ternary() {
+Ptr Parser::ternary() { // 삼항 연산 처리
   Ptr left = logicalOr();
   if (check(TKind::QUESTION)) {
     advance(); //?처리
@@ -140,29 +142,40 @@ Ptr Parser::unary() {
     Ptr left = postfix();
     return make_shared<UnaryExpr>(left->token, op, left);
   }
-  if (check(TKind::CARET)) {
-    advance(); //^ 처리
-    Ptr target = postfix();
-    return make_shared<MoveExpr>(target->token, target);
-  }
-  if (check(TKind::TILDE)) {
-    advance(); //~처리
-    Ptr target = postfix();
-    return make_shared<BorrowExpr>(target->token, target);
-  }
-  if (check(TKind::AMPERSAND)) {
-    advance(); //&처리
-    Ptr target = postfix();
-    return make_shared<ReferenceExpr>(target->token, target);
-  }
   return postfix();
 }
 
 Ptr Parser::postfix() {
   Expr::Ptr expr = primary();
+
   while (true) {
     if (check(TKind::DOT)) {
       Token t = advance(); //.처리
+
+      if (expr->kind == NKind::BUILTIN_NAME_EXPR) { // built in method 처리
+        if (check(TKind::IDENTIFIER) && peek().text == "spawn" &&
+            expr->kind == NKind::BUILTIN_NAME_EXPR) {
+          advance(); // spawn 처리
+          TypeNode::Ptr type = parseType();
+          consume(TKind::LEFT_PAREN, "expect (");
+          std::vector<Expr::Ptr> args;
+          if (!check(TKind::RIGHT_PAREN)) {
+            do {
+              args.push_back(ternary());
+            } while (match({TKind::COMMA}));
+          }
+
+          consume(TKind::RIGHT_PAREN, "expect ')' after arguments");
+          return make_shared<SpawnExpr>(t, expr, type, args);
+        } else if (check(TKind::IDENTIFIER) && peek().text == "view") {
+          advance(); // view 처리
+          consume(TKind::LEFT_PAREN, "expect '(' after view");
+          Ptr target = expression();
+          consume(TKind::RIGHT_PAREN, "expect ')' after arguments");
+          return make_shared<ViewExpr>(t, expr, target);
+        }
+      }
+
       Token member =
           consume(TKind::IDENTIFIER, "expect member's name after '.'");
       expr = make_shared<MemberExpr>(t, expr, member.text);
@@ -180,7 +193,7 @@ Ptr Parser::postfix() {
       if (expr->kind == NKind::MEMBER_EXPR) {
         auto member = static_pointer_cast<MemberExpr>(expr);
         expr = make_shared<CallExpr>(t, member->object, member->member, args);
-      } else if (expr->kind == NKind::VAR_EXPR) {
+      } else if (expr->kind == NKind::NAME_EXPR) {
         expr = make_shared<CallExpr>(
             t, nullptr, static_pointer_cast<NameExpr>(expr)->name, args);
       } else
@@ -191,17 +204,21 @@ Ptr Parser::postfix() {
       Expr::Ptr index = ternary();
       consume(TKind::RIGHT_BRACKET, "expect ']' after index");
       expr = make_shared<ArrayAccessExpr>(t, expr, index);
+    } else if (check(TKind::CAST)) {
+      Token t = advance(); // as처리
+      TypeNode::Ptr type = parseType();
+      expr = make_shared<CastExpr>(t, expr, type);
     } else
       break;
   }
+
   return expr;
 }
 
 Ptr Parser::primary() {
   Token t = peek();
 
-  if (check({TKind::LIT_INT, TKind::LIT_BOOL, TKind::LIT_FLOAT,
-             TKind::LIT_CHARACTER, TKind::LIT_STRING}))
+  if (isLit())
     return make_shared<LiteralExpr>(t, advance().text);
   if (check(TKind::IDENTIFIER))
     return make_shared<NameExpr>(t, advance().text);
@@ -216,5 +233,32 @@ Ptr Parser::primary() {
 
   if (check(TKind::THIS))
     return make_shared<ThisExpr>(advance());
-  Error::diagnostic(peek(), "expect expression");
+  if (check({TKind::WORLD, TKind::ARENA})) {
+    return make_shared<BuiltInNameExpr>(t, advance().text);
+  }
+
+  if (check(TKind::UNDERBAR)) {
+    return make_shared<DefaultValueExpr>(advance());
+  }
+
+  if (check(TKind::MATCH)) {
+    advance(); // match처리
+    consume(TKind::LEFT_PAREN, "expect '(' after match");
+    Ptr value = expression();
+    consume(TKind::RIGHT_PAREN, "expect ')' after valye");
+    consume(TKind::LEFT_BRACE, "expect '{' after '('");
+    vector<shared_ptr<Case>> cases;
+    while (!check(TKind::RIGHT_BRACE) && !isAtEnd()) {
+      auto c = caseStmt(false);
+      if (!c->isDefault && c->values.size() != 1) {
+        Error::diagnostic(c->token, "in match case can have one value but " +
+                                        to_string(c->values.size()));
+      }
+      cases.push_back(c);
+    }
+    consume(TKind::RIGHT_BRACE, "expect '}' after match body");
+    return make_shared<MatchExpr>(t, value, cases);
+  }
+
+  Error::diagnostic(peek(), "expect expression : " + peek().text);
 }

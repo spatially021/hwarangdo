@@ -11,14 +11,14 @@ using std::string;
 
 string ParserDebugger::ident() { return string(depth * 2, ' '); }
 
-void ParserDebugger::visit(LiteralExpr *expr) { cout << " " << expr->value; }
+void ParserDebugger::visit(LiteralExpr *expr) { cout << expr->value; }
 void ParserDebugger::visit(BinaryExpr *expr) {
   cout << " ";
   expr->left->accept(this);
   cout << " " << expr->opRaw.text;
   expr->right->accept(this);
 }
-void ParserDebugger::visit(NameExpr *expr) { cout << " " << expr->name; }
+void ParserDebugger::visit(NameExpr *expr) { cout << expr->name; }
 void ParserDebugger::visit(UnaryExpr *expr) {
   cout << " " << expr->op.text;
   expr->right->accept(this);
@@ -26,11 +26,8 @@ void ParserDebugger::visit(UnaryExpr *expr) {
 void ParserDebugger::visit(CallExpr *expr) {
   cout << " ";
   expr->receiver->accept(this);
-  cout << " " << expr->methodName << "(";
-  for (auto p : expr->arguments) {
-    p->accept(this);
-    cout << " ";
-  }
+  cout << "." << expr->methodName << "(";
+  joinAccept(expr->arguments, ", ");
   cout << ")";
 }
 void ParserDebugger::visit(AssignExpr *expr) {
@@ -57,17 +54,52 @@ void ParserDebugger::visit(TernaryExpr *expr) {
 }
 void ParserDebugger::visit(ThisExpr *) { cout << "this"; }
 void ParserDebugger::visit(SuperExpr *) { cout << "super"; }
-void ParserDebugger::visit(MoveExpr *expr) {
-  cout << "^";
-  expr->target->accept(this);
+
+void ParserDebugger::visit(CastExpr *expr) {
+  expr->left->accept(this);
+  cout << " as ";
+  expr->type->accept(this);
 }
-void ParserDebugger::visit(BorrowExpr *expr) {
-  cout << "~";
-  expr->target->accept(this);
+
+void ParserDebugger::visit(BuiltInNameExpr *expr) { cout << expr->token.text; }
+void ParserDebugger::visit(SpawnExpr *expr) {
+  expr->left->accept(this);
+  cout << " ";
+  expr->spawnType->accept(this);
+  cout << "(";
+  joinAccept(expr->args, ", ");
+  cout << ")";
 }
-void ParserDebugger::visit(ReferenceExpr *expr) {
-  cout << "&";
+void ParserDebugger::visit(ViewExpr *expr) {
+  expr->left->accept(this);
+  cout << ".view(";
   expr->target->accept(this);
+  cout << ")";
+}
+
+void ParserDebugger::visit(DefaultValueExpr *) { cout << "_"; }
+void ParserDebugger::visit(Range *expr) {
+  expr->from->accept(this);
+  cout << "..";
+  expr->to->accept(this);
+}
+
+void ParserDebugger::visit(CaseValueExpr *expr) {
+  expr->value->accept(this);
+  if (expr->arg) {
+    cout << "(";
+    expr->arg->accept(this);
+    cout << ")";
+  }
+}
+void ParserDebugger::visit(MatchExpr *expr) {
+  cout << "match(";
+  expr->value->accept(this);
+  cout << ")\n";
+  depth++;
+  for (auto c : expr->cases)
+    c->accept(this);
+  depth--;
 }
 
 void ParserDebugger::visit(ExprStmt *stmt) {
@@ -84,10 +116,14 @@ void ParserDebugger::visit(BlockStmt *stmt) {
 void ParserDebugger::visit(IfStmt *stmt) {
   cout << ident() << "if(";
   stmt->condition->accept(this);
-  cout << ")";
+  cout << ")\n";
   stmt->thenBranch->accept(this);
-  if (stmt->elseBranch != nullptr)
+  if (stmt->elseBranch != nullptr) {
+    cout << ident() << "else\n";
+    depth++;
     stmt->elseBranch->accept(this);
+    depth--;
+  }
 }
 void ParserDebugger::visit(ForStmt *stmt) {
   cout << ident() << "for(";
@@ -112,16 +148,25 @@ void ParserDebugger::visit(SwitchStmt *stmt) {
   depth--;
 }
 void ParserDebugger::visit(Case *stmt) {
-  cout << ident() << "case ";
-  for (auto v : stmt->values)
-    v->accept(this);
+  cout << ident() << "[case] - values : ";
+  joinAccept(stmt->values, ",");
+
+  cout << "\n";
+  depth++;
   stmt->body->accept(this);
+  depth--;
 }
 void ParserDebugger::visit(ReturnStmt *stmt) {
   cout << ident() << "return";
   stmt->value->accept(this);
   cout << "\n";
 }
+void ParserDebugger::visit(ValueTransferStmt *stmt) {
+  cout << ident() << "<< ";
+  stmt->value->accept(this);
+  cout << "\n";
+}
+
 void ParserDebugger::visit(BreakStmt *) { cout << ident() << "break"; }
 void ParserDebugger::visit(ContinueStmt *) { cout << ident() << "cotinue"; }
 void ParserDebugger::visit(DeclStmt *stmt) { stmt->decl->accept(this); }
@@ -136,8 +181,15 @@ void ParserDebugger::visit(ClassDecl *decl) {
     cout << s << " ";
   cout << "\n";
   depth++;
-  for (auto b : decl->body)
-    b->accept(this);
+  for (auto a : decl->fields) {
+    a->accept(this);
+  }
+  for (auto a : decl->methods) {
+    a->accept(this);
+  }
+  for (auto a : decl->innterDecl) {
+    a->accept(this);
+  }
   depth--;
 }
 void ParserDebugger::visit(StructDecl *decl) {
@@ -151,7 +203,11 @@ void ParserDebugger::visit(EnumDecl *decl) {
   cout << ident() << "[enumDecl] name : " << decl->name << "\n";
   depth++;
   for (auto v : decl->variants) {
-    cout << ident() << v->name << "\n";
+    cout << ident() << v->name;
+    if (v->payload.has_value()) {
+      cout << "(" << v->payload.value()->token.text << ")";
+    }
+    cout << "\n";
   }
   depth--;
 }
@@ -177,8 +233,7 @@ void ParserDebugger::visit(TraitSig *decl) {
 }
 void ParserDebugger::visit(FuncDecl *decl) {
   cout << ident() << "[funcDecl] " << decl->name << "(";
-  for (auto p : decl->params)
-    p->accept(this);
+  joinAccept(decl->params, ", ");
   cout << ")\n";
   depth++;
   decl->body->accept(this);
@@ -187,10 +242,10 @@ void ParserDebugger::visit(FuncDecl *decl) {
 void ParserDebugger::visit(VarDecl *decl) {
   cout << ident() << "[varDecl] ";
   decl->type->accept(this);
-  cout << " " << decl->name;
+  cout << decl->name;
   if (decl->init != nullptr) {
     cout << " = ";
-    decl->init.value()->accept(this);
+    decl->init->accept(this);
   }
   cout << "\n";
 }
@@ -198,14 +253,14 @@ void ParserDebugger::visit(ArrayDecl *decl) {
   cout << ident() << "[arrayDecl] ";
   decl->type->accept(this);
   cout << decl->name;
-  if (decl->init.has_value()) {
+  if (decl->init) {
     cout << " = ";
-    decl->init.value()->accept(this);
+    decl->init->accept(this);
   }
   cout << "\n";
 }
 
-void ParserDebugger::visit(TypeNode *decl) { cout << decl->type; }
+void ParserDebugger::visit(TypeNode *decl) { cout << decl->type << " "; }
 void ParserDebugger::visit(ASTNode *) {}
 void ParserDebugger::visit(Param *param) {
   cout << " ";
@@ -215,4 +270,13 @@ void ParserDebugger::visit(Param *param) {
     cout << " = ";
     param->defaultValue.value()->accept(this);
   }
+}
+
+void ParserDebugger::visit(InitDecl *decl) {
+  cout << ident() << "[funcDecl]init(";
+  joinAccept(decl->params, ", ");
+  cout << ")\n";
+  depth++;
+  decl->body->accept(this);
+  depth--;
 }

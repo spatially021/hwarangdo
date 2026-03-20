@@ -173,6 +173,10 @@ Token Lexer::scan() {
       get();
       return {TKind::DOUBLE_EQUAL, "==", tempL, tempC};
     }
+    if (peek() == '>') {
+      get();
+      return {TKind::EQAUL_AGNLEBUCKET, "=>", tempL, tempC};
+    }
     return {TKind::EQUAL, "=", tempL, tempC};
   }
 
@@ -338,17 +342,10 @@ Token Lexer::scan() {
       isReal = true;
     }
 
-    try {
-      if (isReal) {
-        stof(str);
-        return {TKind::LIT_FLOAT, str, tempL, tempC};
-      } else {
-        stoll(str);
-        return {TKind::LIT_INT, str, tempL, tempC};
-      }
-    } catch (const out_of_range &) {
-      throw runtime_error("Numeric literal out of range at line " +
-                          to_string(line));
+    if (isReal) {
+      return {TKind::LIT_FLOAT, str, tempL, tempC};
+    } else {
+      return {TKind::LIT_INT, str, tempL, tempC};
     }
   }
 

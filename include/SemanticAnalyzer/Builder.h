@@ -1,16 +1,17 @@
 #pragma once
 
+#include "AST/Decl.h"
 #include "AST/Stmt.h"
 #include "AST/Visitor.h"
-#include "Symbol.h"
 #include "SymbolTable.h"
 #include <cassert>
+#include <memory>
 
 class Builder : public ASTVisitor {
 public:
   SymbolTable *table = nullptr;
   TypeSymbol *currentType = nullptr;
-
+  unique_ptr<Scope> rootScope = make_unique<Scope>();
   Builder(SymbolTable *table);
 
   void visit(LiteralExpr *expr);
@@ -24,10 +25,14 @@ public:
   void visit(TernaryExpr *expr);
   void visit(ThisExpr *expr);
   void visit(SuperExpr *expr);
-  void visit(MoveExpr *expr);
-  void visit(BorrowExpr *expr);
-  void visit(ReferenceExpr *expr);
-
+  void visit(CastExpr *expr);
+  void visit(BuiltInNameExpr *expr);
+  void visit(SpawnExpr *expr);
+  void visit(ViewExpr *expr);
+  void visit(DefaultValueExpr *expr);
+  void visit(Range *expr);
+  void visit(CaseValueExpr *expr);
+  void visit(MatchExpr *expr);
   // Statement visitor methods
   void visit(ExprStmt *stmt);
   void visit(BlockStmt *stmt);
@@ -41,7 +46,7 @@ public:
   void visit(ContinueStmt *stmt);
   void visit(DeclStmt *stmt);
   void visit(EmptyStmt *stmt);
-
+  void visit(ValueTransferStmt *stmt);
   // declare visitor methods
   void visit(ClassDecl *decl);
   void visit(StructDecl *decl);
@@ -56,7 +61,16 @@ public:
   void visit(TypeNode *decl);
   void visit(ASTNode *node);
   void visit(Param *param);
+  inline void linkRoot() {
+    assert(table->main);
+    table->main->rootScope = std::move(rootScope);
+  }
+
+  void visit(InitDecl *decl);
 
 private:
   unique_ptr<TypeSymbol> topLevel;
+  void extracted();
+  void buildMain(ClassDecl *decl);
+  bool canInnerDecl(Decl *decl);
 };

@@ -7,6 +7,7 @@
 #include "Token.h"
 #include <cassert>
 #include <cstddef>
+#include <memory>
 #include <vector>
 
 using namespace std;
@@ -40,8 +41,13 @@ private:
 
 struct DeclPrefix {
   AModifier modi = AModifier::DEFAULT;
-  bool isConst = false;
   Token startToken;
+  bool isExtern = false;
+  bool isConst = false;
+  bool isRoot = false;
+  bool isFrame = false;
+  bool isOverride = false;
+  bool isAsync = false;
 };
 
 class Parser {
@@ -93,6 +99,8 @@ private:
   Stmt::Ptr catchStmt();
   Stmt::Ptr onexitStmt();
   Stmt::Ptr throwStmt();
+  Stmt::Ptr valueTransferStmt();
+  shared_ptr<Case> caseStmt(bool isSwtich = true);
 
   Decl::Ptr classDecl(DeclPrefix prefix);
   Decl::Ptr structDecl(DeclPrefix prefix);
@@ -101,6 +109,8 @@ private:
   Decl::Ptr enumDecl(DeclPrefix prefix);
   Decl::Ptr functionDecl(DeclPrefix prefix, bool isDynamic = false);
   Decl::Ptr varDecl(DeclPrefix prefix);
+  Decl::Ptr handleDecl(DeclPrefix prefix);
+  Decl::Ptr initDecl(DeclPrefix prefix);
 
   // 유틸리티
   bool match(std::initializer_list<TKind> kinds);
@@ -122,4 +132,17 @@ private:
   TypeNode::Ptr typeNodeConvertor(Token t, Token size = {});
   bool isAssign() const;
   bool isAssginable(Expr::Ptr p) const;
+
+  TypeNode::Ptr parseType();
+
+  Expr::Ptr parseCaseValue();
+
+private:
+  void notFunc(DeclPrefix prefix);
+  void notVar(DeclPrefix prefix);
+
+  inline bool isLit() {
+    return check({TKind::LIT_BOOL, TKind::LIT_INT, TKind::LIT_CHARACTER,
+                  TKind::LIT_STRING, TKind::LIT_FLOAT});
+  }
 };

@@ -1,7 +1,9 @@
 #pragma once
 
+#include "AST/Expr.h"
 #include "AST/Visitor.h"
 #include <cstddef>
+#include <iostream>
 #include <string>
 class ParserDebugger : public ASTVisitor {
 public:
@@ -18,9 +20,14 @@ public:
   void visit(TernaryExpr *expr);
   void visit(ThisExpr *expr);
   void visit(SuperExpr *expr);
-  void visit(MoveExpr *expr);
-  void visit(BorrowExpr *expr);
-  void visit(ReferenceExpr *expr);
+  void visit(CastExpr *expr);
+  void visit(BuiltInNameExpr *expr);
+  void visit(SpawnExpr *expr);
+  void visit(ViewExpr *expr);
+  void visit(DefaultValueExpr *expr);
+  void visit(Range *expr);
+  void visit(CaseValueExpr *expr);
+  void visit(MatchExpr *expr);
 
   // Statement visitor methods
   void visit(ExprStmt *stmt);
@@ -31,6 +38,7 @@ public:
   void visit(SwitchStmt *stmt);
   void visit(Case *stmt);
   void visit(ReturnStmt *stmt);
+  void visit(ValueTransferStmt *stmt);
   void visit(BreakStmt *stmt);
   void visit(ContinueStmt *stmt);
   void visit(DeclStmt *stmt);
@@ -46,8 +54,26 @@ public:
   void visit(FuncDecl *decl);
   void visit(VarDecl *decl);
   void visit(ArrayDecl *decl);
+  void visit(InitDecl *decl);
 
   void visit(TypeNode *decl);
   void visit(ASTNode *node);
   void visit(Param *param);
+
+private:
+  template <typename Container, typename Func>
+  void join(const Container &c, const char *sep, Func f) {
+    bool first = true;
+    for (const auto &elem : c) {
+      if (!first)
+        cout << sep;
+      f(elem);
+      first = false;
+    }
+  }
+
+  template <typename Container>
+  void joinAccept(const Container &c, const char *sep) {
+    join(c, sep, [this](const auto &elem) { elem->accept(this); });
+  }
 };

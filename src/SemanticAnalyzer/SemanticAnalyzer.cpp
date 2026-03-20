@@ -17,6 +17,7 @@ void SemanticAnalyzer::build() {
     for (auto a : ast) {
       a->accept(&builder);
     }
+    builder.linkRoot();
   } catch (std::runtime_error &e) {
     throw e;
   }
@@ -24,7 +25,6 @@ void SemanticAnalyzer::build() {
 
 void SemanticAnalyzer::link() {
   Linker linker(&symbolTable);
-
   try {
     for (auto a : ast) {
       a->accept(&linker);

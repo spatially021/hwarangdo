@@ -17,10 +17,14 @@ class Verifier : public ASTVisitor {
   void visit(TernaryExpr *expr);
   void visit(ThisExpr *expr);
   void visit(SuperExpr *expr);
-  void visit(MoveExpr *expr);
-  void visit(BorrowExpr *expr);
-  void visit(ReferenceExpr *expr);
-
+  void visit(CastExpr *expr);
+  void visit(BuiltInNameExpr *expr);
+  void visit(SpawnExpr *expr);
+  void visit(ViewExpr *expr);
+  void visit(DefaultValueExpr *expr);
+  void visit(Range *expr);
+  void visit(CaseValueExpr *expr);
+  void visit(MatchExpr *expr);
   // Statement visitor methods
   void visit(ExprStmt *stmt);
   void visit(BlockStmt *stmt);
@@ -34,7 +38,7 @@ class Verifier : public ASTVisitor {
   void visit(ContinueStmt *stmt);
   void visit(DeclStmt *stmt);
   void visit(EmptyStmt *stmt);
-
+  void visit(ValueTransferStmt *stmt);
   // declare visitor methods
   void visit(ClassDecl *decl);
   void visit(StructDecl *decl);
@@ -45,6 +49,7 @@ class Verifier : public ASTVisitor {
   void visit(FuncDecl *decl);
   void visit(VarDecl *decl);
   void visit(ArrayDecl *decl);
+  void visit(InitDecl *decl);
 
   void visit(TypeNode *decl);
   void visit(ASTNode *node);

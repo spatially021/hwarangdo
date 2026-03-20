@@ -56,9 +56,9 @@ static constexpr BuiltinEntry builtinEntries[] = {
     {BuiltInType::C32, BuiltinCategory::Char, "c32"},
 
     // ---- String ----
-    {BuiltInType::C8, BuiltinCategory::String, "string8"},
-    {BuiltInType::C16, BuiltinCategory::String, "string16"},
-    {BuiltInType::C32, BuiltinCategory::String, "string32"},
+    {BuiltInType::C8, BuiltinCategory::String, "s8"},
+    {BuiltInType::C16, BuiltinCategory::String, "s16"},
+    {BuiltInType::C32, BuiltinCategory::String, "s32"},
 
     {BuiltInType::B, BuiltinCategory::Bool, "bool"},
 };

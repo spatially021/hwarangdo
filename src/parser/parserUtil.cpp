@@ -1,3 +1,5 @@
+#include "AST/ASTNode.h"
+#include "AST/Expr.h"
 #include "Parser.h"
 #include "Token.h"
 #include "util/Error.h"
@@ -162,7 +164,7 @@ TypeNode::Ptr Parser::typeNodeConvertor(Token ty, Token size) {
       node = make_shared<BuiltinTypeNode>(ty, BuiltinTypeNode::Category::FUNC);
       break;
     default:
-      Error::diagnostic(ty, "unexpected type");
+      Error::diagnostic(ty, "unexpected type : " + ty.text);
     }
   }
   return node;
@@ -178,11 +180,93 @@ bool Parser::isAssign() const {
 
 bool Parser::isAssginable(Expr::Ptr p) const {
   switch (p->kind) {
-  case NKind::VAR_EXPR:
+  case NKind::NAME_EXPR:
   case NKind::MEMBER_EXPR:
   case NKind::ARRAY_ACCESS_EXPR:
     return true;
   default:
     return false;
   }
+}
+
+TypeNode::Ptr Parser::parseType() {
+  Token ty = advance(); // 자료형/객체인스턴스 처리
+  Token size = {};
+  if (check(TKind::COLON)) {
+
+    if (ty.kind == TKind::IDENTIFIER)
+      Error::diagnostic(peek(), "':' is only allowed built-in types");
+    advance(); //: 처리
+    size = consume(TKind::SIZE, "expect size value");
+    assert(size.text != "");
+    switch (ty.kind) {
+    case TKind::INT:
+      if (!(size.text[0] == 'i' || size.text[0] == 'u'))
+        Error::diagnostic(size, "unmatch bitwidth type");
+      break;
+    case TKind::FLOAT:
+      if (size.text[0] != 'f')
+        Error::diagnostic(size, "unmatch bitwidth type");
+      break;
+    case TKind::FIXED:
+      break;
+    case TKind::CHAR:
+    case TKind::STRING:
+      if (size.text[0] != 'c')
+        Error::diagnostic(size, "unmatch bitwidth type");
+      break;
+    default:
+      Error::diagnostic(ty, "unexpected type : " + ty.text);
+    }
+  }
+
+  return typeNodeConvertor(ty, size);
+}
+
+void Parser::notFunc(DeclPrefix prefix) {
+
+  if (prefix.isFrame) {
+    Error::diagnostic(previous(), "frame can place only function declaration");
+  }
+  if (prefix.isOverride) {
+    Error::diagnostic(previous(),
+                      "override can place only function declaration");
+  }
+
+  if (prefix.isAsync) {
+    Error::diagnostic(previous(), "async can place only function declaration");
+  }
+}
+
+void Parser::notVar(DeclPrefix prefix) {
+  if (prefix.isConst)
+    Error::diagnostic(previous(), "const can place only variation declaration");
+  if (prefix.isRoot) {
+    Error::diagnostic(previous(), "root can place only variation declaration");
+  }
+}
+
+Expr::Ptr Parser::parseCaseValue() {
+  Token t = peek();
+  Expr::Ptr args = nullptr;
+  if (isLit()) {
+    return make_shared<CaseValueExpr>(
+        t, make_shared<LiteralExpr>(t, advance().text), nullptr);
+  }
+  if (check(TKind::IDENTIFIER)) {
+    auto pay = advance();
+    Expr::Ptr expr = make_shared<NameExpr>(pay, pay.text);
+    if (match({TKind::DOT})) {
+      Token member = consume(TKind::IDENTIFIER, "expect ident after '.'");
+      expr = make_shared<MemberExpr>(t, expr, member.text);
+    }
+    if (check(TKind::LEFT_PAREN)) {
+      advance(); //(처리
+      auto id = consume(TKind::IDENTIFIER, "after '(' expect id");
+      consume(TKind::RIGHT_PAREN, "after id expect ')'");
+      args = make_shared<NameExpr>(id, id.text);
+    }
+    return make_shared<CaseValueExpr>(t, expr, args);
+  }
+  Error::diagnostic(t, "in case value only allow literal or Enum : " + t.text);
 }

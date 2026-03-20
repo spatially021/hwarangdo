@@ -26,9 +26,69 @@ Decl::Ptr Parser::declaration(DeclContext context) {
   if (isAccessModifier()) {
     prefix.modi = AModifierConvertor(advance());
   }
-  if (check(TKind::CONST)) {
-    prefix.isConst = true;
-    advance();
+  while (check({
+      TKind::CONST,
+      TKind::ROOT,
+      TKind::FRAME,
+      TKind::OVERRIDE,
+      TKind::ASYNC,
+  })) {
+    if (check(TKind::CONST)) {
+      advance();
+      if (prefix.isConst)
+        Error::diagnostic(peek(), "duplicate const modifier");
+      prefix.isConst = true;
+    }
+    if (check(TKind::ROOT)) {
+      advance();
+      if (prefix.isRoot)
+        Error::diagnostic(peek(), "duplicate root modifier");
+      prefix.isRoot = true;
+    }
+    if (check(TKind::FRAME)) {
+      advance();
+      if (prefix.isFrame) {
+        Error::diagnostic(peek(), "duplicate frame modifier");
+      }
+      prefix.isFrame = true;
+    }
+    if (check(TKind::OVERRIDE)) {
+      advance();
+      if (prefix.isOverride) {
+        Error::diagnostic(peek(), "duplicate override modifier");
+      }
+      prefix.isOverride = true;
+    }
+    if (check(TKind::ASYNC)) {
+      advance();
+      if (prefix.isAsync) {
+        Error::diagnostic(peek(), "duplicated async modifier");
+      }
+      prefix.isAsync = true;
+    }
+  }
+  if (check(TKind::FUNC)) {
+    return functionDecl(prefix, true);
+  }
+
+  if (check(TKind::VOID)) {
+    return functionDecl(prefix);
+  }
+
+  if (check(TKind::INIT)) {
+    return initDecl(prefix);
+  }
+
+  if (isType()) {
+    if (isFunc()) {
+      return functionDecl(prefix);
+    } else {
+      return varDecl(prefix);
+    }
+  }
+
+  if (check(TKind::HANDLE)) {
+    return handleDecl(prefix);
   }
 
   if (check(TKind::CLASS)) {
@@ -49,22 +109,6 @@ Decl::Ptr Parser::declaration(DeclContext context) {
 
   if (check(TKind::ENUM)) {
     return enumDecl(prefix);
-  }
-
-  if (check(TKind::FUNC)) {
-    return functionDecl(prefix, true);
-  }
-
-  if (check(TKind::VOID)) {
-    return functionDecl(prefix);
-  }
-
-  if (isType()) {
-    if (isFunc()) {
-      return functionDecl(prefix);
-    } else {
-      return varDecl(prefix);
-    }
   }
 
   Error::diagnostic(peek(), "only declaration in top-level");
@@ -107,8 +151,15 @@ Stmt::Ptr Parser::statement() {
   case TKind::PRIVATE:
   case TKind::IMPL:
   case TKind::TRAIT:
+  case TKind::CONST:
+  case TKind::ROOT:
+  case TKind::HANDLE:
+  case TKind::FRAME:
+  case TKind::INIT:
     return declStmt();
 
+  case TKind::DOUBLE_ANGLEBUCKET:
+    return valueTransferStmt();
   case TKind::TRY:
     return tryStmt();
 

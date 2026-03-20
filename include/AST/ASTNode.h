@@ -3,6 +3,7 @@
 #include "BuiltInType.h"
 #include "Token.h"
 #include "Visitor.h"
+#include "util/Error.h"
 #include <memory>
 #include <optional>
 #include <vector>
@@ -12,7 +13,7 @@ class TypeSymbol;
 enum class NKind {
   // Expressions
   LITERAL_EXPR,
-  VAR_EXPR,
+  NAME_EXPR,
   BINARY_EXPR,
   UNARY_EXPR,
   CALL_EXPR,
@@ -27,9 +28,12 @@ enum class NKind {
   SUPER_EXPR,
   MATCH_EXPR,
   ENUM_VARIANT_EXPR,
-  MOVE_EXPR,
-  BORROW_EXPR,
-  REFERENCE_EXPR,
+  CAST_EXPR,
+  BUILTIN_NAME_EXPR,
+  SPAWN_EXPR,
+  VIEW_EXPR,
+  DEFUALT_VALUE_EXPR,
+  VALUE_EXPR,
 
   // Statements
   EXPR_STMT,
@@ -41,6 +45,7 @@ enum class NKind {
   SWITCH_STMT,
   DEFAULT_STMT,
   RETURN_STMT,
+  VALUE_TRANSFER_STMT,
   BREAK_STMT,
   CONTINUE_STMT,
   EMPTY_STMT,
@@ -60,6 +65,7 @@ enum class NKind {
   FUNC_DECL,
   VAR_DECL,
   ARRAY_DECL,
+  INIT_DECL,
 
   // Types
   TYPE_NODE,
@@ -189,16 +195,6 @@ public:
   void accept(ASTVisitor *visitor) override { visitor->visit(this); }
 };
 
-class ReferenceTypeNode : public TypeNode {
-public:
-  TypeNode::Ptr target;
-  bool isMutable = false; // &T vs &mut T
-  ReferenceTypeNode(Token t, TypeNode::Ptr trg, bool mut = false)
-      : TypeNode(NKind::REFERENCE_TYPE, t), target(std::move(trg)),
-        isMutable(mut) {}
-  void accept(ASTVisitor *visitor) override { visitor->visit(this); }
-};
-
 class ArrayTypeNode : public TypeNode {
 public:
   TypeNode::Ptr elementType;
@@ -209,22 +205,25 @@ public:
   void accept(ASTVisitor *visitor) override { visitor->visit(this); }
 };
 
-class FunctionTypeNode : public TypeNode {
-public:
-  vector<TypeNode::Ptr> paramTypes; // 이름 없음, 타입 시그니처만
-  TypeNode::Ptr returnType;
-  FunctionTypeNode(Token t, vector<TypeNode::Ptr> params, TypeNode::Ptr ret)
-      : TypeNode(NKind::FUNCTION_TYPE, t), paramTypes(std::move(params)),
-        returnType(std::move(ret)) {}
-  void accept(ASTVisitor *visitor) override { visitor->visit(this); }
-};
-
 class GenericTypeNode : public TypeNode {
 public:
   string baseName;
   vector<TypeNode::Ptr> typeArgs;
+  enum class GenericKind {
+    HANDLE,
+    OPTION,
+    RESULT,
+
+  } gKind;
   GenericTypeNode(Token t, const string &base, vector<TypeNode::Ptr> args)
-      : TypeNode(NKind::GENERIC_TYPE, t), baseName(base),
-        typeArgs(std::move(args)) {}
+      : TypeNode(NKind::GENERIC_TYPE, t), typeArgs(std::move(args)) {
+    if (base == "Handle") {
+      gKind = GenericKind::HANDLE;
+    }
+
+    else {
+      Error::diagnostic(t, "unknwon genertic type : " + t.text);
+    }
+  }
   void accept(ASTVisitor *visitor) override { visitor->visit(this); }
 };

@@ -43,13 +43,13 @@ class VarDecl : public Decl {
 public:
   TypeNode::Ptr type; // 반드시 존재 (타입 추론이면 placeholder)
 
-  optional<ExprPtr> init; // 초기화 식 (없을 수 있음)
-  bool isMutable = true;  // let vs var 등
-  VarDecl(Token t, const string &n, TypeNode::Ptr ty,
-          optional<ExprPtr> i = nullopt, bool mut = true,
-          AModifier modi = AModifier::DEFAULT)
+  ExprPtr init;          // 초기화 식 (없을 수 있음)
+  bool isMutable = true; // let vs var 등
+  bool isRoot = false;
+  VarDecl(Token t, const string &n, TypeNode::Ptr ty, ExprPtr i = nullptr,
+          bool mut = true, bool ro = false, AModifier modi = AModifier::DEFAULT)
       : Decl(NKind::VAR_DECL, t, n, modi), type(std::move(ty)), init(i),
-        isMutable(mut) {
+        isMutable(mut), isRoot(ro) {
     aModifier = modi;
   }
 
@@ -61,13 +61,14 @@ public:
 class ArrayDecl : public Decl {
 public:
   shared_ptr<ArrayTypeNode> type;
-  optional<ExprPtr> init;
+  ExprPtr init;
   bool isMutalbe = true;
+  bool isRoot = false;
   ArrayDecl(Token t, const string &n, shared_ptr<ArrayTypeNode> ty,
-            optional<ExprPtr> i = nullopt, bool m = true,
+            ExprPtr i = nullptr, bool m = true, bool r = false,
             AModifier modi = AModifier::DEFAULT)
       : Decl(NKind::ARRAY_DECL, t, n, modi), type(std::move(ty)), init(i),
-        isMutalbe(m) {
+        isMutalbe(m), isRoot(r) {
     aModifier = modi;
   }
   void accept(ASTVisitor *visitor) override { visitor->visit(this); }
@@ -98,12 +99,16 @@ public:
   optional<TypeNode::Ptr> returnType; // 반환 타입 (void면 BuiltinTypeNode void)
   StmtPtr body;
   bool isExtern = false; // 외부 함수 여부 (DLL/FFI 등)
+  bool isFrame = false;
+  bool isOverride = false;
 
   FuncDecl(Token t, const string &n, vector<shared_ptr<Param>> p,
            optional<TypeNode::Ptr> ret, StmtPtr b,
-           AModifier modi = AModifier::DEFAULT)
+           AModifier modi = AModifier::DEFAULT, bool e = false, bool f = false,
+           bool o = false)
       : Decl(NKind::FUNC_DECL, t, n, modi), params(std::move(p)),
-        returnType(std::move(ret)), body(std::move(b)) {
+        returnType(std::move(ret)), body(std::move(b)), isExtern(e), isFrame(f),
+        isOverride(o) {
     aModifier = modi;
   }
 
@@ -130,15 +135,18 @@ public:
 // Class Declaration (extends StructDecl with inheritance/visibility)
 class ClassDecl : public Decl {
 public:
-  vector<shared_ptr<ASTNode>> body;
+  vector<shared_ptr<VarDecl>> fields;
+  vector<shared_ptr<FuncDecl>> methods;
+  vector<shared_ptr<Decl>> innterDecl;
   optional<string> baseClass; // 단일 상속 (필요시 벡터로 변경)
   vector<string> traits;      // trait/interface 목록
 
-  ClassDecl(Token t, const string &n, vector<shared_ptr<ASTNode>> b,
+  ClassDecl(Token t, const string &n, vector<shared_ptr<VarDecl>> f,
+            vector<shared_ptr<FuncDecl>> m, vector<shared_ptr<Decl>> i,
             optional<string> base = nullopt, vector<string> tr = {},
             AModifier modi = AModifier::DEFAULT)
-      : Decl(NKind::CLASS_DECL, t, n, modi), body(std::move(b)),
-        baseClass(base), traits(std::move(tr)) {
+      : Decl(NKind::CLASS_DECL, t, n, modi), fields(f), methods(m),
+        innterDecl(i), baseClass(base), traits(std::move(tr)) {
     aModifier = modi;
   }
 
@@ -181,7 +189,7 @@ public:
 
   ImplDecl(Token t, const string &n, vector<string> tr,
            vector<shared_ptr<FuncDecl>> m, AModifier modi)
-      : Decl(NKind::IMPL_DECL, t, n, modi), target(n), traits(std::move(tr)),
+      : Decl(NKind::IMPL_DECL, t, "", modi), target(n), traits(std::move(tr)),
         LinkedImplMethods(std::move(m)) {}
 
   void accept(ASTVisitor *visitor) override { visitor->visit(this); }
@@ -208,4 +216,14 @@ public:
       : ASTNode(NKind::TRAIT_SIG, t), type(ty), name(n), params(std::move(p)) {}
   void accept(ASTVisitor *visitor) override { visitor->visit(this); }
   MethodSymbol *symbol = nullptr;
+};
+
+class InitDecl : public FuncDecl {
+public:
+  InitDecl(Token t, vector<shared_ptr<Param>> p, StmtPtr b, bool o = false)
+      : FuncDecl(t, "init", p, nullopt, b) {
+    isOverride = o;
+  }
+  void accept(ASTVisitor *visitor) override { visitor->visit(this); }
+  MethodSymbol *methodSymbol;
 };

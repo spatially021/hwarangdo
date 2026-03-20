@@ -1,6 +1,5 @@
 #pragma once
 
-#include "SemanticAnalyzer/Symbol.h"
 #include <string>
 
 struct Token;
@@ -17,8 +16,9 @@ public:
                                       const std::string &message,
                                       const Token &secondary,
                                       const std::string &note);
-  [[noreturn]] static void symbol(const Symbol &sumbol, str message);
+  [[noreturn]] static void symbol(const Symbol &symbol, str message);
   [[noreturn]] static void internal(str message);
+  [[noreturn]] static void internal(const Token &token, str meessage);
   [[noreturn]] static void fatal(ErrorCategory category,
                                  const std::string &message);
 };

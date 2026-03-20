@@ -96,7 +96,15 @@ enum class TKind {
   RETURN,
 
   FUNC,
-  VOID, // void
+  VOID,  // void
+  FRAME, // frame
+  INIT,
+
+  OVERRIDE,
+  ASYNC,
+
+  WORLD,
+  ARENA,
 
   CARET,                     //^
   AMPERSAND,                 //&
@@ -131,6 +139,11 @@ enum class TKind {
   EMPTY,
 
   SIZE, // built-in type size token
+
+  CAST,   // as
+  HANDLE, // Handle
+
+  ERROR,
 
 };
 struct Token {

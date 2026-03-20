@@ -1,102 +1,51 @@
-////////////////////////////////////////////////////////////
-// Trait 정의
-////////////////////////////////////////////////////////////
+class Main{
+    Handle<Player> player;
+    int dx=1;
 
-trait Movable {
-    func move(int dx, int dy);
-}
-
-trait Drawable {
-    func draw();
-}
-
-////////////////////////////////////////////////////////////
-// Struct
-////////////////////////////////////////////////////////////
-
-struct Vec2 {
-    int x;
-    int y;
-}
-
-////////////////////////////////////////////////////////////
-// Enum
-////////////////////////////////////////////////////////////
-
-enum State {
-    Idle,
-    Moving(int),
-    Dead
-}
-
-////////////////////////////////////////////////////////////
-// Base Class
-////////////////////////////////////////////////////////////
-
-class Entity {
-    int id;
-
-    func update() {
-        id = id + 1;
+    frame void update(){
+        Player p=world.view(player);
+        p.move(dx,_);
+        int moveKind = match(p.state){
+            case Idle => {<<-1;}
+            case Act(k) => {<<k;}
+        };
     }
+
+    public init(){
+        player=world.spawn Player();
+    }
+
 }
 
-////////////////////////////////////////////////////////////
-// Trait 다중 상속 클래스
-////////////////////////////////////////////////////////////
 
-class Player : Movable Drawable {
+trait moveable{
+    void move(int dx,int dy);
+}
 
-    Vec2 position;
+struct Vec{
+    int x=0;
+    int y=0;
+}
+
+class Player : moveable{
+    Vec pos;
     State state;
 
-    func move(int dx, int dy) {
-        position.x = position.x + dx;
-        position.y = position.y + dy;
-        state = State.Moving(1);
+    void move(int dx = 0,int dy = 0){
+        pos.x+=dx;
+        pos.y+=dy;
+        if(dx==0 && dy==0){
+            state=State.Idle;
+        }else{
+            state=State.Act(0);
+        }
     }
 
-    func draw() {
-        position.x = position.x + 1;
-    }
-}
-
-////////////////////////////////////////////////////////////
-// 단일 상속
-////////////////////////////////////////////////////////////
-
-class Actor extends Entity {
-    int id;
-    func update() {
-        id = id + 2;
+    public init(){
     }
 }
 
-////////////////////////////////////////////////////////////
-// extends + trait 다중 상속
-////////////////////////////////////////////////////////////
-
-class NPC extends Actor : Movable {
-
-    Vec2 pos;
-
-    func move(int dx, int dy) {
-        pos.x = pos.x + dx;
-        pos.y = pos.y + dy;
-    }
-
-    func update() {
-        id = id + 3;
-    }
-}
-
-////////////////////////////////////////////////////////////
-// trait 상속 확인용 클래스
-////////////////////////////////////////////////////////////
-
-class Enemy : Movable {
-
-    func move(int dx, int dy) {
-        int temp = dx + dy;
-    }
+enum State{
+    Idle,
+    Act(int)
 }

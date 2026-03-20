@@ -2,6 +2,7 @@
 
 #include "AST/Visitor.h"
 #include "SemanticAnalyzer/SymbolTable.h"
+#include "SemanticAnalyzer/symbol/TypeSymbol.h"
 
 class Linker : public ASTVisitor {
 
@@ -23,9 +24,14 @@ public:
   void visit(TernaryExpr *expr);
   void visit(ThisExpr *expr);
   void visit(SuperExpr *expr);
-  void visit(MoveExpr *expr);
-  void visit(BorrowExpr *expr);
-  void visit(ReferenceExpr *expr);
+  void visit(CastExpr *expr);
+  void visit(BuiltInNameExpr *expr);
+  void visit(SpawnExpr *expr);
+  void visit(ViewExpr *expr);
+  void visit(DefaultValueExpr *expr);
+  void visit(Range *expr);
+  void visit(CaseValueExpr *expr);
+  void visit(MatchExpr *expr);
 
   // Statement visitor methods
   void visit(ExprStmt *stmt);
@@ -40,7 +46,7 @@ public:
   void visit(ContinueStmt *stmt);
   void visit(DeclStmt *stmt);
   void visit(EmptyStmt *stmt);
-
+  void visit(ValueTransferStmt *stmt);
   // declare visitor methods
   void visit(ClassDecl *decl);
   void visit(StructDecl *decl);
@@ -57,4 +63,13 @@ public:
 
   void visit(TraitSig *sig);
   void visit(Param *param);
+  void visit(InitDecl *decl);
+
+private:
+  inline bool isDeclField(TypeSymbol *type) {
+    return (type->kind == TypeSymbol::TypeKind::PRIMITIVE ||
+            type->kind == TypeSymbol::TypeKind::HANDLE ||
+            type->kind == TypeSymbol::TypeKind::STRUCT ||
+            type->kind == TypeSymbol::TypeKind::ENUM);
+  }
 };

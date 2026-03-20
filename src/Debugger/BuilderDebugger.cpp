@@ -1,4 +1,7 @@
 #include "Debugger/BuilderDebugger.h"
+#include "SemanticAnalyzer/symbol/MethodSymbol.h"
+#include "SemanticAnalyzer/symbol/TypeSymbol.h"
+#include "SemanticAnalyzer/symbol/ValueSymbol.h"
 #include <iostream>
 #include <string>
 
@@ -7,10 +10,21 @@ using std::string;
 
 string BuilderDebugger::ident() { return string(depth * 2, ' '); }
 BuilderDebugger::BuilderDebugger(Scope *s) : toplevel(s) {}
-void BuilderDebugger::debug() { debug(toplevel); }
+void BuilderDebugger::debug() {
+  debug(toplevel->parent);
+  debug(toplevel);
+}
 void BuilderDebugger::debug(Scope *scope) {
-  cout << ident() << "[scope#" << scope->id << "]\n";
-  depth++;
+  if (scope->id == -1) {
+    cout << ident() << "[scope#" << "root" << "]\n";
+    depth++;
+  } else if (scope->id == -2) {
+    cout << ident() << "[scope#" << "reserved" << "]\n";
+    depth++;
+  } else {
+    cout << ident() << "[scope#" << scope->id << "]\n";
+    depth++;
+  }
 
   if (!scope->value.empty()) {
     cout << ident() << "<values>\n";
@@ -25,7 +39,8 @@ void BuilderDebugger::debug(Scope *scope) {
     cout << ident() << "<methods>\n";
     depth++;
     for (auto &m : scope->method) {
-      if(m.second==nullptr) continue;
+      if (m.second == nullptr)
+        continue;
       cout << ident() << m.second->name << "\n";
     }
     depth--;
@@ -35,6 +50,15 @@ void BuilderDebugger::debug(Scope *scope) {
     cout << ident() << "<types>\n";
     depth++;
     for (auto &t : scope->type) {
+      cout << ident() << t.second->name << "\n";
+    }
+    depth--;
+  }
+
+  if (!scope->inits.empty()) {
+    cout << ident() << "<inits>\n";
+    depth++;
+    for (auto &t : scope->inits) {
       cout << ident() << t.second->name << "\n";
     }
     depth--;

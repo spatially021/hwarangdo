@@ -1,7 +1,6 @@
 #pragma once
-
-#include "Symbol.h"
-#include "SymbolTable.h"
+#include "IR/HIR/HIRStmt.h"
+#include "SemanticAnalyzer/SymbolTable.h"
 
 class TypeContextGuard {
 public:
@@ -30,4 +29,16 @@ public:
 
 private:
   SymbolTable &table;
+};
+
+class BlockGuard {
+private:
+  HIRBlockStmt *&slot;
+  HIRBlockStmt *prev;
+
+public:
+  BlockGuard(HIRBlockStmt *&s, HIRBlockStmt *next) : slot(s), prev(s) {
+    slot = next;
+  }
+  ~BlockGuard() { slot = prev; }
 };

@@ -11,9 +11,14 @@ class ArrayAccessExpr;
 class TernaryExpr;
 class ThisExpr;
 class SuperExpr;
-class MoveExpr;
-class BorrowExpr;
-class ReferenceExpr;
+class CastExpr;
+class BuiltInNameExpr;
+class SpawnExpr;
+class ViewExpr;
+class DefaultValueExpr;
+class Range;
+class CaseValueExpr;
+class MatchExpr;
 
 class ExprStmt;
 class VarStmt;
@@ -24,6 +29,7 @@ class WhileStmt;
 class SwitchStmt;
 class Case;
 class ReturnStmt;
+class ValueTransferStmt;
 class BreakStmt;
 class ContinueStmt;
 class EmptyStmt;
@@ -37,6 +43,7 @@ class EnumDecl;
 class FuncDecl;
 class VarDecl;
 class ArrayDecl;
+class InitDecl;
 
 class TypeNode;
 class ASTNode;
@@ -59,9 +66,14 @@ public:
   virtual void visit(TernaryExpr *expr) = 0;
   virtual void visit(ThisExpr *expr) = 0;
   virtual void visit(SuperExpr *expr) = 0;
-  virtual void visit(MoveExpr *expr) = 0;
-  virtual void visit(BorrowExpr *expr) = 0;
-  virtual void visit(ReferenceExpr *expr) = 0;
+  virtual void visit(CastExpr *expr) = 0;
+  virtual void visit(BuiltInNameExpr *expr) = 0;
+  virtual void visit(SpawnExpr *expr) = 0;
+  virtual void visit(ViewExpr *expr) = 0;
+  virtual void visit(DefaultValueExpr *expr) = 0;
+  virtual void visit(Range *expr) = 0;
+  virtual void visit(CaseValueExpr *expr) = 0;
+  virtual void visit(MatchExpr *expr) = 0;
 
   // Statement visitor methods
   virtual void visit(ExprStmt *stmt) = 0;
@@ -72,6 +84,7 @@ public:
   virtual void visit(SwitchStmt *stmt) = 0;
   virtual void visit(Case *stmt) = 0;
   virtual void visit(ReturnStmt *stmt) = 0;
+  virtual void visit(ValueTransferStmt *stmt) = 0;
   virtual void visit(BreakStmt *stmt) = 0;
   virtual void visit(ContinueStmt *stmt) = 0;
   virtual void visit(DeclStmt *stmt) = 0;
@@ -93,4 +106,6 @@ public:
 
   virtual void visit(TraitSig *sig) = 0;
   virtual void visit(Param *param) = 0;
+
+  virtual void visit(InitDecl *decl) = 0;
 };

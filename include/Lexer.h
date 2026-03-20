@@ -56,5 +56,10 @@ protected:
       {"u8", TKind::SIZE},           {"u16", TKind::SIZE},
       {"u32", TKind::SIZE},          {"u64", TKind::SIZE},
       {"u128", TKind::SIZE},         {"c8", TKind::SIZE},
-      {"c16", TKind::SIZE},          {"c32", TKind::SIZE}};
+      {"c16", TKind::SIZE},          {"c32", TKind::SIZE},
+      {"as", TKind::CAST},           {"frame", TKind::FRAME},
+      {"override", TKind::OVERRIDE}, {"async", TKind::ASYNC},
+      {"world", TKind::WORLD},       {"arena", TKind::ARENA},
+      {"Handle", TKind::HANDLE},     {"Error", TKind::ERROR},
+      {"init", TKind::INIT}};
 };

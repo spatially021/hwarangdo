@@ -19,7 +19,7 @@ void Verifier::visit(BinaryExpr *expr) {
 }
 void Verifier::visit(NameExpr *expr) {
   if (expr->resolvedType == nullptr) {
-    unresolved(expr, "varExpr is unresolved");
+    unresolved(expr, "nameExpr is unresolved");
   }
 
   if (expr->resolvedType == nullptr)
@@ -31,7 +31,7 @@ void Verifier::visit(UnaryExpr *expr) {
     unresolved(expr, "unaryExpr is unresolved");
 }
 void Verifier::visit(CallExpr *expr) {
-  for (auto a : expr->arguments) {
+  for (auto &a : expr->arguments) {
     a->accept(this);
   }
   if (expr->receiver != nullptr)
@@ -72,20 +72,64 @@ void Verifier::visit(TernaryExpr *expr) {
 }
 void Verifier::visit(ThisExpr *) {}
 void Verifier::visit(SuperExpr *) {}
-
+void Verifier::visit(CastExpr *expr) {
+  expr->left->accept(this);
+  expr->type->accept(this);
+  if (expr->resolvedType == nullptr) {
+    unresolved(expr, "castExpr is unresolved");
+  }
+}
+void Verifier::visit(SpawnExpr *expr) {
+  expr->left->accept(this);
+  expr->spawnType->accept(this);
+  for (auto &p : expr->args) {
+    p->accept(this);
+  }
+  if (expr->resolvedType == nullptr) {
+    unresolved(expr, "castExpr is unresolved");
+  }
+}
+void Verifier::visit(ViewExpr *expr) {
+  expr->left->accept(this);
+  expr->target->accept(this);
+  if (expr->resolvedType == nullptr) {
+    unresolved(expr, "castExpr is unresolved");
+  }
+}
+void Verifier::visit(DefaultValueExpr *) {}
+void Verifier::visit(Range *expr) {
+  expr->from->accept(this);
+  expr->to->accept(this);
+  if (expr->step) {
+    expr->step->accept(this);
+  }
+}
+void Verifier::visit(CaseValueExpr *expr) {
+  expr->value->accept(this);
+  if (expr->arg) {
+    expr->arg->accept(this);
+  }
+}
+void Verifier::visit(MatchExpr *expr) {
+  expr->value->accept(this);
+  for (auto &c : expr->cases) {
+    c->accept(this);
+  }
+  if (!expr->resolvedType) {
+    unresolved(expr, "unresolved match type");
+  }
+}
 // Statement Verifier::visitor methods
 void Verifier::visit(ExprStmt *stmt) { stmt->expr->accept(this); }
 void Verifier::visit(BlockStmt *stmt) {
-  for (auto s : stmt->statements) {
+  for (auto &s : stmt->statements) {
     s->accept(this);
   }
 }
-void Verifier::visit(MoveExpr *) {}
-void Verifier::visit(BorrowExpr *) {}
-void Verifier::visit(ReferenceExpr *) {}
+void Verifier::visit(BuiltInNameExpr *) {}
 
 void Verifier::visit(IfStmt *stmt) {
-  stmt->accept(this);
+  stmt->condition->accept(this);
   stmt->thenBranch->accept(this);
   stmt->elseBranch->accept(this);
 }
@@ -111,6 +155,7 @@ void Verifier::visit(ReturnStmt *stmt) {
       unresolved(stmt, "returnStmt is unresolved");
   }
 }
+void Verifier::visit(ValueTransferStmt *stmt) { stmt->value->accept(this); }
 void Verifier::visit(BreakStmt *) {}
 void Verifier::visit(ContinueStmt *) {}
 void Verifier::visit(DeclStmt *stmt) { stmt->decl->accept(this); }
@@ -120,14 +165,20 @@ void Verifier::visit(EmptyStmt *) {}
 void Verifier::visit(ClassDecl *decl) {
   if (decl->symbol == nullptr)
     unresolved(decl, "ClassDecl is unresolved");
-  for (auto a : decl->body) {
+  for (auto &a : decl->fields) {
+    a->accept(this);
+  }
+  for (auto &a : decl->methods) {
+    a->accept(this);
+  }
+  for (auto &a : decl->innterDecl) {
     a->accept(this);
   }
 }
 void Verifier::visit(StructDecl *decl) {
   if (decl->symbol == nullptr)
     unresolved(decl, "structDecl is unresolved");
-  for (auto f : decl->fields) {
+  for (auto &f : decl->fields) {
     f->accept(this);
   }
 }
@@ -140,14 +191,14 @@ void Verifier::visit(TraitDecl *) {}
 void Verifier::visit(TraitSig *sig) {
   if (sig->symbol == nullptr)
     unresolved(sig, "trait signiture is unresolved");
-  for (auto p : sig->params) {
+  for (auto &p : sig->params) {
     p->accept(this);
   }
 }
 void Verifier::visit(FuncDecl *decl) {
   if (decl->methodSymbol == nullptr)
     unresolved(decl, "funcDecl is unresolved");
-  for (auto p : decl->params)
+  for (auto &p : decl->params)
     p->accept(this);
   decl->body->accept(this);
 }
@@ -165,6 +216,15 @@ void Verifier::visit(ASTNode *) {}
 void Verifier::visit(Param *param) {
   if (param->symbol == nullptr)
     unresolved(param, "param is unresolved");
+}
+
+void Verifier::visit(InitDecl *decl) {
+  if (decl->methodSymbol == nullptr) {
+    unresolved(decl, "init is unresolved");
+  }
+  for (auto &p : decl->params)
+    p->accept(this);
+  decl->body->accept(this);
 }
 
 void Verifier::unresolved(ASTNode *node, const string &msg) {

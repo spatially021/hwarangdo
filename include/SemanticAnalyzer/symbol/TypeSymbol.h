@@ -1,51 +1,18 @@
 #pragma once
 
-#include "AST/ASTNode.h"
 #include "AST/Decl.h"
-#include "AST/Expr.h"
 #include "BuiltInType.h"
-#include <optional>
-#include <string>
-#include <unordered_map>
+#include "SemanticAnalyzer/symbol/ValueSymbol.h"
+#include "Symbol.h"
 #include <vector>
 
-using std::string;
-using std::unordered_map;
-using std::vector;
-
-class ValueSymbol;
-class EnumVariantSymbol;
-class Decl;
 class Scope;
-
-class Symbol {
-public:
-  string name;
-  enum class SymbolType {
-    TYPE,
-    VALUE,
-    IMPL,
-    METHOD,
-    ENUM_VARIANT,
-  } type;
-  virtual ~Symbol() = default;
-
-  enum class OwnType {
-    Owned,
-    Borrowed,
-    Moved,
-    Reference,
-  } own = Symbol::OwnType::Owned;
-
-protected:
-  virtual void _anchor() = 0;
-};
 
 class TypeSymbol : public Symbol {
 public:
-  TypeSymbol() { type = Symbol::SymbolType::TYPE; }
-
-  enum class Kind {
+  TypeSymbol();
+  ~TypeSymbol();
+  enum class TypeKind {
     CLASS,
     ENUM,
     STRUCT,
@@ -53,73 +20,47 @@ public:
     PRIMITIVE,
     VOID,
     FUNC,
+    HANDLE,
+    RESULT,
+    OPTION,
+    ERROR,
     UNKNOWN,
+    BUILTIN,
+    DEFAULT_VALUE,
   } kind;
 
-  Decl *decl = nullptr;
-  TypeSymbol *base = nullptr;
+  Decl *decl;
+  TypeSymbol *base;
   optional<string> baseName;
   vector<TypeSymbol *> traits;
   // class/struct
-  Scope *memberScope = nullptr;
+  Scope *memberScope;
+  unordered_map<string, Token> methodsName;
 
   // enum
   vector<unique_ptr<EnumVariantSymbol>> variants;
   unordered_map<string, EnumVariantSymbol *> variantMap;
-  unordered_map<string, Token> methodsName;
 
   bool isInhereted = false;
+  bool isReserved = false;
 
 protected:
   void _anchor() override {};
 };
 
-class MethodSymbol : public Symbol {
+class ErrorType : public TypeSymbol {
 public:
-  MethodSymbol() { type = Symbol::SymbolType::METHOD; }
-
-  TypeSymbol *onwer = nullptr;
-  TypeSymbol *returnType = nullptr;
-  ASTNode *decl = nullptr;
-  vector<TypeSymbol *> paramTypes;
-  Expr::State state = Expr::State::RESOLVED;
-  Scope *scope = nullptr;
-  Scope *selfScope = nullptr;
-  std::vector<ReturnStmt *> returns;
-
 protected:
   void _anchor() override {};
 };
 
-class ValueSymbol : public Symbol {
+class MainSymbol : public TypeSymbol {
 public:
-  ValueSymbol() { type = Symbol::SymbolType::VALUE; }
-
-  enum class Kind {
-    VAR,
-    TRAITSIG,
-    PARAM,
-  } kind;
-
-  enum class BindingType {
-    Value,
-    Reference,
-    Borrow,
-  };
-
-  ASTNode *node = nullptr;
-  TypeSymbol *typeSymbol = nullptr;
-
-protected:
-  void _anchor() override {};
-};
-
-class EnumVariantSymbol : public ValueSymbol {
-public:
-  int ordinal;
-  TypeSymbol *payloadType = nullptr;
-  optional<ValueSymbol> payloadValue = nullopt;
-  EnumVariantSymbol() { type = Symbol::SymbolType::ENUM_VARIANT; }
+  Decl *decl = nullptr;
+  unique_ptr<Scope> rootScope;
+  MethodSymbol *main = nullptr;
+  MainSymbol();
+  ~MainSymbol();
 
 protected:
   void _anchor() override {};
@@ -129,7 +70,6 @@ class ImplSymbol : public TypeSymbol {
 public:
   string targetName;
   TypeSymbol *target = nullptr;
-  Decl *decl = nullptr;
   ImplSymbol() { type = Symbol::SymbolType::IMPL; }
 
 protected:
@@ -148,8 +88,9 @@ public:
 
   } primtiveKind;
   PrimtiveType(PrimtiveKind pk) {
-    kind = TypeSymbol::Kind::PRIMITIVE;
+    kind = TypeSymbol::TypeKind::PRIMITIVE;
     primtiveKind = pk;
+    isReserved = true;
   }
 
 protected:
@@ -159,7 +100,7 @@ protected:
 class IntType : public PrimtiveType {
 public:
   int bitWidth = 32;
-  bool singed = true;
+  bool isSigned = true;
   IntType(BuiltInType t = {}) : PrimtiveType(PrimtiveKind::INT) {
     switch (t) {
     case BuiltInType::I8:
@@ -187,32 +128,32 @@ public:
 
       break;
     case BuiltInType::U8:
-      singed = false;
+      isSigned = false;
 
       bitWidth = 8;
       name = "u8";
 
       break;
     case BuiltInType::U16:
-      singed = false;
+      isSigned = false;
       bitWidth = 16;
       name = "u16";
 
       break;
     case BuiltInType::U32:
-      singed = false;
+      isSigned = false;
       bitWidth = 32;
       name = "u32";
 
       break;
     case BuiltInType::U64:
-      singed = false;
+      isSigned = false;
       bitWidth = 64;
       name = "u64";
 
       break;
     case BuiltInType::U128:
-      singed = false;
+      isSigned = false;
       bitWidth = 128;
       name = "u128";
 
@@ -233,7 +174,7 @@ public:
 
     case BuiltInType::F16:
       bitWidth = 16;
-      precious = 24;
+      precious = 11;
       name = "f16";
       break;
     case BuiltInType::F32:
@@ -260,7 +201,7 @@ public:
 
 class BoolType : public PrimtiveType {
 public:
-  BoolType() : PrimtiveType(PrimtiveKind::BOOL) {}
+  BoolType() : PrimtiveType(PrimtiveKind::BOOL) { name = "bool"; }
 };
 
 class CharType : public PrimtiveType {
@@ -308,4 +249,27 @@ public:
       throw("unmatched size");
     }
   }
+};
+
+class HandleSymbol : public TypeSymbol {
+public:
+  HandleSymbol() { isReserved = true; }
+};
+
+class ResultSymbol : public TypeSymbol {
+public:
+  ResultSymbol() { isReserved = true; }
+};
+
+class OptionSymbol : public TypeSymbol {
+public:
+  OptionSymbol() { isReserved = true; }
+};
+
+class GenericSymbol : public TypeSymbol {
+public:
+  TypeSymbol *origin = nullptr;
+  std::vector<TypeSymbol *> args;
+  GenericSymbol(TypeSymbol *o, std::vector<TypeSymbol *> a);
+  ~GenericSymbol();
 };

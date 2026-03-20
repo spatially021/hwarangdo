@@ -2,7 +2,6 @@
 
 #include "SemanticAnalyzer/Resolver.h"
 #include "SemanticAnalyzer/Scope.h"
-#include "SemanticAnalyzer/Symbol.h"
 #include "SemanticAnalyzer/SymbolTable.h"
 #include <vector>
 
@@ -15,8 +14,6 @@ public:
   void build();
   void link();
   void resolve();
-
-  // util function
 
 private:
 };

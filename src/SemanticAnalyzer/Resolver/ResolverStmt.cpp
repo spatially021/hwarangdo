@@ -1,13 +1,13 @@
 #include "AST/Decl.h"
 #include "AST/Expr.h"
 #include "AST/Stmt.h"
-#include "SemanticAnalyzer/Guard.h"
 #include "SemanticAnalyzer/Resolver.h"
 #include "SemanticAnalyzer/Scope.h"
 #include "SemanticAnalyzer/symbol/MethodSymbol.h"
 #include "SemanticAnalyzer/symbol/TypeSymbol.h"
 #include "SemanticAnalyzer/symbol/ValueSymbol.h"
 #include "util/Error.h"
+#include "util/Guard.h"
 #include <memory>
 
 // Statement Resolver::visitor methods

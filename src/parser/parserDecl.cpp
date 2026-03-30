@@ -47,18 +47,18 @@ Ptr Parser::classDecl(DeclPrefix prefix) {
   vector<shared_ptr<FuncDecl>> methods;
   vector<shared_ptr<Decl>> innterDecl;
   while (!check(TKind::RIGHT_BRACE) && !isAtEnd()) {
-    auto b = dynamic_pointer_cast<DeclStmt>(statement());
+    auto b = declaration(CLASSBODY);
     if (!b) {
       Error::diagnostic(b->token, "not declare statement : " + b->token.text);
     }
-    if (auto f = dynamic_pointer_cast<VarDecl>(b->decl)) {
+    if (auto f = dynamic_pointer_cast<VarDecl>(b)) {
       fields.push_back(f);
-    } else if (auto m = dynamic_pointer_cast<FuncDecl>(b->decl)) {
+    } else if (auto m = dynamic_pointer_cast<FuncDecl>(b)) {
       methods.push_back(m);
-    } else if (auto i = dynamic_pointer_cast<InitDecl>(b->decl)) {
+    } else if (auto i = dynamic_pointer_cast<InitDecl>(b)) {
       methods.push_back(i);
     } else {
-      innterDecl.push_back(b->decl);
+      innterDecl.push_back(b);
     }
   }
 
@@ -74,7 +74,7 @@ Ptr Parser::structDecl(DeclPrefix prefix) {
     Error::diagnostic(prefix.startToken,
                       "struct delaration can only declare in top-level "
                       "or other class's block");
-  ContextGuard _{contexts, BLOCK};
+  ContextGuard _{contexts, CLASSBODY};
 
   notFunc(prefix);
   notVar(prefix);
@@ -138,32 +138,6 @@ Ptr Parser::varDecl(DeclPrefix prefix) {
   TypeNode::Ptr type = parseType();
   Token name = consume(TKind::IDENTIFIER, "expect var name after type-keyword");
 
-  if (contexts.back() == CLASSBODY) {
-  }
-
-  if (check(TKind::LEFT_BRACKET)) {
-    advance(); //[처리
-    Expr::Ptr s = expression();
-    consume(TKind::RIGHT_BRACKET, "expect ']' after array's size expression");
-
-    Expr::Ptr init = nullptr;
-
-    if (check(TKind::EQUAL)) {
-      advance(); //=처리
-      init = expression();
-      if (init == nullptr) {
-        Error::internal(t, "var decl init is nullptr");
-      }
-    }
-
-    consume(TKind::SEMICOLON, "expect ';' after expression");
-
-    auto aNode = make_shared<ArrayTypeNode>(t, type, s);
-
-    return make_shared<ArrayDecl>(t, name.text, aNode, init, !prefix.isConst,
-                                  prefix.isRoot, modi);
-  }
-
   Expr::Ptr init = nullptr;
 
   if (check(TKind::EQUAL)) {
@@ -198,11 +172,6 @@ Ptr Parser::functionDecl(DeclPrefix prefix, bool isDynamic) {
   vector<shared_ptr<Param>> params;
 
   while (!check(TKind::RIGHT_PAREN) && !isAtEnd()) {
-    bool isBorrow = false;
-    if (check(TKind::TILDE)) {
-      isBorrow = true;
-      advance(); //~처리
-    }
     if (isType()) {
       TypeNode::Ptr type = parseType();
       Token n = consume(TKind::IDENTIFIER,
@@ -212,7 +181,7 @@ Ptr Parser::functionDecl(DeclPrefix prefix, bool isDynamic) {
         advance(); //=처리
         init = expression();
       }
-      params.push_back(make_shared<Param>(n.text, type, init, isBorrow));
+      params.push_back(make_shared<Param>(n.text, type, init));
       if (check(TKind::COMMA)) {
         if (!check(TKind::RIGHT_PAREN, 1))
           advance(); //,처리
@@ -455,11 +424,6 @@ Ptr Parser::initDecl(DeclPrefix prefix) {
   vector<shared_ptr<Param>> params;
 
   while (!check(TKind::RIGHT_PAREN) && !isAtEnd()) {
-    bool isBorrow = false;
-    if (check(TKind::TILDE)) {
-      isBorrow = true;
-      advance(); //~처리
-    }
     if (isType()) {
       TypeNode::Ptr type = parseType();
       Token n = consume(TKind::IDENTIFIER,
@@ -469,7 +433,7 @@ Ptr Parser::initDecl(DeclPrefix prefix) {
         advance(); //=처리
         init = expression();
       }
-      params.push_back(make_shared<Param>(n.text, type, init, isBorrow));
+      params.push_back(make_shared<Param>(n.text, type, init));
       if (check(TKind::COMMA)) {
         if (!check(TKind::RIGHT_PAREN, 1))
           advance(); //,처리

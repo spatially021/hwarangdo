@@ -163,6 +163,7 @@ TypeNode::Ptr Parser::typeNodeConvertor(Token ty, Token size) {
     case TKind::FUNC:
       node = make_shared<BuiltinTypeNode>(ty, BuiltinTypeNode::Category::FUNC);
       break;
+
     default:
       Error::diagnostic(ty, "unexpected type : " + ty.text);
     }
@@ -190,15 +191,17 @@ bool Parser::isAssginable(Expr::Ptr p) const {
 }
 
 TypeNode::Ptr Parser::parseType() {
-  Token ty = advance(); // 자료형/객체인스턴스 처리
+  Token ty = advance(); // 자료형/객체명
   Token size = {};
-  if (check(TKind::COLON)) {
 
+  if (check(TKind::COLON)) {
     if (ty.kind == TKind::IDENTIFIER)
       Error::diagnostic(peek(), "':' is only allowed built-in types");
-    advance(); //: 처리
+
+    advance(); // :
     size = consume(TKind::SIZE, "expect size value");
     assert(size.text != "");
+
     switch (ty.kind) {
     case TKind::INT:
       if (!(size.text[0] == 'i' || size.text[0] == 'u'))
@@ -211,16 +214,32 @@ TypeNode::Ptr Parser::parseType() {
     case TKind::FIXED:
       break;
     case TKind::CHAR:
-    case TKind::STRING:
       if (size.text[0] != 'c')
+        Error::diagnostic(size, "unmatch bitwidth type");
+      break;
+    case TKind::STRING:
+      if (size.text[0] != 's')
         Error::diagnostic(size, "unmatch bitwidth type");
       break;
     default:
       Error::diagnostic(ty, "unexpected type : " + ty.text);
     }
   }
+  std::vector<std::pair<Token, Expr::Ptr>> dims;
+  while (check(TKind::LEFT_BRACKET)) {
+    Token bracket = advance();
+    Expr::Ptr sizeExpr = expression();
+    consume(TKind::RIGHT_BRACKET, "expect ']'");
+    dims.push_back({bracket, std::move(sizeExpr)});
+  }
 
-  return typeNodeConvertor(ty, size);
+  TypeNode::Ptr type = typeNodeConvertor(ty, size);
+
+  for (auto it = dims.rbegin(); it != dims.rend(); ++it) {
+    type = make_shared<ArrayTypeNode>(it->first, type, std::move(it->second));
+  }
+
+  return type;
 }
 
 void Parser::notFunc(DeclPrefix prefix) {

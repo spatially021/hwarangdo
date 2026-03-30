@@ -5,7 +5,6 @@
 #include "Visitor.h"
 #include "util/Error.h"
 #include <memory>
-#include <optional>
 #include <vector>
 
 class TypeSymbol;
@@ -26,6 +25,9 @@ enum class NKind {
   NEW_EXPR,
   THIS_EXPR,
   SUPER_EXPR,
+  SELF_EXPR,
+  ROOT_EXPR,
+
   MATCH_EXPR,
   ENUM_VARIANT_EXPR,
   CAST_EXPR,
@@ -88,6 +90,9 @@ class ASTVisitor;
 class Expr;
 using ExprPtr = shared_ptr<Expr>;
 
+// AST의 모든 노드가 공통으로 상속하는 기반 클래스를 나타낸다.
+// 노드 종류와 토큰 정보를 보유하며 visitor 패턴을 통한 순회를 지원한다.
+// 모든 파생 노드는 accept를 구현해야 하며 다형적 소멸을 보장한다.
 class ASTNode {
 public:
   NKind kind;
@@ -99,6 +104,9 @@ public:
   virtual void accept(ASTVisitor *visitor) = 0;
 };
 
+// 타입을 표현하는 AST 노드의 공통 기반 클래스를 나타낸다.
+// 토큰 기반 타입 문자열과 의미 분석 결과(TypeSymbol)를 보유한다.
+// 모든 타입 노드는 resolved가 채워지는 것을 전제로 이후 단계에서 사용된다.
 class TypeNode : public ASTNode {
 public:
   using Ptr = shared_ptr<TypeNode>;
@@ -110,7 +118,9 @@ public:
   void accept(ASTVisitor *visitor) override { visitor->visit(this); }
   TypeSymbol *resolved = nullptr;
 };
-
+// 내장 타입을 표현하는 AST 노드를 나타낸다.
+// 카테고리와 크기 정보를 기반으로 구체적인 BuiltInType을 결정한다.
+// 크기 토큰이 없을 경우 기본 타입으로 초기화되며 잘못된 값은 허용되지 않는다.
 class BuiltinTypeNode : public TypeNode {
 public:
   enum class Category {
@@ -187,6 +197,9 @@ public:
   void accept(ASTVisitor *visitor) override { visitor->visit(this); }
 };
 
+// 사용자 정의 타입 이름을 참조하는 AST 노드를 나타낸다.
+// 식별자 문자열을 기반으로 의미 분석 단계에서 실제 타입으로 해석된다.
+// resolved 필드는 해당 타입 심볼로 채워지는 것을 전제로 한다.
 class IdentifierTypeNode : public TypeNode {
 public:
   string name; // ex: Player, Transform
@@ -195,16 +208,22 @@ public:
   void accept(ASTVisitor *visitor) override { visitor->visit(this); }
 };
 
+// 배열 타입을 표현하는 AST 노드를 나타낸다.
+// 요소 타입과 선택적 고정 크기를 보유하며 크기가 없으면 동적 배열로 간주된다.
+// fixedSize는 표현식 형태로 유지되며 이후 단계에서 평가된다.
 class ArrayTypeNode : public TypeNode {
 public:
   TypeNode::Ptr elementType;
-  optional<ExprPtr> fixedSize; // nullopt => dynamic / slice
-  ArrayTypeNode(Token t, TypeNode::Ptr elem, optional<ExprPtr> size = nullopt)
+  ExprPtr fixedSize; // nullopt => dynamic / slice
+  ArrayTypeNode(Token t, TypeNode::Ptr elem, ExprPtr size)
       : TypeNode(NKind::ARRAY_TYPE, t), elementType(std::move(elem)),
         fixedSize(size) {}
   void accept(ASTVisitor *visitor) override { visitor->visit(this); }
 };
 
+// 제네릭 타입을 표현하는 AST 노드를 나타낸다.
+// 기본 타입 이름과 타입 인자를 보유하며 지원되는 제네릭 종류로 분류된다.
+// 지원되지 않는 제네릭은 생성 시점에 진단 오류로 처리된다.
 class GenericTypeNode : public TypeNode {
 public:
   string baseName;

@@ -4,6 +4,7 @@
 #include "SemanticAnalyzer/ResolvedLit.h"
 #include "Token.h"
 #include "Visitor.h"
+#include "enums/Operator.h"
 #include <memory>
 #include <stdexcept>
 #include <string>
@@ -61,20 +62,20 @@ public:
 
   Ptr deepCopy() const override { return make_shared<NameExpr>(token, name); }
 
-  TypeSymbol *typeSymbol = nullptr;
-  ValueSymbol *valueSymbol = nullptr;
+  Symbol *resolved = nullptr;
 };
 
 class UnaryExpr : public Expr {
 public:
-  Token op;
+  Token tOp;
+  Operator op;
   Ptr right;
   UnaryExpr(Token t, Token o, Ptr p)
-      : Expr(NKind::UNARY_EXPR, t), op(o), right(std::move(p)) {}
+      : Expr(NKind::UNARY_EXPR, t), tOp(o), right(std::move(p)) {}
   void accept(ASTVisitor *visitor) override { visitor->visit(this); }
 
   Ptr deepCopy() const override {
-    return make_shared<UnaryExpr>(token, op,
+    return make_shared<UnaryExpr>(token, tOp,
                                   right ? right->deepCopy() : nullptr);
   }
 };
@@ -82,32 +83,7 @@ public:
 class BinaryExpr : public Expr {
 public:
   Ptr left, right;
-  enum class OperatorType {
-    ADD,
-    SUB,
-    MUL,
-    DIV,
-    REM,
-    POW,
-
-    B_AND,
-    B_OR,
-    B_XOR,
-
-    AND,
-    OR,
-
-    EQ,
-    NT,
-    LS,
-    LSE,
-    GR,
-    GRE,
-
-    LSH,
-    RSH,
-
-  } op;
+  Operator op;
   Token opRaw;
 
   BinaryExpr(Token t, Ptr l, Token o, Ptr r)
@@ -115,61 +91,61 @@ public:
         opRaw(o) {
     switch (o.kind) {
     case TKind::DOUBLE_EQUAL:
-      op = OperatorType::EQ;
+      op = Operator::EQ;
       break;
     case TKind::BANG_EQUAL:
-      op = OperatorType::NT;
+      op = Operator::NT;
       break;
     case TKind::LESS:
-      op = OperatorType::LS;
+      op = Operator::LS;
       break;
     case TKind::GREATER:
-      op = OperatorType::GR;
+      op = Operator::GR;
       break;
     case TKind::LESS_EQUAL:
-      op = OperatorType::LSE;
+      op = Operator::LSE;
       break;
     case TKind::GREATER_EQUAL:
-      op = OperatorType::GRE;
+      op = Operator::GRE;
       break;
     case TKind::AND:
-      op = OperatorType::AND;
+      op = Operator::AND;
       break;
     case TKind::OR:
-      op = OperatorType::OR;
+      op = Operator::OR;
       break;
     case TKind::DOUBLE_ANGLEBUCKET:
-      op = OperatorType::LSH;
+      op = Operator::LSH;
       break;
     case TKind::CARET:
-      op = OperatorType::B_XOR;
+      op = Operator::B_XOR;
       break;
     case TKind::AMPERSAND:
-      op = OperatorType::B_AND;
+      op = Operator::B_AND;
       break;
     case TKind::PIPE:
-      op = OperatorType::B_OR;
+      op = Operator::B_OR;
       break;
     case TKind::DOUBLE_RIGHT_ANGLE_BUCKET:
-      op = OperatorType::RSH;
+      op = Operator::RSH;
       break;
     case TKind::PLUS:
-      op = OperatorType::ADD;
+      op = Operator::ADD;
       break;
     case TKind::MINUS:
-      op = OperatorType::SUB;
+      op = Operator::SUB;
       break;
     case TKind::SLASH:
-      op = OperatorType::DIV;
+      op = Operator::DIV;
       break;
     case TKind::PERCENT:
-      op = OperatorType::REM;
+      op = Operator::REM;
       break;
     case TKind::STAR:
-      op = OperatorType::MUL;
+      op = Operator::MUL;
       break;
     case TKind::DOUBLE_STAR:
-      op = OperatorType::POW;
+      op = Operator::POW;
       break;
     default:
       throw runtime_error("[line : " + to_string(o.line) +
@@ -331,6 +307,28 @@ public:
   void accept(ASTVisitor *visitor) override { visitor->visit(this); }
 
   Ptr deepCopy() const override { return make_shared<SuperExpr>(token); }
+
+  TypeSymbol *resolved = nullptr;
+};
+
+class SelfExpr : public Expr {
+public:
+  SelfExpr(Token t) : Expr(NKind::SELF_EXPR, t) {}
+
+  void accept(ASTVisitor *visitor) override { visitor->visit(this); }
+
+  Ptr deepCopy() const override { return make_shared<SelfExpr>(token); }
+
+  TypeSymbol *resolved = nullptr;
+};
+
+class RootExpr : public Expr {
+public:
+  RootExpr(Token t) : Expr(NKind::ROOT_EXPR, t) {}
+
+  void accept(ASTVisitor *visitor) override { visitor->visit(this); }
+
+  Ptr deepCopy() const override { return make_shared<RootExpr>(token); }
 
   TypeSymbol *resolved = nullptr;
 };

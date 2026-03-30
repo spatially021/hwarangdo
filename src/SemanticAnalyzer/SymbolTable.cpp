@@ -7,6 +7,7 @@
 #include "SemanticAnalyzer/symbol/ValueSymbol.h"
 #include "util/Error.h"
 #include <cassert>
+#include <llvm/ADT/APInt.h>
 #include <memory>
 #include <string>
 #include <utility>
@@ -17,6 +18,8 @@ using scopePtr = shared_ptr<Scope>;
 SymbolTable::SymbolTable() {
   topLevel = make_unique<Scope>();
   builtIn = make_unique<BuiltInScope>();
+  rootScope = make_unique<Scope>();
+  rootScope->id = -1;
   topLevel->parent = builtIn.get();
   current = builtIn.get();
   for (const auto &entry : builtinEntries) {
@@ -91,9 +94,6 @@ SymbolTable::SymbolTable() {
   symbol->name = "@default";
   symbol->kind = TypeSymbol::TypeKind::DEFAULT_VALUE;
   add(std::move(symbol));
-
-  unknown = make_unique<TypeSymbol>();
-  unknown->kind = TypeSymbol::TypeKind::UNKNOWN;
 
   current = topLevel.get();
   topLevel->id = -1;
@@ -185,11 +185,45 @@ bool SymbolTable::addType(unique_ptr<TypeSymbol> symbol) {
 }
 
 bool SymbolTable::addValue(unique_ptr<ValueSymbol> symbol) {
-  return current->value.emplace(symbol->name, std::move(symbol)).second;
+  if (symbol->isRoot) {
+    return rootScope->value.emplace(symbol->name, std::move(symbol)).second;
+  } else {
+    return current->value.emplace(symbol->name, std::move(symbol)).second;
+  }
 }
 
 bool SymbolTable::addMethod(unique_ptr<MethodSymbol> symbol) {
-  return current->method.emplace(symbol->name, std::move(symbol)).second;
+  auto &bucket = current->methodMap[symbol->name];
+  auto raw = symbol.get();
+
+  if (hasSameSig(bucket, raw)) {
+    return false;
+  }
+
+  current->methodOwn.push_back(std::move(symbol));
+  bucket.push_back(raw);
+  return true;
+}
+bool SymbolTable::hasSameSig(vector<MethodSymbol *> vec, MethodSymbol *symbol) {
+  bool flag = true;
+
+  for (auto &m : vec) {
+    if (m->paramTypes.size() != symbol->paramTypes.size()) {
+      continue;
+    }
+    bool flag_ = true;
+    for (unsigned int i = 0; i < m->paramTypes.size(); ++i) {
+      if (m->paramTypes[i] != symbol->paramTypes[i]) {
+        flag_ = false;
+        break;
+      }
+    }
+    if (flag_) {
+      flag = true;
+      break;
+    }
+  }
+  return flag;
 }
 
 TypeSymbol *SymbolTable::getType(str name) {
@@ -243,6 +277,12 @@ TypeSymbol *SymbolTable::getType(TypeNode *node) {
       return getBuilt("bool");
     case BuiltInType::FI:
       return getBuilt("fixed");
+    case BuiltInType::S8:
+      return getBuilt("s8");
+    case BuiltInType::S16:
+      return getBuilt("s16");
+    case BuiltInType::S32:
+      return getBuilt("s32");
     }
   } else {
     return getType(node->type);
@@ -323,4 +363,17 @@ SymbolTable::Result SymbolTable::addInit(unique_ptr<MethodSymbol> initMethod) {
   auto [it, inserted] = current->inits.emplace("init", std::move(initMethod));
   return {inserted, inserted ? Result::NONE : Result::DUPLICATED};
   // TODO: 메서드 overloading추가하면서 오버로딩 규칙 추가
+}
+
+ArrayTypeSymbol *SymbolTable::arrayTypeGetOrCreate(TypeSymbol *base,
+                                                   llvm::APInt size) {
+  auto key = ArrayTypeKey({base, size});
+  auto it = arrayTypeMap.find(key);
+  if (it == arrayTypeMap.end()) {
+    auto type = make_unique<ArrayTypeSymbol>(base, size);
+    auto raw = type.get();
+    arrayTypeStorage.push_back(std::move(type));
+    it = arrayTypeMap.emplace(key, raw).first;
+  }
+  return it->second;
 }

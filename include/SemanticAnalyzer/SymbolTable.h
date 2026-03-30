@@ -5,8 +5,28 @@
 #include "SemanticAnalyzer/symbol/MethodSymbol.h"
 #include "symbol/Symbol.h"
 #include "symbol/TypeSymbol.h"
+#include <cstddef>
+#include <functional>
+#include <llvm/ADT/APInt.h>
 #include <memory>
 #include <vector>
+
+struct ArrayTypeKey {
+  TypeSymbol *base;
+  llvm::APInt size;
+  bool operator==(const ArrayTypeKey &other) const {
+    return base == other.base && size == other.size;
+  }
+};
+
+#include "llvm/ADT/Hashing.h"
+
+struct ArrayTypeHash {
+  size_t operator()(const ArrayTypeKey &k) const {
+    using llvm::hash_value;
+    return llvm::hash_combine(k.base, hash_value(k.size));
+  }
+};
 
 struct GenericInsKey {
   TypeSymbol *origin;
@@ -45,9 +65,12 @@ public:
   vector<unique_ptr<ImplSymbol>> impls;
   unordered_map<Decl *, ImplSymbol *> implMap;
   MainSymbol *main = nullptr;
-
+  unique_ptr<Scope> rootScope;
   vector<unique_ptr<GenericSymbol>> genericInsStorage;
   unordered_map<GenericInsKey, GenericSymbol *, GenericInsHash> genericInsSMap;
+
+  vector<unique_ptr<ArrayTypeSymbol>> arrayTypeStorage;
+  unordered_map<ArrayTypeKey, ArrayTypeSymbol *, ArrayTypeHash> arrayTypeMap;
 
   Result add(unique_ptr<Symbol> symbol);
   Result addInit(unique_ptr<MethodSymbol> initMethod);
@@ -72,6 +95,7 @@ public:
 
   GenericSymbol *GenericInsGetOrCreate(TypeSymbol *origin,
                                        std::vector<TypeSymbol *> args);
+  ArrayTypeSymbol *arrayTypeGetOrCreate(TypeSymbol *base, llvm::APInt size);
 
   inline bool isType(str name) { return getType(name) != nullptr; }
   inline bool isValue(str name) { return getValue(name) != nullptr; }
@@ -80,34 +104,34 @@ public:
   bool isNumberic(TypeSymbol *symbol);
   inline bool isInt(TypeSymbol *symbol) {
     return symbol->kind == TypeSymbol::TypeKind::PRIMITIVE
-               ? (static_cast<PrimtiveType *>(symbol)->primtiveKind ==
-                  PrimtiveType::PrimtiveKind::INT)
+               ? (static_cast<PrimtiveType *>(symbol)->builtinCategory ==
+                  BuiltinCategory::Int)
                : (false);
   }
   inline bool isFloat(TypeSymbol *symbol) {
     return symbol->kind == TypeSymbol::TypeKind::PRIMITIVE
-               ? (static_cast<PrimtiveType *>(symbol)->primtiveKind ==
-                  PrimtiveType::PrimtiveKind::FIXED)
+               ? (static_cast<PrimtiveType *>(symbol)->builtinCategory ==
+                  BuiltinCategory::Float)
                : (false);
   }
   inline bool isFixed(TypeSymbol *symbol) {
     return symbol->kind == TypeSymbol::TypeKind::PRIMITIVE
-               ? (static_cast<PrimtiveType *>(symbol)->primtiveKind ==
-                  PrimtiveType::PrimtiveKind::FIXED)
+               ? (static_cast<PrimtiveType *>(symbol)->builtinCategory ==
+                  BuiltinCategory::Fixed)
                : (false);
   }
   inline bool isBool(TypeSymbol *symbol) { return getType("bool") == symbol; }
   inline bool isString(TypeSymbol *symbol) {
     return symbol->kind == TypeSymbol::TypeKind::PRIMITIVE
-               ? (static_cast<PrimtiveType *>(symbol)->primtiveKind ==
-                  PrimtiveType::PrimtiveKind::STRING)
+               ? (static_cast<PrimtiveType *>(symbol)->builtinCategory ==
+                  BuiltinCategory::String)
                : (false);
   }
 
   inline bool isChar(TypeSymbol *symbol) {
     return symbol->kind == TypeSymbol::TypeKind::PRIMITIVE
-               ? (static_cast<PrimtiveType *>(symbol)->primtiveKind ==
-                  PrimtiveType::PrimtiveKind::CHAR)
+               ? (static_cast<PrimtiveType *>(symbol)->builtinCategory ==
+                  BuiltinCategory::Char)
                : (false);
   }
 
@@ -123,9 +147,11 @@ private:
   TypeSymbol *currentType = nullptr;
   unique_ptr<Scope> topLevel;
   unique_ptr<BuiltInScope> builtIn;
+
   bool addValue(unique_ptr<ValueSymbol> symbol);
   bool addType(unique_ptr<TypeSymbol> symbol);
   bool addMethod(unique_ptr<MethodSymbol> symbol);
+  bool hasSameSig(vector<MethodSymbol *> vec, MethodSymbol *method);
   ValueSymbol *getValue(str name);
 
   friend class Resolver;

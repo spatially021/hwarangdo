@@ -4,9 +4,12 @@
 #include "AST/Expr.h"
 #include "AST/Visitor.h"
 #include "SemanticAnalyzer/ResolvedLit.h"
+#include "SemanticAnalyzer/symbol/Symbol.h"
 #include "SemanticAnalyzer/symbol/TypeSymbol.h"
 #include "SemanticAnalyzer/symbol/ValueSymbol.h"
 #include "SymbolTable.h"
+#include "util/Error.h"
+#include <cassert>
 #include <cstddef>
 
 class SymbolTable;
@@ -22,58 +25,10 @@ public:
   Case *currentCase = nullptr;
 
   Resolver(SymbolTable *table);
+#define AST_NODE(T) void visit(T *node) override;
+#include "../AST/ASTNodeList.def"
+#undef AST_NODE
 
-  void visit(LiteralExpr *expr);
-  void visit(BinaryExpr *expr);
-  void visit(NameExpr *expr);
-  void visit(UnaryExpr *expr);
-  void visit(CallExpr *expr);
-  void visit(AssignExpr *expr);
-  void visit(MemberExpr *expr);
-  void visit(ArrayAccessExpr *expr);
-  void visit(TernaryExpr *expr);
-  void visit(ThisExpr *expr);
-  void visit(SuperExpr *expr);
-  void visit(CastExpr *expr);
-  void visit(BuiltInNameExpr *expr);
-  void visit(SpawnExpr *expr);
-  void visit(ViewExpr *expr);
-  void visit(DefaultValueExpr *expr);
-  void visit(Range *expr);
-  void visit(CaseValueExpr *expr);
-  void visit(MatchExpr *expr);
-
-  // Statement visitor methods
-  void visit(ExprStmt *stmt);
-  void visit(BlockStmt *stmt);
-  void visit(IfStmt *stmt);
-  void visit(ForStmt *stmt);
-  void visit(WhileStmt *stmt);
-  void visit(SwitchStmt *stmt);
-  void visit(Case *stmt);
-  void visit(ReturnStmt *stmt);
-  void visit(BreakStmt *stmt);
-  void visit(ContinueStmt *stmt);
-  void visit(DeclStmt *stmt);
-  void visit(EmptyStmt *stmt);
-  void visit(ValueTransferStmt *stmt);
-  // declare visitor methods
-  void visit(ClassDecl *decl);
-  void visit(StructDecl *decl);
-  void visit(EnumDecl *decl);
-  void visit(ImplDecl *decl);
-  void visit(TraitDecl *decl);
-
-  void visit(FuncDecl *decl);
-  void visit(VarDecl *decl);
-  void visit(ArrayDecl *decl);
-
-  void visit(TypeNode *decl);
-  void visit(ASTNode *node);
-
-  void visit(TraitSig *sig);
-  void visit(Param *param);
-  void visit(InitDecl *decl);
   // util function
 
   ValueSymbol *resolveValue(str name);
@@ -91,12 +46,10 @@ private:
   void ResolveEnumVariant(CallExpr *expr);
   void ResolveCall(CallExpr *expr);
   bool isAssignable(TypeSymbol *from, TypeSymbol *to);
-  bool isBinaryOperatalbe(BinaryExpr::OperatorType op, TypeSymbol *left,
-                          TypeSymbol *right);
+  bool isBinaryOperatalbe(Operator op, TypeSymbol *left, TypeSymbol *right);
 
   bool isCmpable(TypeSymbol *left, TypeSymbol *right);
-  TypeSymbol *binaryResult(BinaryExpr::OperatorType op, TypeSymbol *left,
-                           TypeSymbol *right);
+  TypeSymbol *binaryResult(Operator op, TypeSymbol *left, TypeSymbol *right);
   bool isCastable(TypeSymbol *from, TypeSymbol *to);
   TypeSymbol *binaryCasting(TypeSymbol *from, TypeSymbol *to);
   [[noreturn]]
@@ -152,7 +105,8 @@ private:
       return static_cast<uint32_t>(10 + (c - 'a'));
     if (c >= 'A' && c <= 'F')
       return static_cast<uint32_t>(10 + (c - 'A'));
-    throw std::runtime_error("invalid hex digit");
+
+    Error::internal("invalid hex digit");
   }
 
   static uint32_t parseHex(const std::string &s, size_t start, size_t count) {
@@ -160,7 +114,7 @@ private:
     for (size_t i = 0; i < count; ++i) {
       char c = s[start + i];
       if (!isHexDigit(c)) {
-        throw std::runtime_error("invalid hex digit in unicode escape");
+        Error::internal("invalid hex digit in unicode escape");
       }
       value = (value << 4) | hexValue(c);
     }
@@ -195,4 +149,12 @@ private:
   ValueSymbol *lookupEnumVariant(TypeSymbol *enumType, const string &name,
                                  Token token);
   TypeSymbol *getTargetType();
+
+  inline bool isTypeReceiver(Expr *expr) {
+    if (auto name = dynamic_cast<NameExpr *>(expr)) {
+      return name->resolved->type == Symbol::SymbolType::TYPE;
+    }
+    return false;
+  }
+  llvm::APInt resolveFixedArraySize(Expr *expr) ;
 };

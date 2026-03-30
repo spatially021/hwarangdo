@@ -233,6 +233,13 @@ Ptr Parser::primary() {
 
   if (check(TKind::THIS))
     return make_shared<ThisExpr>(advance());
+  if (check(TKind::SELF)) {
+    return make_shared<SelfExpr>(advance());
+  }
+  if (check(TKind::ROOT)) {
+    return make_shared<RootExpr>(advance());
+  }
+
   if (check({TKind::WORLD, TKind::ARENA})) {
     return make_shared<BuiltInNameExpr>(t, advance().text);
   }

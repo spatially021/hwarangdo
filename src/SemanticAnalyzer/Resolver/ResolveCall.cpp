@@ -137,27 +137,39 @@ void Resolver::visit(CallExpr *expr) {
   // 1. receiver 없는 호출
   if (expr->receiver == nullptr) {
     expr->callType = CallExpr::CallType::FUNC_CALL;
-
-    if (!expr->resolved) {
-      Error::internal(expr->token, "unresolved function call target");
+    auto it = currentType->memberScope->methodMap.find(expr->methodName);
+    if (it == currentType->memberScope->methodMap.end()) {
+      Error::diagnostic(expr->token,
+                        "cannot find method name : " + expr->methodName);
     }
-
+    expr->resolved = it->second.get();
     ResolveCall(expr);
     return;
   }
 
   // 2. receiver 해석
   expr->receiver->accept(this);
+  if (isTypeReceiver(expr->receiver.get())) {
+    if (expr->receiver->resolvedType->kind == TypeSymbol::TypeKind::ENUM) {
+      auto it = expr->receiver->resolvedType->variantMap.find(expr->methodName);
+      if (it == expr->receiver->resolvedType->variantMap.end()) {
+        Error::diagnostic(expr->token,
+                          "unknown variant name: " + expr->methodName);
+      }
 
-  auto *name = dynamic_cast<NameExpr *>(expr->receiver.get());
-  if (!name) {
-    Error::internal(expr->token, "call receiver must be a name expression");
-  }
-
-  // 3. 값 receiver -> 멤버 메서드 호출
-  if (name->valueSymbol) {
-    auto *ownerType = name->valueSymbol->typeSymbol;
-    if (!ownerType) {
+      expr->callType = CallExpr::CallType::PAYLOAD_CALL;
+      expr->resolved = it->second;
+      ResolveEnumVariant(expr);
+      return;
+    } else {
+      // TODO:정적 메서드 추가시 추가.
+      Error::diagnostic(expr->token, "static method is not supported yet");
+    }
+    Error::diagnostic(expr->token, "static method is not supported yet: " +
+                                       expr->methodName);
+  } else {
+    auto *ownerType = expr->receiver->resolvedType;
+    if (ownerType == nullptr) {
       Error::internal(expr->token,
                       "unresolved type: " + expr->receiver->token.text);
     }
@@ -175,8 +187,8 @@ void Resolver::visit(CallExpr *expr) {
                       "memberScope is nullptr: " + ownerType->name);
     }
 
-    auto it = scope->method.find(expr->methodName);
-    if (it == scope->method.end()) {
+    auto it = scope->methodMap.find(expr->methodName);
+    if (it == scope->methodMap.end()) {
       Error::diagnostic(expr->token,
                         "unknown method name: " + expr->methodName);
     }
@@ -187,25 +199,6 @@ void Resolver::visit(CallExpr *expr) {
     return;
   }
 
-  // 4. 타입 receiver -> enum variant 혹은 static call
-  if (name->typeSymbol) {
-    if (name->typeSymbol->kind == TypeSymbol::TypeKind::ENUM) {
-      auto it = name->typeSymbol->variantMap.find(expr->methodName);
-      if (it == name->typeSymbol->variantMap.end()) {
-        Error::diagnostic(expr->token,
-                          "unknown variant name: " + expr->methodName);
-      }
-
-      expr->callType = CallExpr::CallType::PAYLOAD_CALL;
-      expr->resolved = it->second;
-      ResolveEnumVariant(expr);
-      return;
-    }
-
-    // TODO: static method 지원 시 여기서 처리
-    Error::diagnostic(expr->token, "static method is not supported yet: " +
-                                       expr->methodName);
-  }
-
-  Error::internal(expr->token, "unresolved call receiver: " + name->token.text);
+  Error::internal(expr->token,
+                  "unresolved call receiver: " + expr->receiver->token.text);
 }

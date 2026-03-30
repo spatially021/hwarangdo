@@ -1,5 +1,6 @@
 #pragma once
 
+#include "SemanticAnalyzer/symbol/TypeSymbol.h"
 #include "Symbol.h"
 class Scope;
 
@@ -8,6 +9,7 @@ public:
   MethodSymbol() { type = Symbol::SymbolType::METHOD; }
 
   TypeSymbol *onwer = nullptr;
+  TypeSymbol *declType = nullptr;
   TypeSymbol *returnType = nullptr;
   ASTNode *decl = nullptr;
   vector<TypeSymbol *> paramTypes;

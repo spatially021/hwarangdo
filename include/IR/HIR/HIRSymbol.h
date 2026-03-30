@@ -2,18 +2,21 @@
 
 #include "IR/HIR/HIRType.h"
 #include "string"
+#include <memory>
 
-struct FieldSymbol;
 struct MethodSymbol;
 struct ValueSymbol;
 struct EnumVariantSymbol;
+struct HIRTypeDecl;
+struct HIRExpr;
 
 struct HIRField {
   int id = -1;
   std::string name;
   HIRType *type = nullptr;
-  FieldSymbol *symbol = nullptr;
+  ValueSymbol *symbol = nullptr;
   bool isMutable = true;
+  bool isInitialized = false;
 };
 
 struct HIRParam {
@@ -21,6 +24,7 @@ struct HIRParam {
   std::string name;
   HIRType *type = nullptr;
   ValueSymbol *symbol = nullptr;
+  std::unique_ptr<HIRExpr> defaultValue = nullptr;
 };
 
 enum class HIRLocalKind {
@@ -37,10 +41,15 @@ struct HIRLocal {
   bool isMutable = true;
   bool isInitialized = false;
 };
-
+enum class HIREnumVariantKind {
+  Unit,    // payload 없음
+  Payload, // payload 하나 있음
+};
 struct HIREnumVariant {
   int id = -1;
   std::string name;
-  HIREnumType *owner = nullptr;
+  HIREnumVariantKind kind;
+  HIRTypeDecl *owner = nullptr;
   EnumVariantSymbol *symbol = nullptr;
+  HIRType *payloadType = nullptr;
 };

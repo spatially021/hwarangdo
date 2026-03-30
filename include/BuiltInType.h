@@ -1,5 +1,6 @@
 #pragma once
 
+#include "enums/BuiltInCategory.h"
 enum class BuiltInType {
   I8,
   I16,
@@ -18,11 +19,12 @@ enum class BuiltInType {
   C8,
   C16,
   C32,
+  S8,
+  S16,
+  S32,
   B,
   FI
 };
-
-enum class BuiltinCategory { Int, Float, Char, String, Bool, Void, Func };
 
 struct BuiltinEntry {
   BuiltInType type;
@@ -56,9 +58,9 @@ static constexpr BuiltinEntry builtinEntries[] = {
     {BuiltInType::C32, BuiltinCategory::Char, "c32"},
 
     // ---- String ----
-    {BuiltInType::C8, BuiltinCategory::String, "s8"},
-    {BuiltInType::C16, BuiltinCategory::String, "s16"},
-    {BuiltInType::C32, BuiltinCategory::String, "s32"},
+    {BuiltInType::S8, BuiltinCategory::String, "s8"},
+    {BuiltInType::S16, BuiltinCategory::String, "s16"},
+    {BuiltInType::S32, BuiltinCategory::String, "s32"},
 
     {BuiltInType::B, BuiltinCategory::Bool, "bool"},
 };

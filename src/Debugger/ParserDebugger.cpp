@@ -20,7 +20,7 @@ void ParserDebugger::visit(BinaryExpr *expr) {
 }
 void ParserDebugger::visit(NameExpr *expr) { cout << expr->name; }
 void ParserDebugger::visit(UnaryExpr *expr) {
-  cout << " " << expr->op.text;
+  cout << " " << expr->tOp.text;
   expr->right->accept(this);
 }
 void ParserDebugger::visit(CallExpr *expr) {
@@ -54,6 +54,8 @@ void ParserDebugger::visit(TernaryExpr *expr) {
 }
 void ParserDebugger::visit(ThisExpr *) { cout << "this"; }
 void ParserDebugger::visit(SuperExpr *) { cout << "super"; }
+void ParserDebugger::visit(RootExpr *) { cout << "root"; }
+void ParserDebugger::visit(SelfExpr *) { cout << "self"; }
 
 void ParserDebugger::visit(CastExpr *expr) {
   expr->left->accept(this);
@@ -187,7 +189,7 @@ void ParserDebugger::visit(ClassDecl *decl) {
   for (auto a : decl->methods) {
     a->accept(this);
   }
-  for (auto a : decl->innterDecl) {
+  for (auto a : decl->innerDecl) {
     a->accept(this);
   }
   depth--;
@@ -244,16 +246,6 @@ void ParserDebugger::visit(VarDecl *decl) {
   decl->type->accept(this);
   cout << decl->name;
   if (decl->init != nullptr) {
-    cout << " = ";
-    decl->init->accept(this);
-  }
-  cout << "\n";
-}
-void ParserDebugger::visit(ArrayDecl *decl) {
-  cout << ident() << "[arrayDecl] ";
-  decl->type->accept(this);
-  cout << decl->name;
-  if (decl->init) {
     cout << " = ";
     decl->init->accept(this);
   }

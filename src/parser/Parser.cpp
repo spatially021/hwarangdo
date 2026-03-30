@@ -1,20 +1,24 @@
 #include "Parser.h"
+#include "AST/Decl.h"
+#include "AST/TokenStream.h"
 #include "Token.h"
 #include "util/Error.h"
 #include <memory>
-#include <vector>
 
 using ptr = shared_ptr<ASTNode>;
 
-Parser::Parser(const vector<Token> &t) : tokens(t) {}
+Parser::Parser(const TokenStream &t) : tokens(t.tokens) {}
 
-vector<Stmt::Ptr> Parser::parse() {
+vector<Decl::Ptr> Parser::parse() {
+
+  vector<Decl::Ptr> decls;
+
   while (!isAtEnd()) {
     Token t = peek();
     auto decl = declaration(TOPLEVEL);
-    statements.push_back(make_shared<DeclStmt>(t, decl));
+    decls.push_back(decl);
   }
-  return statements;
+  return decls;
 }
 
 Decl::Ptr Parser::declaration(DeclContext context) {
@@ -135,29 +139,28 @@ Stmt::Ptr Parser::statement() {
   case TKind::RETURN:
     return returnStmt();
 
+  case TKind::ROOT:
+    if (following().kind == TKind::DOT) {
+      return expressionStmt();
+    } else {
+      return declStmt();
+    }
   case TKind::INT:
   case TKind::FLOAT:
   case TKind::STRING:
   case TKind::CHAR:
   case TKind::FIXED:
   case TKind::BOOL:
-  case TKind::FUNC:
-  case TKind::VOID:
-  case TKind::CLASS:
-  case TKind::STRUCT:
-  case TKind::ENUM:
   case TKind::PUBLIC:
   case TKind::PROTECTED:
   case TKind::PRIVATE:
   case TKind::IMPL:
   case TKind::TRAIT:
   case TKind::CONST:
-  case TKind::ROOT:
   case TKind::HANDLE:
   case TKind::FRAME:
   case TKind::INIT:
     return declStmt();
-
   case TKind::DOUBLE_ANGLEBUCKET:
     return valueTransferStmt();
   case TKind::TRY:

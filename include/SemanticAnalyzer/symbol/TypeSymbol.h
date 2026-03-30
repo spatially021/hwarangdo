@@ -2,8 +2,13 @@
 
 #include "AST/Decl.h"
 #include "BuiltInType.h"
+#include "IR/HIR/HIRType.h"
 #include "SemanticAnalyzer/symbol/ValueSymbol.h"
 #include "Symbol.h"
+#include "enums/StorageKind.h"
+#include "util/Error.h"
+#include <llvm/ADT/APInt.h>
+#include <string>
 #include <vector>
 
 class Scope;
@@ -27,15 +32,18 @@ public:
     UNKNOWN,
     BUILTIN,
     DEFAULT_VALUE,
+    ARRAY,
   } kind;
 
   Decl *decl;
   TypeSymbol *base;
   optional<string> baseName;
   vector<TypeSymbol *> traits;
+
   // class/struct
-  Scope *memberScope;
-  unordered_map<string, Token> methodsName;
+  Scope *memberScope = nullptr;
+  // struct
+  unordered_map<string, vector<MethodSymbol *>> impledMethod;
 
   // enum
   vector<unique_ptr<EnumVariantSymbol>> variants;
@@ -43,6 +51,12 @@ public:
 
   bool isInhereted = false;
   bool isReserved = false;
+
+  // trait
+  unordered_map<string, vector<TraitSig *>> traitSigs;
+
+  bool addMethod(MethodSymbol *symbol);
+  bool hasSameSig(vector<MethodSymbol *> vec, MethodSymbol *symbol);
 
 protected:
   void _anchor() override {};
@@ -78,18 +92,10 @@ protected:
 
 class PrimtiveType : public TypeSymbol {
 public:
-  enum class PrimtiveKind {
-    INT,
-    FLOAT,
-    CHAR,
-    STRING,
-    BOOL,
-    FIXED,
-
-  } primtiveKind;
-  PrimtiveType(PrimtiveKind pk) {
+  BuiltinCategory builtinCategory;
+  PrimtiveType(enum BuiltinCategory pk) {
     kind = TypeSymbol::TypeKind::PRIMITIVE;
-    primtiveKind = pk;
+    builtinCategory = pk;
     isReserved = true;
   }
 
@@ -101,7 +107,7 @@ class IntType : public PrimtiveType {
 public:
   int bitWidth = 32;
   bool isSigned = true;
-  IntType(BuiltInType t = {}) : PrimtiveType(PrimtiveKind::INT) {
+  IntType(BuiltInType t = {}) : PrimtiveType(BuiltinCategory::Int) {
     switch (t) {
     case BuiltInType::I8:
       bitWidth = 8;
@@ -159,7 +165,7 @@ public:
 
       break;
     default:
-      throw("unmatched size");
+      Error::internal("unmatched size in ineteger type");
     }
   }
 };
@@ -169,7 +175,7 @@ public:
   int bitWidth = 32;
   int precious = 24;
 
-  FloatType(BuiltInType t = {}) : PrimtiveType(PrimtiveKind::FLOAT) {
+  FloatType(BuiltInType t = {}) : PrimtiveType(BuiltinCategory::Float) {
     switch (t) {
 
     case BuiltInType::F16:
@@ -193,7 +199,7 @@ public:
       name = "f128";
       break;
     default:
-      throw("unmatched size");
+      Error::internal("unmatched size in float type");
       break;
     }
   }
@@ -201,13 +207,13 @@ public:
 
 class BoolType : public PrimtiveType {
 public:
-  BoolType() : PrimtiveType(PrimtiveKind::BOOL) { name = "bool"; }
+  BoolType() : PrimtiveType(BuiltinCategory::Bool) { name = "bool"; }
 };
 
 class CharType : public PrimtiveType {
 public:
   int bitWidth = 8;
-  CharType(BuiltInType t = {}) : PrimtiveType(PrimtiveKind::CHAR) {
+  CharType(BuiltInType t = {}) : PrimtiveType(BuiltinCategory::Char) {
     switch (t) {
 
     case BuiltInType::C8:
@@ -223,7 +229,7 @@ public:
       name = "c32";
       break;
     default:
-      throw("unmatched size");
+      Error::internal("unmatched size in char type");
     }
   }
 };
@@ -231,39 +237,49 @@ public:
 class StringType : public PrimtiveType {
 public:
   int bitWidth = 8;
-  StringType(BuiltInType t = {}) : PrimtiveType(PrimtiveKind::STRING) {
+  StringType(BuiltInType t = {}) : PrimtiveType(BuiltinCategory::String) {
     switch (t) {
-    case BuiltInType::C8:
+    case BuiltInType::S8:
       bitWidth = 8;
-      name = "c8";
+      name = "s8";
       break;
-    case BuiltInType::C16:
+    case BuiltInType::S16:
       bitWidth = 16;
-      name = "c16";
+      name = "s16";
       break;
-    case BuiltInType::C32:
+    case BuiltInType::S32:
       bitWidth = 32;
-      name = "c32";
+      name = "s32";
       break;
     default:
-      throw("unmatched size");
+      Error::internal("unmatched size in string type");
     }
   }
 };
 
 class HandleSymbol : public TypeSymbol {
 public:
-  HandleSymbol() { isReserved = true; }
+  StorageKind storage = StorageKind::World;
+  HandleSymbol() {
+    isReserved = true;
+    kind = TypeSymbol::TypeKind::HANDLE;
+  }
 };
 
 class ResultSymbol : public TypeSymbol {
 public:
-  ResultSymbol() { isReserved = true; }
+  ResultSymbol() {
+    isReserved = true;
+    kind = TypeSymbol::TypeKind::RESULT;
+  }
 };
 
 class OptionSymbol : public TypeSymbol {
 public:
-  OptionSymbol() { isReserved = true; }
+  OptionSymbol() {
+    isReserved = true;
+    kind = TypeSymbol::TypeKind::OPTION;
+  }
 };
 
 class GenericSymbol : public TypeSymbol {
@@ -272,4 +288,14 @@ public:
   std::vector<TypeSymbol *> args;
   GenericSymbol(TypeSymbol *o, std::vector<TypeSymbol *> a);
   ~GenericSymbol();
+};
+
+class ArrayTypeSymbol : public TypeSymbol {
+public:
+  TypeSymbol *baseType = nullptr;
+  llvm::APInt sizeValue;
+  ArrayTypeSymbol(TypeSymbol *b, llvm::APInt s)
+      : TypeSymbol(), baseType(b), sizeValue(s) {
+    kind = TypeSymbol::TypeKind::ARRAY;
+  }
 };

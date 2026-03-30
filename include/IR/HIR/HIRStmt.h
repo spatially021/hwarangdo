@@ -2,7 +2,11 @@
 
 #include "IR/HIR/HIRExpr.h"
 #include "IR/HIR/HIRNode.h"
+#include "IR/HIR/HIRSymbol.h"
+#include "SemanticAnalyzer/symbol/ValueSymbol.h"
 #include <memory>
+#include <unordered_map>
+#include <utility>
 #include <vector>
 struct HIRStmt : HIRNode {
   explicit HIRStmt(HIRNodeKind k, SourceSpan s = {}) : HIRNode(k, s) {}
@@ -11,7 +15,8 @@ struct HIRStmt : HIRNode {
 
 struct HIRBlockStmt : HIRStmt {
   std::vector<std::unique_ptr<HIRStmt>> statements;
-
+  std::unordered_map<ValueSymbol *, HIRLocal *> localMap;
+  HIRBlockStmt *parent = nullptr;
   HIRBlockStmt(SourceSpan s = {}) : HIRStmt(HIRNodeKind::BlockStmt, s) {}
 };
 
@@ -23,13 +28,11 @@ struct HIRExprStmt : HIRStmt {
 };
 
 struct HIRLocalDeclStmt : HIRStmt {
-  std::unique_ptr<HIRLocal> local;
+  HIRLocal *local;
   std::unique_ptr<HIRExpr> init; // nullable
 
-  HIRLocalDeclStmt(std::unique_ptr<HIRLocal> l, std::unique_ptr<HIRExpr> i,
-                   SourceSpan s = {})
-      : HIRStmt(HIRNodeKind::LocalDeclStmt, s), local(std::move(l)),
-        init(std::move(i)) {}
+  HIRLocalDeclStmt(HIRLocal *l, std::unique_ptr<HIRExpr> i, SourceSpan s = {})
+      : HIRStmt(HIRNodeKind::LocalDeclStmt, s), local(l), init(std::move(i)) {}
 };
 
 struct HIRIfStmt : HIRStmt {
@@ -54,13 +57,13 @@ struct HIRWhileStmt : HIRStmt {
 };
 
 struct HIRForRangeStmt : HIRStmt {
-  std::unique_ptr<HIRLocal> indexVar;
+  HIRLocal *indexVar;
   std::unique_ptr<HIRExpr> start;
   std::unique_ptr<HIRExpr> end;
   std::unique_ptr<HIRExpr> step; // nullable -> default 1
   std::unique_ptr<HIRBlockStmt> body;
 
-  HIRForRangeStmt(std::unique_ptr<HIRLocal> idx, std::unique_ptr<HIRExpr> st,
+  HIRForRangeStmt(HIRLocal *idx, std::unique_ptr<HIRExpr> st,
                   std::unique_ptr<HIRExpr> ed, std::unique_ptr<HIRExpr> sp,
                   std::unique_ptr<HIRBlockStmt> b, SourceSpan s = {})
       : HIRStmt(HIRNodeKind::ForRangeStmt, s), indexVar(std::move(idx)),
@@ -81,4 +84,18 @@ struct HIRBreakStmt : HIRStmt {
 
 struct HIRContinueStmt : HIRStmt {
   HIRContinueStmt(SourceSpan s = {}) : HIRStmt(HIRNodeKind::ContinueStmt, s) {}
+};
+
+struct HIRCaseStmt : HIRStmt {
+  std::vector<std::unique_ptr<HIRExpr>> selectors; // literal or enum variant
+
+  std::unique_ptr<HIRBlockStmt> body;
+};
+
+struct HIRSwitchStmt : HIRStmt {
+  HIRExpr *condition;
+
+  std::vector<std::unique_ptr<HIRCaseStmt>> cases;
+
+  HIRBlockStmt *defaultBlock; // nullable
 };

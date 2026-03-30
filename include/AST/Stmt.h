@@ -1,7 +1,6 @@
 #pragma once
 
 #include "ASTNode.h"
-#include "IR/HIR/HIRStmt.h"
 #include "Visitor.h"
 #include <memory>
 #include <optional>
@@ -12,6 +11,7 @@ class Decl;
 class Expr;
 class Scope;
 class Range;
+class HIRStmt;
 using DeclPtr = shared_ptr<Decl>;
 using ExprPtr = shared_ptr<Expr>;
 
@@ -21,7 +21,6 @@ public:
   Stmt(NKind k, Token t) : ASTNode(k, t) {}
   void accept(ASTVisitor *visitor) override { visitor->visit(this); }
   Scope *blockScope = nullptr;
-  unique_ptr<HIRStmt> hitStmt = nullptr;
 };
 
 class ExprStmt : public Stmt {

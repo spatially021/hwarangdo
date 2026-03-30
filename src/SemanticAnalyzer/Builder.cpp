@@ -2,11 +2,11 @@
 #include "AST/ASTNode.h"
 #include "AST/Decl.h"
 #include "AST/Expr.h"
-#include "SemanticAnalyzer/Guard.h"
 #include "SemanticAnalyzer/Scope.h"
 #include "SemanticAnalyzer/symbol/MethodSymbol.h"
 #include "SemanticAnalyzer/symbol/ValueSymbol.h"
 #include "util/Error.h"
+#include "util/Guard.h"
 #include <memory>
 #include <utility>
 
@@ -48,6 +48,8 @@ void Builder::visit(TernaryExpr *expr) {
 }
 void Builder::visit(ThisExpr *) {}
 void Builder::visit(SuperExpr *) {}
+void Builder::visit(RootExpr *) {};
+void Builder::visit(SelfExpr *) {};
 void Builder::visit(CastExpr *expr) {
   expr->left->accept(this);
   expr->type->accept(this);
@@ -166,7 +168,7 @@ void Builder::buildMain(ClassDecl *decl) {
   for (auto &a : decl->methods) {
     a->accept(this);
   }
-  for (auto &a : decl->innterDecl) {
+  for (auto &a : decl->innerDecl) {
     a->accept(this);
   }
 }
@@ -215,7 +217,7 @@ void Builder::visit(ClassDecl *decl) {
     a->accept(this);
   }
 
-  for (auto &a : decl->innterDecl) {
+  for (auto &a : decl->innerDecl) {
     if (canInnerDecl(a.get())) {
       a->accept(this);
     } else {
@@ -230,6 +232,7 @@ void Builder::visit(StructDecl *decl) {
   symbol->name = decl->name;
   symbol->decl = decl;
   symbol->kind = TypeSymbol::TypeKind::STRUCT;
+
   auto raw = symbol.get();
 
   auto result = table->add(std::move(symbol));
@@ -303,6 +306,7 @@ void Builder::visit(EnumDecl *decl) {
     EnumVariantSymbol *r = v.get();
     decl->symbol->variants.push_back(std::move(v));
     decl->symbol->variantMap.emplace(r->name, r);
+    a->symbol = r;
   }
 }
 
@@ -319,6 +323,7 @@ void Builder::visit(ImplDecl *decl) {
   symbol->memberScope = table->getCurrent();
   for (auto &a : decl->LinkedImplMethods) {
     a->accept(this);
+    a->methodSymbol->onwer = nullptr;
   }
 
   table->impls.push_back(std::move(symbol));
@@ -430,6 +435,7 @@ void Builder::visit(FuncDecl *decl) {
   symbol->name = decl->name;
   symbol->decl = decl;
   symbol->onwer = currentType;
+  symbol->declType = currentType;
   auto raw = symbol.get();
 
   auto result = table->add(std::move(symbol));
@@ -462,8 +468,6 @@ void Builder::visit(FuncDecl *decl) {
     a->accept(this);
   }
 
-  currentType->methodsName.emplace(raw->name, decl->token);
-
   decl->body->accept(this);
 }
 
@@ -472,6 +476,7 @@ void Builder::visit(VarDecl *decl) {
   symbol->name = decl->name;
   symbol->kind = ValueSymbol::Kind::VAR;
   symbol->node = decl;
+  symbol->isRoot = decl->isRoot;
   auto raw = symbol.get();
 
   auto result = table->add(std::move(symbol));
@@ -514,57 +519,6 @@ void Builder::visit(VarDecl *decl) {
 
   decl->symbol = raw;
 
-  if (decl->init) {
-    decl->init->accept(this);
-  }
-}
-
-void Builder::visit(ArrayDecl *decl) {
-  auto symbol = make_unique<ValueSymbol>();
-  symbol->name = decl->name;
-  symbol->kind = ValueSymbol::Kind::VAR;
-  symbol->node = decl;
-  auto raw = symbol.get();
-  if (decl->isRoot) {
-    auto result = table->add(std::move(symbol));
-
-    if (!result.success) {
-      switch (result.errorType) {
-      case SymbolTable::Result::DUPLICATED:
-        Error::diagnostic(decl->token,
-                          "duplicated root variation name : " + decl->name);
-        break;
-      case SymbolTable::Result::RESERVED:
-        Error::diagnostic(decl->token, "reserved name : " + decl->name);
-        break;
-      case SymbolTable::Result::UNKNOWN_SYMBOL:
-        Error::internal(decl->token, "unknown symbol" + decl->name);
-        break;
-      case SymbolTable::Result::NONE:
-        break;
-      }
-    }
-  } else {
-    auto result = table->add(std::move(symbol));
-
-    if (!result.success) {
-      switch (result.errorType) {
-      case SymbolTable::Result::DUPLICATED:
-        Error::diagnostic(decl->token,
-                          "duplicated variation name : " + decl->name);
-        break;
-      case SymbolTable::Result::RESERVED:
-        Error::diagnostic(decl->token, "reserved name : " + decl->name);
-        break;
-      case SymbolTable::Result::UNKNOWN_SYMBOL:
-        Error::internal(decl->token, "unknown symbol" + decl->name);
-        break;
-      case SymbolTable::Result::NONE:
-        break;
-      }
-    }
-  }
-  decl->symbol = raw;
   if (decl->init) {
     decl->init->accept(this);
   }
@@ -605,6 +559,7 @@ void Builder::visit(InitDecl *decl) {
   symbol->decl = decl;
   symbol->onwer = currentType;
   symbol->isInit = true;
+  symbol->returnType = table->getBuilt("void");
   auto raw = symbol.get();
 
   auto result = table->addInit(std::move(symbol));

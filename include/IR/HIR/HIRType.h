@@ -1,11 +1,24 @@
 #pragma once
 
+#include "SemanticAnalyzer/ResolvedLit.h"
+#include "enums/BuiltInCategory.h"
+#include "enums/StorageKind.h"
 #include "string"
+#include "util/Helper.h"
+#include <llvm/ADT/APInt.h>
+#include <llvm/ADT/SmallString.h>
+#include <string>
+#include <utility>
+
+struct HIRObserverType;
 
 using std::string;
 
 enum class HIRTypeKind {
   Void,
+
+  Result,
+  Option,
   Error,
 
   Builtin,
@@ -15,12 +28,11 @@ enum class HIRTypeKind {
 
   Handle,
   Observer,
-};
 
-enum class StorageKind {
-  World,
-  Arena,
-  Resource,
+  Array,
+  Root,
+
+  NUL,
 };
 
 class TypeSymbol;
@@ -38,22 +50,17 @@ struct HIRVoidType : HIRType {
 };
 
 struct HIRErrorType : HIRType {
+  string errorInfo = "";
   HIRErrorType() : HIRType(HIRTypeKind::Error, "<error>") {}
 };
 
-enum class BuiltinTypeKind {
-  Bool,
-  Char,
-  String,
-  Int,
-  Float,
-};
-
 struct HIRBuiltinType : HIRType {
-  BuiltinTypeKind builtinKind;
+  BuiltinCategory builtinKind;
+  TypeSymbol *symbol;
 
-  HIRBuiltinType(std::string n, BuiltinTypeKind b)
-      : HIRType(HIRTypeKind::Builtin, std::move(n)), builtinKind(b) {}
+  HIRBuiltinType(std::string n, BuiltinCategory b, TypeSymbol *t)
+      : HIRType(HIRTypeKind::Builtin, std::move(n)), builtinKind(b), symbol(t) {
+  }
 };
 
 struct HIRStructType : HIRType {
@@ -86,11 +93,42 @@ struct HIRHandleType : HIRType {
         storage(s) {}
 };
 
-struct HIROserverType : HIRType {
+struct HIRObserverType : HIRType {
   HIREntityType *entityType = nullptr;
   StorageKind storage = StorageKind::World;
 
-  HIROserverType(HIREntityType *e, StorageKind s)
+  HIRObserverType(HIREntityType *e, StorageKind s)
       : HIRType(HIRTypeKind::Observer, "Observer<" + e->name + ">"),
         entityType(e), storage(s) {}
+};
+
+struct HIRResultType : HIRType {
+  HIRType *successType = nullptr;
+  HIRErrorType *error = nullptr;
+
+  HIRResultType(HIRType *s, HIRErrorType *e)
+      : HIRType(HIRTypeKind::Result,
+                "Result<" + s->name + ", " + e->name + ">"),
+        successType(s), error(e) {}
+};
+
+struct HIROptionType : HIRType {
+  HIRType *type = nullptr;
+
+  HIROptionType(HIRType *t)
+      : HIRType(HIRTypeKind::Option, "Option<" + t->name + ">"), type(t) {}
+};
+
+struct HIRArrayType : HIRType {
+  HIRType *elementType = nullptr;
+  llvm::APInt size;
+
+  HIRArrayType(HIRType *b, const llvm::APInt &s)
+      : HIRType(HIRTypeKind::Array, buildName(b, s)), elementType(b), size(s) {}
+
+private:
+  static std::string buildName(HIRType *elem, const llvm::APInt &s) {
+
+    return elem->name + "[" + Helper::apIntToString(s) + "]";
+  }
 };

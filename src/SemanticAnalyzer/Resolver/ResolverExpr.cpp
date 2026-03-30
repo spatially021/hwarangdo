@@ -9,10 +9,12 @@
 #include "SemanticAnalyzer/symbol/TypeSymbol.h"
 #include "SemanticAnalyzer/symbol/ValueSymbol.h"
 #include "Token.h"
+#include "enums/Operator.h"
 #include "util/Error.h"
 #include "util/Guard.h"
 #include <cstddef>
 #include <memory>
+#include <string>
 #include <vector>
 
 void Resolver::visit(LiteralExpr *expr) {
@@ -90,11 +92,13 @@ void Resolver::visit(NameExpr *expr) {
   if (!symbol) {
     auto *temp = table->getType(expr->name);
     if (temp) {
+
       if (temp->kind == TypeSymbol::TypeKind::ENUM) {
         expr->resolvedType = temp;
-        expr->typeSymbol = temp;
+        expr->resolved = temp;
         return;
       }
+      // TODO: 추후 static메서드 추가시 추가 적용 필요.
       Error::internal(expr->token, "expect enum");
     }
 
@@ -107,17 +111,8 @@ void Resolver::visit(NameExpr *expr) {
     }
   }
 
-  expr->valueSymbol = symbol;
-
-  if (!expr->valueSymbol) {
-    Error::internal(expr->token, "resolved symbol is nullptr");
-  }
-
-  if (!expr->valueSymbol->typeSymbol) {
-    Error::internal(expr->token, "typeSymbol is nullptr");
-  }
-
-  expr->resolvedType = expr->valueSymbol->typeSymbol;
+  expr->resolved = symbol;
+  expr->resolvedType = symbol->typeSymbol;
 
   if (!expr->resolvedType) {
     Error::internal(expr->token, "type symbol is nullptr: " + expr->token.text);
@@ -131,23 +126,29 @@ void Resolver::visit(NameExpr *expr) {
 void Resolver::visit(UnaryExpr *expr) {
   expr->right->accept(this);
 
-  if (expr->op.kind == TKind::BANG) {
-    if (expr->right->resolvedType == table->getType("bool"))
+  if (expr->tOp.kind == TKind::BANG) {
+    if (expr->right->resolvedType == table->getType("bool")) {
       expr->resolvedType = expr->right->resolvedType;
-    else if (expr->right->resolvedType == table->getType("int")) {
+      expr->op = Operator::L_NOT;
+    } else if (expr->right->resolvedType == table->getType("int")) {
       expr->resolvedType = expr->right->resolvedType;
+      expr->op = Operator::B_NOT;
     } else
       Error::diagnostic(expr->token, "bad operand type " +
                                          expr->right->resolvedType->name +
                                          " for unary operator '!'");
-  } else if (expr->op.kind == TKind::PLUS || expr->op.kind == TKind::MINUS) {
-
+  } else if (expr->tOp.kind == TKind::PLUS || expr->tOp.kind == TKind::MINUS) {
+    if (expr->tOp.kind == TKind::PLUS) {
+      expr->op = Operator::PLUS;
+    } else {
+      expr->op = Operator::MINUS;
+    }
     if (table->isNumberic(expr->right->resolvedType))
       expr->resolvedType = expr->right->resolvedType;
     else
       Error::diagnostic(expr->token,
                         "bad operand type " + expr->right->resolvedType->name +
-                            " for unary operator '" + expr->op.text + "'");
+                            " for unary operator '" + expr->tOp.text + "'");
   }
 }
 
@@ -226,6 +227,15 @@ void Resolver::visit(SuperExpr *expr) {
   expr->resolvedType = currentType->base;
 }
 
+void Resolver::visit(RootExpr *expr) {
+  expr->resolved = table->main;
+  expr->resolvedType = table->main;
+}
+void Resolver::visit(SelfExpr *expr) {
+  expr->resolved = currentType;
+  expr->resolvedType = currentType;
+}
+
 void Resolver::visit(CastExpr *expr) {
   expr->left->accept(this);
   expr->type->accept(this);
@@ -279,8 +289,8 @@ void Resolver::visit(SpawnExpr *expr) {
     }
     args.push_back(a->resolvedType);
   }
-  auto it = expr->spawnType->resolved->memberScope->method.find("init");
-  if (it == expr->spawnType->resolved->memberScope->method.end()) {
+  auto it = expr->spawnType->resolved->memberScope->methodMap.find("init");
+  if (it == expr->spawnType->resolved->memberScope->methodMap.end()) {
     if (args.size() != 0) {
       Error::diagnostic(expr->token,
                         "type '" + expr->spawnType->resolved->name +
@@ -354,9 +364,21 @@ void Resolver::visit(DefaultValueExpr *expr) {
 
 void Resolver::visit(Range *expr) {
   expr->from->accept(this);
+  if (!table->isInt(expr->from->resolvedType)) {
+    Error::diagnostic(expr->token, "in for-range start only allowed int type");
+  }
+
   expr->to->accept(this);
-  if (expr->step) {
-    expr->step->accept(this);
+  if (!table->isInt(expr->to->resolvedType)) {
+    Error::diagnostic(expr->token, "in for-range end only allowed int type");
+  }
+
+  if (!expr->step) {
+    expr->step = make_shared<LiteralExpr>(expr->token, "1");
+  }
+  expr->step->accept(this);
+  if (!table->isInt(expr->step->resolvedType)) {
+    Error::diagnostic(expr->token, "in for-range step only allowed int type");
   }
 }
 
@@ -433,7 +455,7 @@ void Resolver::visit(CaseValueExpr *expr) {
     symbol->typeSymbol = expr->arg->resolvedType;
     auto raw = symbol.get();
 
-    static_cast<NameExpr *>(expr->arg.get())->valueSymbol = raw;
+    static_cast<NameExpr *>(expr->arg.get())->resolved = raw;
 
     expr->payloadType = expr->arg->resolvedType;
     return;

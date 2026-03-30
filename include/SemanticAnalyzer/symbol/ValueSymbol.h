@@ -19,6 +19,7 @@ public:
   ASTNode *node = nullptr;
   TypeSymbol *typeSymbol = nullptr;
   std::variant<Scope *, TypeSymbol *, StorageSymbol *> owner;
+  bool isRoot = false;
 
 protected:
   void _anchor() override {};

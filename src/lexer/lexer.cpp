@@ -1,24 +1,31 @@
 #include "Lexer.h"
+#include "AST/TokenStream.h"
 #include "Token.h"
 #include <cctype>
 #include <stdexcept>
 #include <string>
 #include <sys/types.h>
+#include <vector>
 
 using namespace std;
 
-Lexer::Lexer(const string &s) : src(s) {}
+Lexer::Lexer(InputSource in) : input(in) {}
 
-void Lexer::lexing() {
+TokenStream Lexer::lexing() {
+
   line = 1;
   col = 1;
   pos = 0;
+
+  src = input.text;
+  path = input.path;
 
   while (Lexer::peek() != '\0') {
     Token t = Lexer::scan();
     if (t.kind != TKind::EMPTY)
       tokenized.push_back(t);
   }
+  return {path, tokenized};
 }
 
 char Lexer::get() {
@@ -65,52 +72,52 @@ Token Lexer::scan() {
   int tempL = line, tempC = col;
 
   if (!c || c == '\0')
-    return {TKind::END, "", tempL, tempC};
+    return {TKind::END, "", path, tempL, tempC};
   // 단일 문자 기호들
   if (c == '(')
-    return {TKind::LEFT_PAREN, string(1, get()), tempL, tempC};
+    return {TKind::LEFT_PAREN, string(1, get()), path, tempL, tempC};
   if (c == ')')
-    return {TKind::RIGHT_PAREN, string(1, get()), tempL, tempC};
+    return {TKind::RIGHT_PAREN, string(1, get()), path, tempL, tempC};
   if (c == '{')
-    return {TKind::LEFT_BRACE, string(1, get()), tempL, tempC};
+    return {TKind::LEFT_BRACE, string(1, get()), path, tempL, tempC};
   if (c == '}')
-    return {TKind::RIGHT_BRACE, string(1, get()), tempL, tempC};
+    return {TKind::RIGHT_BRACE, string(1, get()), path, tempL, tempC};
   if (c == '[')
-    return {TKind::LEFT_BRACKET, string(1, get()), tempL, tempC};
+    return {TKind::LEFT_BRACKET, string(1, get()), path, tempL, tempC};
   if (c == ']')
-    return {TKind::RIGHT_BRACKET, string(1, get()), tempL, tempC};
+    return {TKind::RIGHT_BRACKET, string(1, get()), path, tempL, tempC};
   if (c == ';')
-    return {TKind::SEMICOLON, string(1, get()), tempL, tempC};
+    return {TKind::SEMICOLON, string(1, get()), path, tempL, tempC};
   if (c == ':')
-    return {TKind::COLON, string(1, get()), tempL, tempC};
+    return {TKind::COLON, string(1, get()), path, tempL, tempC};
   if (c == ',')
-    return {TKind::COMMA, string(1, get()), tempL, tempC};
+    return {TKind::COMMA, string(1, get()), path, tempL, tempC};
   if (c == '.') {
     get();
     if (peek() == '.') {
       get();
-      return {TKind::DOUBLE_DOT, "..", tempL, tempC};
+      return {TKind::DOUBLE_DOT, "..", path, tempL, tempC};
     }
-    return {TKind::DOT, ".", tempL, tempC};
+    return {TKind::DOT, ".", path, tempL, tempC};
   }
   if (c == '_')
-    return {TKind::UNDERBAR, string(1, get()), tempL, tempC};
+    return {TKind::UNDERBAR, string(1, get()), path, tempL, tempC};
 
   if (c == '+') {
     get();
     if (peek() == '=') {
       get();
-      return {TKind::PLUS_EQUAL, "+=", tempL, tempC};
+      return {TKind::PLUS_EQUAL, "+=", path, tempL, tempC};
     }
-    return {TKind::PLUS, "+", tempL, tempC};
+    return {TKind::PLUS, "+", path, tempL, tempC};
   }
   if (c == '-') {
     get();
     if (peek() == '=') {
       get();
-      return {TKind::MINUS_EQUAL, "-=", tempL, tempC};
+      return {TKind::MINUS_EQUAL, "-=", path, tempL, tempC};
     }
-    return {TKind::MINUS, "-", tempL, tempC};
+    return {TKind::MINUS, "-", path, tempL, tempC};
   }
   if (c == '*') {
     get();
@@ -118,27 +125,27 @@ Token Lexer::scan() {
       get();
       if (peek() == '=') {
         get();
-        return {TKind::DOUBLE_STAR_EQUAL, "**=", tempL, tempC};
+        return {TKind::DOUBLE_STAR_EQUAL, "**=", path, tempL, tempC};
       }
-      return {TKind::DOUBLE_STAR, "**", tempL, tempC};
+      return {TKind::DOUBLE_STAR, "**", path, tempL, tempC};
     }
     if (peek() == '=') {
       get();
-      return {TKind::STAR_EQUAL, "*=", tempL, tempC};
+      return {TKind::STAR_EQUAL, "*=", path, tempL, tempC};
     }
-    return {TKind::STAR, "*", tempL, tempC};
+    return {TKind::STAR, "*", path, tempL, tempC};
   }
   if (c == '/') {
     get();
     if (peek() == '=') {
       get();
-      return {TKind::SLASH_EQUAL, "/=", tempL, tempC};
+      return {TKind::SLASH_EQUAL, "/=", path, tempL, tempC};
     }
     if (peek() == '/') {
       get();
       while (peek() != '\n')
         get();
-      return {TKind::EMPTY, "//", tempL, tempC};
+      return {TKind::EMPTY, "//", path, tempL, tempC};
     }
     if (peek() == '*') {
       while (true) {
@@ -152,113 +159,114 @@ Token Lexer::scan() {
           get();
         }
       }
-      return {TKind::EMPTY, "/*", tempL, tempC};
+      return {TKind::EMPTY, "/*", path, tempL, tempC};
     }
 
-    return {TKind::SLASH, "/", tempL, tempC};
+    return {TKind::SLASH, "/", path, tempL, tempC};
   }
 
   if (c == '%') {
     get();
     if (peek() == '=') {
       get();
-      return {TKind::PERCENT_EQUAL, "%=", tempL, tempC};
+      return {TKind::PERCENT_EQUAL, "%=", path, tempL, tempC};
     }
-    return {TKind::PERCENT, "%", tempL, tempC};
+    return {TKind::PERCENT, "%", path, tempL, tempC};
   }
 
   if (c == '=') {
     get();
     if (peek() == '=') {
       get();
-      return {TKind::DOUBLE_EQUAL, "==", tempL, tempC};
+      return {TKind::DOUBLE_EQUAL, "==", path, tempL, tempC};
     }
     if (peek() == '>') {
       get();
-      return {TKind::EQAUL_AGNLEBUCKET, "=>", tempL, tempC};
+      return {TKind::EQAUL_AGNLEBUCKET, "=>", path, tempL, tempC};
     }
-    return {TKind::EQUAL, "=", tempL, tempC};
+    return {TKind::EQUAL, "=", path, tempL, tempC};
   }
 
   if (c == '!') {
     get();
     if (peek() == '=') {
       get();
-      return {TKind::BANG_EQUAL, "!=", tempL, tempC};
+      return {TKind::BANG_EQUAL, "!=", path, tempL, tempC};
     }
-    return {TKind::BANG, "!", tempL, tempC};
+    return {TKind::BANG, "!", path, tempL, tempC};
   }
 
   if (c == '<') {
     get();
     if (peek() == '=') {
       get();
-      return {TKind::LESS_EQUAL, "<=", tempL, tempC};
+      return {TKind::LESS_EQUAL, "<=", path, tempL, tempC};
     }
     if (peek() == '<') {
       get();
       if (peek() == '=') {
         get();
-        return {TKind::DOUBLE_ANGLEBUCKET_EQAUL, "<<=", tempL, tempC};
+        return {TKind::DOUBLE_ANGLEBUCKET_EQAUL, "<<=", path, tempL, tempC};
       }
-      return {TKind::DOUBLE_ANGLEBUCKET, "<<", tempL, tempC};
+      return {TKind::DOUBLE_ANGLEBUCKET, "<<", path, tempL, tempC};
     }
-    return {TKind::LESS, "<", tempL, tempC};
+    return {TKind::LESS, "<", path, tempL, tempC};
   }
 
   if (c == '>') {
     get();
     if (peek() == '=') {
       get();
-      return {TKind::GREATER_EQUAL, ">=", tempL, tempC};
+      return {TKind::GREATER_EQUAL, ">=", path, tempL, tempC};
     }
     if (peek() == '>') {
       get();
       if (peek() == '=') {
         get();
-        return {TKind::DOUBLE_RIGHT_ANGLE_BUCKET_EQUAL, ">>=", tempL, tempC};
+        return {TKind::DOUBLE_RIGHT_ANGLE_BUCKET_EQUAL, ">>=", path, tempL,
+                tempC};
       }
-      return {TKind::DOUBLE_RIGHT_ANGLE_BUCKET, ">>", tempL, tempC};
+      return {TKind::DOUBLE_RIGHT_ANGLE_BUCKET, ">>", path, tempL, tempC};
     }
-    return {TKind::GREATER, ">", tempL, tempC};
+    return {TKind::GREATER, ">", path, tempL, tempC};
   }
 
   if (c == '&') {
     get();
     if (peek() == '&') {
       get();
-      return {TKind::AND, "&&", tempL, tempC};
+      return {TKind::AND, "&&", path, tempL, tempC};
     }
     if (peek() == '=') {
       get();
-      return {TKind::AMPERSAND_EQAUL, "&=", tempL, tempC};
+      return {TKind::AMPERSAND_EQAUL, "&=", path, tempL, tempC};
     }
-    return {TKind::AMPERSAND, "&", tempL, tempC};
+    return {TKind::AMPERSAND, "&", path, tempL, tempC};
   }
 
   if (c == '~') {
-    return {TKind::TILDE, string(1, get()), tempL, tempC};
+    return {TKind::TILDE, string(1, get()), path, tempL, tempC};
   }
 
   if (c == '|') {
     get();
     if (peek() == '|') {
       get();
-      return {TKind::OR, "||", tempL, tempC};
+      return {TKind::OR, "||", path, tempL, tempC};
     }
     if (peek() == '=') {
       get();
-      return {TKind::PIPE_EQUAL, "|=", tempL, tempC};
+      return {TKind::PIPE_EQUAL, "|=", path, tempL, tempC};
     }
-    return {TKind::PIPE, "|", tempL, tempC};
+    return {TKind::PIPE, "|", path, tempL, tempC};
   }
 
   if (c == '?')
-    return {TKind::QUESTION, string(1, get()), tempL, tempC};
+    return {TKind::QUESTION, string(1, get()), path, tempL, tempC};
   if (c == '\0')
-    return {TKind::END, string(1, get()), tempL, tempC};
+    return {TKind::END, string(1, get()), path, tempL, tempC};
   if (c == '^')
-    return {TKind::CARET, string(1, get()), tempL, tempC};
+    return {TKind::CARET, string(1, get()), path, tempL, tempC};
 
   if (isIdentFirst(c)) {
     string ident;
@@ -267,14 +275,14 @@ Token Lexer::scan() {
     }
     auto it = keyword_map.find(ident);
     if (it != keyword_map.end()) {
-      return {it->second, ident, tempL, tempC}; // 키워드인 경우 바로 반환
+      return {it->second, ident, path, tempL, tempC}; // 키워드인 경우 바로 반환
     }
 
     if (ident == "true" || ident == "false") {
-      return {TKind::LIT_BOOL, ident, tempL, tempC};
+      return {TKind::LIT_BOOL, ident, path, tempL, tempC};
     }
 
-    return {TKind::IDENTIFIER, ident, tempL,
+    return {TKind::IDENTIFIER, ident, path, tempL,
             tempC}; // 키워드가 아니면 일반 식별자
   }
 
@@ -290,7 +298,7 @@ Token Lexer::scan() {
       throw runtime_error("Unterminated string literal");
     }
     get(); // closing "
-    return {TKind::LIT_STRING, str, tempL, tempC};
+    return {TKind::LIT_STRING, str, path, tempL, tempC};
   }
 
   // 문자 리터럴
@@ -311,7 +319,7 @@ Token Lexer::scan() {
       throw runtime_error("Unterminated character literal");
     }
     get(); // closing '
-    return {TKind::LIT_CHARACTER, ch, tempL, tempC};
+    return {TKind::LIT_CHARACTER, ch, path, tempL, tempC};
   }
 
   // 숫자 리터럴
@@ -325,7 +333,7 @@ Token Lexer::scan() {
 
     if (peek() == '.') {
       if (peek(1) == '.') {
-        return {TKind::LIT_INT, str, tempL, tempC};
+        return {TKind::LIT_INT, str, path, tempL, tempC};
       }
       str.push_back(get());
       isReal = true;
@@ -343,9 +351,9 @@ Token Lexer::scan() {
     }
 
     if (isReal) {
-      return {TKind::LIT_FLOAT, str, tempL, tempC};
+      return {TKind::LIT_FLOAT, str, path, tempL, tempC};
     } else {
-      return {TKind::LIT_INT, str, tempL, tempC};
+      return {TKind::LIT_INT, str, path, tempL, tempC};
     }
   }
 

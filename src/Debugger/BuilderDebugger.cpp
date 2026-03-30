@@ -35,10 +35,10 @@ void BuilderDebugger::debug(Scope *scope) {
     depth--;
   }
 
-  if (!scope->method.empty()) {
+  if (!scope->methodMap.empty()) {
     cout << ident() << "<methods>\n";
     depth++;
-    for (auto &m : scope->method) {
+    for (auto &m : scope->methodMap) {
       if (m.second == nullptr)
         continue;
       cout << ident() << m.second->name << "\n";

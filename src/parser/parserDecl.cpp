@@ -47,18 +47,18 @@ Ptr Parser::classDecl(DeclPrefix prefix) {
   vector<shared_ptr<FuncDecl>> methods;
   vector<shared_ptr<Decl>> innterDecl;
   while (!check(TKind::RIGHT_BRACE) && !isAtEnd()) {
-    auto b = dynamic_pointer_cast<DeclStmt>(statement());
+    auto b = declaration(CLASSBODY);
     if (!b) {
       Error::diagnostic(b->token, "not declare statement : " + b->token.text);
     }
-    if (auto f = dynamic_pointer_cast<VarDecl>(b->decl)) {
+    if (auto f = dynamic_pointer_cast<VarDecl>(b)) {
       fields.push_back(f);
-    } else if (auto m = dynamic_pointer_cast<FuncDecl>(b->decl)) {
+    } else if (auto m = dynamic_pointer_cast<FuncDecl>(b)) {
       methods.push_back(m);
-    } else if (auto i = dynamic_pointer_cast<InitDecl>(b->decl)) {
+    } else if (auto i = dynamic_pointer_cast<InitDecl>(b)) {
       methods.push_back(i);
     } else {
-      innterDecl.push_back(b->decl);
+      innterDecl.push_back(b);
     }
   }
 
@@ -74,7 +74,7 @@ Ptr Parser::structDecl(DeclPrefix prefix) {
     Error::diagnostic(prefix.startToken,
                       "struct delaration can only declare in top-level "
                       "or other class's block");
-  ContextGuard _{contexts, BLOCK};
+  ContextGuard _{contexts, CLASSBODY};
 
   notFunc(prefix);
   notVar(prefix);

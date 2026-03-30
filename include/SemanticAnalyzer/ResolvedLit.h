@@ -29,4 +29,18 @@ struct ResolvedLit {
   TypeSymbol *type;
   std::variant<bool, IntPayload, FloatPayload, CharPayload, StringPayload>
       value;
+
+  bool isBool() const { return std::holds_alternative<bool>(value); }
+  bool isInt() const { return std::holds_alternative<IntPayload>(value); }
+  bool isFloat() const { return std::holds_alternative<FloatPayload>(value); }
+  bool isChar() const { return std::holds_alternative<CharPayload>(value); }
+  bool isString() const { return std::holds_alternative<StringPayload>(value); }
+
+  const bool &asBool() const { return std::get<bool>(value); }
+  const IntPayload &asInt() const { return std::get<IntPayload>(value); }
+  const FloatPayload &asFloat() const { return std::get<FloatPayload>(value); }
+  const CharPayload &asChar() const { return std::get<CharPayload>(value); }
+  const StringPayload &asString() const {
+    return std::get<StringPayload>(value);
+  }
 };

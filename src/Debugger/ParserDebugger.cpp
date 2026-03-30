@@ -20,7 +20,7 @@ void ParserDebugger::visit(BinaryExpr *expr) {
 }
 void ParserDebugger::visit(NameExpr *expr) { cout << expr->name; }
 void ParserDebugger::visit(UnaryExpr *expr) {
-  cout << " " << expr->op.text;
+  cout << " " << expr->tOp.text;
   expr->right->accept(this);
 }
 void ParserDebugger::visit(CallExpr *expr) {
@@ -187,7 +187,7 @@ void ParserDebugger::visit(ClassDecl *decl) {
   for (auto a : decl->methods) {
     a->accept(this);
   }
-  for (auto a : decl->innterDecl) {
+  for (auto a : decl->innerDecl) {
     a->accept(this);
   }
   depth--;

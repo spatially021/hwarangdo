@@ -8,7 +8,8 @@ struct SourceSpan {
 };
 
 enum class HIRNodeKind {
-  Module,
+  Program,
+  Source,
 
   // decl
   TypeDecl,
@@ -20,6 +21,7 @@ enum class HIRNodeKind {
   BlockStmt,
   ExprStmt,
   LocalDeclStmt,
+  MethodDeclStmt,
   IfStmt,
   WhileStmt,
   ForRangeStmt,

@@ -1,13 +1,13 @@
 #include "AST/ASTNode.h"
 #include "AST/Decl.h"
 #include "AST/Stmt.h"
-#include "SemanticAnalyzer/Guard.h"
 #include "SemanticAnalyzer/Resolver.h"
 #include "SemanticAnalyzer/symbol/MethodSymbol.h"
 #include "SemanticAnalyzer/symbol/Symbol.h"
 #include "SemanticAnalyzer/symbol/TypeSymbol.h"
 #include "SemanticAnalyzer/symbol/ValueSymbol.h"
 #include "util/Error.h"
+#include "util/Guard.h"
 #include <string>
 
 void Resolver::visit(ClassDecl *decl) {
@@ -22,7 +22,7 @@ void Resolver::visit(ClassDecl *decl) {
   for (auto a : decl->methods) {
     a->accept(this);
   }
-  for (auto a : decl->innterDecl) {
+  for (auto a : decl->innerDecl) {
     a->accept(this);
   }
 }

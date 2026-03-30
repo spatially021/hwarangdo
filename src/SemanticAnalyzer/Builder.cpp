@@ -2,11 +2,11 @@
 #include "AST/ASTNode.h"
 #include "AST/Decl.h"
 #include "AST/Expr.h"
-#include "SemanticAnalyzer/Guard.h"
 #include "SemanticAnalyzer/Scope.h"
 #include "SemanticAnalyzer/symbol/MethodSymbol.h"
 #include "SemanticAnalyzer/symbol/ValueSymbol.h"
 #include "util/Error.h"
+#include "util/Guard.h"
 #include <memory>
 #include <utility>
 
@@ -166,7 +166,7 @@ void Builder::buildMain(ClassDecl *decl) {
   for (auto &a : decl->methods) {
     a->accept(this);
   }
-  for (auto &a : decl->innterDecl) {
+  for (auto &a : decl->innerDecl) {
     a->accept(this);
   }
 }
@@ -215,7 +215,7 @@ void Builder::visit(ClassDecl *decl) {
     a->accept(this);
   }
 
-  for (auto &a : decl->innterDecl) {
+  for (auto &a : decl->innerDecl) {
     if (canInnerDecl(a.get())) {
       a->accept(this);
     } else {
@@ -303,6 +303,7 @@ void Builder::visit(EnumDecl *decl) {
     EnumVariantSymbol *r = v.get();
     decl->symbol->variants.push_back(std::move(v));
     decl->symbol->variantMap.emplace(r->name, r);
+    a->symbol = r;
   }
 }
 

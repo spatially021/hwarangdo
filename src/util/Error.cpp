@@ -23,7 +23,8 @@ inline void throwError(const std::string &msg) {
 [[noreturn]]
 void Error::diagnostic(const Token &token, const std::string &message) {
   std::ostringstream oss;
-  oss << "[error] " << token.line << ":" << token.col << ": " << message;
+  oss << "[error] " << token.path << " " << token.line << ":" << token.col
+      << ": " << message;
 
   throwError(oss.str());
 }
@@ -32,9 +33,10 @@ void Error::diagnostic(const Token &token, const std::string &message) {
 void Error::diagnostic(const Token &primary, const std::string &message,
                        const Token &secondary, const std::string &note) {
   std::ostringstream oss;
-  oss << "[error] " << primary.line << ":" << primary.col << ": " << message
-      << "\n"
-      << "  note: " << secondary.line << ":" << secondary.col << ": " << note;
+  oss << "[error] " << primary.path << " " << primary.line << ":" << primary.col
+      << ": " << message << "\n"
+      << "  note: " << primary.path << " " << secondary.line << ":"
+      << secondary.col << ": " << note;
 
   throwError(oss.str());
 }
@@ -57,7 +59,7 @@ void Error::internal(const std::string &message) {
 void Error::internal(const Token &token, const std::string &message) {
   std::ostringstream oss;
   oss << "[internal compiler error]\n"
-      << token.line << ":" << token.col << ": " << message;
+      << token.path << " " << token.line << ":" << token.col << ": " << message;
   throwError(oss.str());
 }
 

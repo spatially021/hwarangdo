@@ -4,6 +4,7 @@
 #include "AST/Decl.h"
 #include "AST/Expr.h"
 #include "AST/Stmt.h"
+#include "AST/TokenStream.h"
 #include "Token.h"
 #include <cassert>
 #include <cstddef>
@@ -52,9 +53,9 @@ struct DeclPrefix {
 
 class Parser {
 public:
-  explicit Parser(const vector<Token> &tokens);
+  explicit Parser(const TokenStream &tokens);
   vector<Stmt::Ptr> statements;
-  vector<Stmt::Ptr> parse();
+  vector<Decl::Ptr> parse();
   vector<DeclContext> contexts;
 
 private:

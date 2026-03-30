@@ -1,10 +1,8 @@
 #include "SemanticAnalyzer/Verifier.h"
 #include "AST/Decl.h"
 #include "AST/Expr.h"
-#include "Token.h"
 #include "util/Error.h"
 #include <cerrno>
-#include <string>
 
 void Verifier::visit(LiteralExpr *expr) {
   if (expr->resolvedType == nullptr)
@@ -171,7 +169,7 @@ void Verifier::visit(ClassDecl *decl) {
   for (auto &a : decl->methods) {
     a->accept(this);
   }
-  for (auto &a : decl->innterDecl) {
+  for (auto &a : decl->innerDecl) {
     a->accept(this);
   }
 }
@@ -228,7 +226,5 @@ void Verifier::visit(InitDecl *decl) {
 }
 
 void Verifier::unresolved(ASTNode *node, const string &msg) {
-  Error::internal(std::to_string(node->token.line) + ":" +
-                  std::to_string(node->token.col) + " " + msg + "(" +
-                  node->token.text + ")");
+  Error::internal(node->token, msg);
 }

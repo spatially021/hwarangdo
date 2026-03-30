@@ -91,12 +91,10 @@ private:
   void ResolveEnumVariant(CallExpr *expr);
   void ResolveCall(CallExpr *expr);
   bool isAssignable(TypeSymbol *from, TypeSymbol *to);
-  bool isBinaryOperatalbe(BinaryExpr::OperatorType op, TypeSymbol *left,
-                          TypeSymbol *right);
+  bool isBinaryOperatalbe(Operator op, TypeSymbol *left, TypeSymbol *right);
 
   bool isCmpable(TypeSymbol *left, TypeSymbol *right);
-  TypeSymbol *binaryResult(BinaryExpr::OperatorType op, TypeSymbol *left,
-                           TypeSymbol *right);
+  TypeSymbol *binaryResult(Operator op, TypeSymbol *left, TypeSymbol *right);
   bool isCastable(TypeSymbol *from, TypeSymbol *to);
   TypeSymbol *binaryCasting(TypeSymbol *from, TypeSymbol *to);
   [[noreturn]]

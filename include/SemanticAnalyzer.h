@@ -1,14 +1,13 @@
 #pragma once
 
+#include "AST/Program.h"
 #include "SemanticAnalyzer/Resolver.h"
-#include "SemanticAnalyzer/Scope.h"
 #include "SemanticAnalyzer/SymbolTable.h"
-#include <vector>
 
 class SemanticAnalyzer {
 public:
-  vector<StmtPtr> ast;
-  SemanticAnalyzer(std::vector<StmtPtr> s);
+  Program *program;
+  SemanticAnalyzer(Program *p);
   SymbolTable symbolTable;
 
   void build();

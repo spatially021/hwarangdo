@@ -80,34 +80,34 @@ public:
   bool isNumberic(TypeSymbol *symbol);
   inline bool isInt(TypeSymbol *symbol) {
     return symbol->kind == TypeSymbol::TypeKind::PRIMITIVE
-               ? (static_cast<PrimtiveType *>(symbol)->primtiveKind ==
-                  PrimtiveType::PrimtiveKind::INT)
+               ? (static_cast<PrimtiveType *>(symbol)->builtinCategory ==
+                  BuiltinCategory::Int)
                : (false);
   }
   inline bool isFloat(TypeSymbol *symbol) {
     return symbol->kind == TypeSymbol::TypeKind::PRIMITIVE
-               ? (static_cast<PrimtiveType *>(symbol)->primtiveKind ==
-                  PrimtiveType::PrimtiveKind::FIXED)
+               ? (static_cast<PrimtiveType *>(symbol)->builtinCategory ==
+                  BuiltinCategory::Float)
                : (false);
   }
   inline bool isFixed(TypeSymbol *symbol) {
     return symbol->kind == TypeSymbol::TypeKind::PRIMITIVE
-               ? (static_cast<PrimtiveType *>(symbol)->primtiveKind ==
-                  PrimtiveType::PrimtiveKind::FIXED)
+               ? (static_cast<PrimtiveType *>(symbol)->builtinCategory ==
+                  BuiltinCategory::Fixed)
                : (false);
   }
   inline bool isBool(TypeSymbol *symbol) { return getType("bool") == symbol; }
   inline bool isString(TypeSymbol *symbol) {
     return symbol->kind == TypeSymbol::TypeKind::PRIMITIVE
-               ? (static_cast<PrimtiveType *>(symbol)->primtiveKind ==
-                  PrimtiveType::PrimtiveKind::STRING)
+               ? (static_cast<PrimtiveType *>(symbol)->builtinCategory ==
+                  BuiltinCategory::String)
                : (false);
   }
 
   inline bool isChar(TypeSymbol *symbol) {
     return symbol->kind == TypeSymbol::TypeKind::PRIMITIVE
-               ? (static_cast<PrimtiveType *>(symbol)->primtiveKind ==
-                  PrimtiveType::PrimtiveKind::CHAR)
+               ? (static_cast<PrimtiveType *>(symbol)->builtinCategory ==
+                  BuiltinCategory::Char)
                : (false);
   }
 

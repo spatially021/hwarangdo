@@ -4,6 +4,7 @@
 #include "AST/Stmt.h"
 #include "AST/Visitor.h"
 #include "SymbolTable.h"
+#include "util/Error.h"
 #include <cassert>
 #include <memory>
 
@@ -62,7 +63,9 @@ public:
   void visit(ASTNode *node);
   void visit(Param *param);
   inline void linkRoot() {
-    assert(table->main);
+    if (!table->main) {
+      Error::diagnostic({}, "has no main");
+    }
     table->main->rootScope = std::move(rootScope);
   }
 

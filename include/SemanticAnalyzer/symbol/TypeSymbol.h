@@ -2,8 +2,10 @@
 
 #include "AST/Decl.h"
 #include "BuiltInType.h"
+#include "IR/HIR/HIRType.h"
 #include "SemanticAnalyzer/symbol/ValueSymbol.h"
 #include "Symbol.h"
+#include "enums/StorageKind.h"
 #include <vector>
 
 class Scope;
@@ -78,18 +80,10 @@ protected:
 
 class PrimtiveType : public TypeSymbol {
 public:
-  enum class PrimtiveKind {
-    INT,
-    FLOAT,
-    CHAR,
-    STRING,
-    BOOL,
-    FIXED,
-
-  } primtiveKind;
-  PrimtiveType(PrimtiveKind pk) {
+  BuiltinCategory builtinCategory;
+  PrimtiveType(enum BuiltinCategory pk) {
     kind = TypeSymbol::TypeKind::PRIMITIVE;
-    primtiveKind = pk;
+    builtinCategory = pk;
     isReserved = true;
   }
 
@@ -101,7 +95,7 @@ class IntType : public PrimtiveType {
 public:
   int bitWidth = 32;
   bool isSigned = true;
-  IntType(BuiltInType t = {}) : PrimtiveType(PrimtiveKind::INT) {
+  IntType(BuiltInType t = {}) : PrimtiveType(BuiltinCategory::Int) {
     switch (t) {
     case BuiltInType::I8:
       bitWidth = 8;
@@ -169,7 +163,7 @@ public:
   int bitWidth = 32;
   int precious = 24;
 
-  FloatType(BuiltInType t = {}) : PrimtiveType(PrimtiveKind::FLOAT) {
+  FloatType(BuiltInType t = {}) : PrimtiveType(BuiltinCategory::Float) {
     switch (t) {
 
     case BuiltInType::F16:
@@ -201,13 +195,13 @@ public:
 
 class BoolType : public PrimtiveType {
 public:
-  BoolType() : PrimtiveType(PrimtiveKind::BOOL) { name = "bool"; }
+  BoolType() : PrimtiveType(BuiltinCategory::Bool) { name = "bool"; }
 };
 
 class CharType : public PrimtiveType {
 public:
   int bitWidth = 8;
-  CharType(BuiltInType t = {}) : PrimtiveType(PrimtiveKind::CHAR) {
+  CharType(BuiltInType t = {}) : PrimtiveType(BuiltinCategory::Char) {
     switch (t) {
 
     case BuiltInType::C8:
@@ -231,7 +225,7 @@ public:
 class StringType : public PrimtiveType {
 public:
   int bitWidth = 8;
-  StringType(BuiltInType t = {}) : PrimtiveType(PrimtiveKind::STRING) {
+  StringType(BuiltInType t = {}) : PrimtiveType(BuiltinCategory::String) {
     switch (t) {
     case BuiltInType::C8:
       bitWidth = 8;
@@ -253,17 +247,27 @@ public:
 
 class HandleSymbol : public TypeSymbol {
 public:
-  HandleSymbol() { isReserved = true; }
+  StorageKind storage = StorageKind::World;
+  HandleSymbol() {
+    isReserved = true;
+    kind = TypeSymbol::TypeKind::HANDLE;
+  }
 };
 
 class ResultSymbol : public TypeSymbol {
 public:
-  ResultSymbol() { isReserved = true; }
+  ResultSymbol() {
+    isReserved = true;
+    kind = TypeSymbol::TypeKind::RESULT;
+  }
 };
 
 class OptionSymbol : public TypeSymbol {
 public:
-  OptionSymbol() { isReserved = true; }
+  OptionSymbol() {
+    isReserved = true;
+    kind = TypeSymbol::TypeKind::OPTION;
+  }
 };
 
 class GenericSymbol : public TypeSymbol {

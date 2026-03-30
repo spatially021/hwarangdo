@@ -16,5 +16,7 @@ MainSymbol::MainSymbol() {
 }
 MainSymbol::~MainSymbol() = default;
 GenericSymbol::GenericSymbol(TypeSymbol *o, std::vector<TypeSymbol *> a)
-    : origin(o), args(a) {};
+    : origin(o), args(a) {
+  kind = o->kind;
+};
 GenericSymbol::~GenericSymbol() = default;

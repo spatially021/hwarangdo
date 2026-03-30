@@ -24,39 +24,47 @@ bool Resolver::isAssignable(TypeSymbol *from, TypeSymbol *to) {
   return canImplicitlyConvert(from, to);
 }
 
-bool Resolver::isBinaryOperatalbe(BinaryExpr::OperatorType op, TypeSymbol *left,
+bool Resolver::isBinaryOperatalbe(Operator op, TypeSymbol *left,
                                   TypeSymbol *right) {
 
   assert(left != nullptr);
   assert(right != nullptr);
 
   switch (op) {
-  case BinaryExpr::OperatorType::B_AND:
-  case BinaryExpr::OperatorType::B_OR:
-  case BinaryExpr::OperatorType::B_XOR:
-  case BinaryExpr::OperatorType::LSH:
-  case BinaryExpr::OperatorType::RSH:
+  case Operator::B_AND:
+  case Operator::B_OR:
+  case Operator::B_XOR:
+  case Operator::LSH:
+  case Operator::RSH:
     return table->isInt(left) && table->isInt(right);
 
-  case BinaryExpr::OperatorType::LS:
-  case BinaryExpr::OperatorType::LSE:
-  case BinaryExpr::OperatorType::GR:
-  case BinaryExpr::OperatorType::GRE:
-  case BinaryExpr::OperatorType::ADD:
-  case BinaryExpr::OperatorType::SUB:
-  case BinaryExpr::OperatorType::MUL:
-  case BinaryExpr::OperatorType::DIV:
-  case BinaryExpr::OperatorType::REM:
-  case BinaryExpr::OperatorType::POW:
+  case Operator::LS:
+  case Operator::LSE:
+  case Operator::GR:
+  case Operator::GRE:
+  case Operator::ADD:
+  case Operator::SUB:
+  case Operator::MUL:
+  case Operator::DIV:
+  case Operator::REM:
+  case Operator::POW:
     return table->isNumberic(left) && table->isNumberic(right);
 
-  case BinaryExpr::OperatorType::AND:
-  case BinaryExpr::OperatorType::OR:
+  case Operator::AND:
+  case Operator::OR:
     return table->isBool(left) && table->isBool(right);
 
-  case BinaryExpr::OperatorType::EQ:
-  case BinaryExpr::OperatorType::NT:
+  case Operator::EQ:
+  case Operator::NT:
     return isCmpable(left, right);
+    break;
+
+    break;
+  case Operator::L_NOT:
+  case Operator::B_NOT:
+  case Operator::PLUS:
+  case Operator::MINUS:
+    Error::internal("Unmatched operator Type");
     break;
   }
   return false;
@@ -77,37 +85,44 @@ bool Resolver::isCmpable(TypeSymbol *left, TypeSymbol *right) {
   return left == right;
 }
 
-TypeSymbol *Resolver::binaryResult(BinaryExpr::OperatorType op,
-                                   TypeSymbol *left, TypeSymbol *right) {
+TypeSymbol *Resolver::binaryResult(Operator op, TypeSymbol *left,
+                                   TypeSymbol *right) {
   assert(left != nullptr);
   assert(right != nullptr);
 
   switch (op) {
-  case BinaryExpr::OperatorType::B_AND:
-  case BinaryExpr::OperatorType::B_OR:
-  case BinaryExpr::OperatorType::B_XOR:
-  case BinaryExpr::OperatorType::LSH:
-  case BinaryExpr::OperatorType::RSH:
-  case BinaryExpr::OperatorType::LS:
-  case BinaryExpr::OperatorType::LSE:
-  case BinaryExpr::OperatorType::GR:
-  case BinaryExpr::OperatorType::GRE:
-  case BinaryExpr::OperatorType::ADD:
-  case BinaryExpr::OperatorType::SUB:
-  case BinaryExpr::OperatorType::MUL:
-  case BinaryExpr::OperatorType::DIV:
-  case BinaryExpr::OperatorType::REM:
-  case BinaryExpr::OperatorType::POW:
+  case Operator::B_AND:
+  case Operator::B_OR:
+  case Operator::B_XOR:
+  case Operator::LSH:
+  case Operator::RSH:
+  case Operator::LS:
+  case Operator::LSE:
+  case Operator::GR:
+  case Operator::GRE:
+  case Operator::ADD:
+  case Operator::SUB:
+  case Operator::MUL:
+  case Operator::DIV:
+  case Operator::REM:
+  case Operator::POW:
     if (auto temp = binaryCasting(left, right)) {
       return temp;
     }
     Error::internal("fail to binary casting");
 
-  case BinaryExpr::OperatorType::AND:
-  case BinaryExpr::OperatorType::OR:
-  case BinaryExpr::OperatorType::EQ:
-  case BinaryExpr::OperatorType::NT:
+  case Operator::AND:
+  case Operator::OR:
+  case Operator::EQ:
+  case Operator::NT:
     return table->getBuilt("bool");
+
+  case Operator::L_NOT:
+  case Operator::B_NOT:
+  case Operator::PLUS:
+  case Operator::MINUS:
+    Error::internal("Unmatched operator Type");
+    break;
   }
   return nullptr;
 }

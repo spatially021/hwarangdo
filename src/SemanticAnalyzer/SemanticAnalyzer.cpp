@@ -1,47 +1,51 @@
 #include "SemanticAnalyzer.h"
-#include "AST/Stmt.h"
+#include "AST/Program.h"
 #include "SemanticAnalyzer/Builder.h"
 #include "SemanticAnalyzer/Linker.h"
 
 #include <stdexcept>
-#include <vector>
 
-using std::vector;
-
-SemanticAnalyzer::SemanticAnalyzer(vector<Stmt::Ptr> s) { ast = std::move(s); }
+SemanticAnalyzer::SemanticAnalyzer(Program *p) : program(p) {}
 
 void SemanticAnalyzer::build() {
   Builder builder(&symbolTable);
+  for (auto &s : program->sources) {
 
-  try {
-    for (auto a : ast) {
-      a->accept(&builder);
+    try {
+      for (auto &a : s->decls) {
+        a->accept(&builder);
+      }
+    } catch (std::runtime_error &e) {
+      throw e;
     }
-    builder.linkRoot();
-  } catch (std::runtime_error &e) {
-    throw e;
   }
+
+  builder.linkRoot();
 }
 
 void SemanticAnalyzer::link() {
   Linker linker(&symbolTable);
-  try {
-    for (auto a : ast) {
-      a->accept(&linker);
+  for (auto &s : program->sources) {
+    try {
+      for (auto &a : s->decls) {
+        a->accept(&linker);
+      }
+    } catch (std::runtime_error &e) {
+      throw e;
     }
-  } catch (std::runtime_error &e) {
-    throw e;
   }
 }
 
 void SemanticAnalyzer::resolve() {
   Resolver resolver(&symbolTable);
-  try {
+  for (auto &s : program->sources) {
 
-    for (auto a : ast) {
-      a->accept(&resolver);
+    try {
+      for (auto &a : s->decls) {
+        a->accept(&resolver);
+      }
+    } catch (std::runtime_error &e) {
+      throw e;
     }
-  } catch (std::runtime_error &e) {
-    throw e;
   }
 }

@@ -9,10 +9,12 @@
 #include "SemanticAnalyzer/symbol/TypeSymbol.h"
 #include "SemanticAnalyzer/symbol/ValueSymbol.h"
 #include "Token.h"
+#include "enums/Operator.h"
 #include "util/Error.h"
 #include "util/Guard.h"
 #include <cstddef>
 #include <memory>
+#include <string>
 #include <vector>
 
 void Resolver::visit(LiteralExpr *expr) {
@@ -131,23 +133,29 @@ void Resolver::visit(NameExpr *expr) {
 void Resolver::visit(UnaryExpr *expr) {
   expr->right->accept(this);
 
-  if (expr->op.kind == TKind::BANG) {
-    if (expr->right->resolvedType == table->getType("bool"))
+  if (expr->tOp.kind == TKind::BANG) {
+    if (expr->right->resolvedType == table->getType("bool")) {
       expr->resolvedType = expr->right->resolvedType;
-    else if (expr->right->resolvedType == table->getType("int")) {
+      expr->op = Operator::L_NOT;
+    } else if (expr->right->resolvedType == table->getType("int")) {
       expr->resolvedType = expr->right->resolvedType;
+      expr->op = Operator::B_NOT;
     } else
       Error::diagnostic(expr->token, "bad operand type " +
                                          expr->right->resolvedType->name +
                                          " for unary operator '!'");
-  } else if (expr->op.kind == TKind::PLUS || expr->op.kind == TKind::MINUS) {
-
+  } else if (expr->tOp.kind == TKind::PLUS || expr->tOp.kind == TKind::MINUS) {
+    if (expr->tOp.kind == TKind::PLUS) {
+      expr->op = Operator::PLUS;
+    } else {
+      expr->op = Operator::MINUS;
+    }
     if (table->isNumberic(expr->right->resolvedType))
       expr->resolvedType = expr->right->resolvedType;
     else
       Error::diagnostic(expr->token,
                         "bad operand type " + expr->right->resolvedType->name +
-                            " for unary operator '" + expr->op.text + "'");
+                            " for unary operator '" + expr->tOp.text + "'");
   }
 }
 
@@ -354,9 +362,21 @@ void Resolver::visit(DefaultValueExpr *expr) {
 
 void Resolver::visit(Range *expr) {
   expr->from->accept(this);
+  if (!table->isInt(expr->from->resolvedType)) {
+    Error::diagnostic(expr->token, "in for-range start only allowed int type");
+  }
+
   expr->to->accept(this);
-  if (expr->step) {
-    expr->step->accept(this);
+  if (!table->isInt(expr->to->resolvedType)) {
+    Error::diagnostic(expr->token, "in for-range end only allowed int type");
+  }
+
+  if (!expr->step) {
+    expr->step = make_shared<LiteralExpr>(expr->token, "1");
+  }
+  expr->step->accept(this);
+  if (!table->isInt(expr->step->resolvedType)) {
+    Error::diagnostic(expr->token, "in for-range step only allowed int type");
   }
 }
 

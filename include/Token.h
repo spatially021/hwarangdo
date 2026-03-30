@@ -149,5 +149,6 @@ enum class TKind {
 struct Token {
   TKind kind = TKind::EMPTY;
   string text;
+  string path = "[MAIN]";
   int line, col;
 };

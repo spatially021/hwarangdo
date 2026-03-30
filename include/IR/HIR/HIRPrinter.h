@@ -1,13 +1,13 @@
 #pragma once
 
 #include "IR/HIR/HIRDecl.h"
-#include "IR/HIR/HIRModule.h"
+#include "IR/HIR/HIRProgram.h"
 #include "IR/HIR/HIRStmt.h"
 #include "IR/HIR/HIRType.h"
 
 class HIRPrinter {
 public:
-  void print(const HIRModule *module);
+  void print(const HIRProgram *module);
 
 private:
   int depth = 0;

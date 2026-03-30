@@ -137,7 +137,7 @@ class ClassDecl : public Decl {
 public:
   vector<shared_ptr<VarDecl>> fields;
   vector<shared_ptr<FuncDecl>> methods;
-  vector<shared_ptr<Decl>> innterDecl;
+  vector<shared_ptr<Decl>> innerDecl;
   optional<string> baseClass; // 단일 상속 (필요시 벡터로 변경)
   vector<string> traits;      // trait/interface 목록
 
@@ -146,7 +146,7 @@ public:
             optional<string> base = nullopt, vector<string> tr = {},
             AModifier modi = AModifier::DEFAULT)
       : Decl(NKind::CLASS_DECL, t, n, modi), fields(f), methods(m),
-        innterDecl(i), baseClass(base), traits(std::move(tr)) {
+        innerDecl(i), baseClass(base), traits(std::move(tr)) {
     aModifier = modi;
   }
 
@@ -165,6 +165,8 @@ public:
         payload; // enum variant가 값(튜플 혹은 타입)을 가질 수 있음
     Variant(Token t, const string &n, optional<TypeNode::Ptr> p = nullopt)
         : token(t), name(n), payload(p) {}
+
+    EnumVariantSymbol *symbol = nullptr;
   };
 
   vector<shared_ptr<Variant>> variants;

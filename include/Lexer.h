@@ -1,4 +1,6 @@
 #pragma once
+#include "AST/TokenStream.h"
+#include "Inputs.h"
 #include "Token.h"
 #include <string>
 #include <unordered_map>
@@ -7,13 +9,13 @@
 using namespace std;
 
 struct Lexer {
-  explicit Lexer(const string &src);
+  explicit Lexer(InputSource inputs);
   Token next();
   vector<Token> tokenized;
 
 public:
   Token scan();
-  void lexing();
+  TokenStream lexing();
 
 protected:
   char peek(unsigned int offset = 0) const;
@@ -22,9 +24,11 @@ protected:
   bool isIdentFirst(char c);
   bool isIdentRest(char c);
   bool isNumber(char c);
-  string src;
+  InputSource input;
   size_t i = 0;
   int line, col;
+  string src;
+  string path;
   unsigned int pos;
   bool isEscapeChar(char c);
 

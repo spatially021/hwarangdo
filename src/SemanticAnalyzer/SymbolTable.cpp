@@ -92,9 +92,6 @@ SymbolTable::SymbolTable() {
   symbol->kind = TypeSymbol::TypeKind::DEFAULT_VALUE;
   add(std::move(symbol));
 
-  unknown = make_unique<TypeSymbol>();
-  unknown->kind = TypeSymbol::TypeKind::UNKNOWN;
-
   current = topLevel.get();
   topLevel->id = -1;
   builtIn->id = -2;
@@ -243,6 +240,12 @@ TypeSymbol *SymbolTable::getType(TypeNode *node) {
       return getBuilt("bool");
     case BuiltInType::FI:
       return getBuilt("fixed");
+    case BuiltInType::S8:
+      return getBuilt("s8");
+    case BuiltInType::S16:
+      return getBuilt("s16");
+    case BuiltInType::S32:
+      return getBuilt("s32");
     }
   } else {
     return getType(node->type);

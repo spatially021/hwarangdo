@@ -19,6 +19,7 @@ enum class HIRTypeKind {
 
   Result,
   Option,
+
   Error,
 
   Builtin,

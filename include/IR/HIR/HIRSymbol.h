@@ -4,9 +4,9 @@
 #include "string"
 #include <memory>
 
-struct MethodSymbol;
-struct ValueSymbol;
-struct EnumVariantSymbol;
+class MethodSymbol;
+class ValueSymbol;
+class EnumVariantSymbol;
 struct HIRTypeDecl;
 struct HIRExpr;
 
@@ -45,6 +45,7 @@ enum class HIREnumVariantKind {
   Unit,    // payload 없음
   Payload, // payload 하나 있음
 };
+
 struct HIREnumVariant {
   int id = -1;
   std::string name;

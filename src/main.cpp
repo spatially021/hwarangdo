@@ -5,8 +5,13 @@
 #include "Debugger/ParserDebugger.h"
 #include "Debugger/ResolverDebugger.h"
 #include "IR/HIR/HIRBuilder.h"
+<<<<<<< HEAD
 #include "IR/HIR/HIRLinker.h"
 #include "IR/HIR/HIRProgram.h"
+=======
+#include "IR/HIR/HIRProgram.h"
+#include "IR/MIR.h"
+>>>>>>> dd7486765f77f2c69a9a91ef8a8c9197d27e5710
 #include "Inputs.h"
 #include "Lexer.h"
 #include "Parser.h"
@@ -25,7 +30,10 @@
 #include <string>
 #include <string_view>
 #include <unordered_map>
+<<<<<<< HEAD
 #include <utility>
+=======
+>>>>>>> dd7486765f77f2c69a9a91ef8a8c9197d27e5710
 #include <vector>
 
 using namespace std;
@@ -389,6 +397,7 @@ int main(int argc, char *argv[]) {
     return -1;
   }
 
+<<<<<<< HEAD
   unique_ptr<HIRProgram> hirProgram =
       make_unique<HIRProgram>(&analyzer.symbolTable);
 
@@ -406,6 +415,18 @@ int main(int argc, char *argv[]) {
 
   } catch (std::runtime_error &e) {
     cout << Color::RED << "error occur while hir building\n"
+=======
+  unique_ptr<HIRProgram> HirProgram =
+      make_unique<HIRProgram>(&analyzer.symbolTable);
+
+  try {
+    for (auto &s : program->sources) {
+      HIRBuilder builder(&analyzer.symbolTable, HirProgram.get());
+      builder.build(s.get());
+    }
+  } catch (std::runtime_error &e) {
+    cout << Color::RED << "error occur while verifying\n"
+>>>>>>> dd7486765f77f2c69a9a91ef8a8c9197d27e5710
          << Color::RESET << e.what() << "\n";
     return -1;
   }

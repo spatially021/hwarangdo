@@ -48,7 +48,6 @@ struct HIRTypeDecl : HIRDecl {
       : HIRDecl(HIRNodeKind::TypeDecl, s), typeDeclKind(dk), name(std::move(n)),
         type(ty) {}
 };
-
 struct HIRMethodDecl : HIRDecl {
   HIRTypeDecl *owner = nullptr; // nullable for top-level func
   std::unique_ptr<HIRBlockStmt> body;

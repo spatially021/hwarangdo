@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 #include "AST/Decl.h"
 #include "AST/Expr.h"
 #include "IR/HIR/HIRBuilder.h"
@@ -10,6 +11,14 @@
 #include <cstddef>
 #include <memory>
 #include <utility>
+=======
+#include "IR/HIR/HIRBuilder.h"
+#include "IR/HIR/HIRExpr.h"
+#include "IR/HIR/HIRSymbol.h"
+#include "IR/HIR/HIRType.h"
+#include "util/Error.h"
+#include <memory>
+>>>>>>> dd7486765f77f2c69a9a91ef8a8c9197d27e5710
 
 unique_ptr<HIRExpr> HIRBuilder::lowerExpr(Expr *expr) {
   if (expr == nullptr) {
@@ -18,11 +27,16 @@ unique_ptr<HIRExpr> HIRBuilder::lowerExpr(Expr *expr) {
   exprResult.reset();
   expr->accept(this);
   if (exprResult == nullptr) {
+<<<<<<< HEAD
     Error::internal(expr->token, "expr result nullptr");
+=======
+    Error::internal("expr result nullptr");
+>>>>>>> dd7486765f77f2c69a9a91ef8a8c9197d27e5710
   }
   return std::move(exprResult);
 }
 
+<<<<<<< HEAD
 unique_ptr<HIRExpr> HIRBuilder::lowerImplictCall(CallExpr *expr) {
   auto receiver = lowerImplictSelf();
   if (receiver == nullptr) {
@@ -144,4 +158,36 @@ unique_ptr<HIRExpr> HIRBuilder::lowerCast(CastExpr *expr) {
   auto from = lowerType(expr->left->resolvedType);
   auto to = lowerType(expr->resolvedType);
   return make_unique<HIRCastExpr>(std::move(operand), from, to);
+=======
+unique_ptr<HIRPlaceExpr> HIRBuilder::lowerPlace(NameExpr *expr) {
+  if (expr == nullptr) {
+    Error::internal("nameExpr is nullptr");
+  }
+  if (expr->valueSymbol == nullptr) {
+    Error::internal(expr->token, "valueSymbol is nullptr");
+  }
+
+  auto value = expr->valueSymbol;
+
+  if (auto [cond, result] = lookupLocal(value); cond) {
+    return make_unique<HIRLocalPlaceExpr>(result);
+  }
+  if (auto [cond, result] = lookupParam(value); cond) {
+    return make_unique<HIRParamPlaceExpr>(result);
+  }
+  if (auto [cond, result] = lookupField(value); cond) {
+
+    auto type = lowerType(expr->valueSymbol->typeSymbol);
+    if (type == nullptr) {
+      Error::internal(expr->token, "hirType is nullptr");
+    }
+
+    HIRFieldAccessMode mode = HIRFieldAccessMode::ValueObject;
+    if (currentType->type->kind == HIRTypeKind::Entity) {
+      mode = HIRFieldAccessMode::ObserverObject;
+    }
+    return make_unique<HIRFieldPlaceExpr>(currentType, result, mode);
+  }
+  Error::internal(expr->token, "unregisitered value");
+>>>>>>> dd7486765f77f2c69a9a91ef8a8c9197d27e5710
 }

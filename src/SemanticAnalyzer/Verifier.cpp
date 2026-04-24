@@ -1,7 +1,10 @@
 #include "SemanticAnalyzer/Verifier.h"
 #include "AST/Decl.h"
 #include "AST/Expr.h"
+<<<<<<< HEAD
 #include "AST/Stmt.h"
+=======
+>>>>>>> dd7486765f77f2c69a9a91ef8a8c9197d27e5710
 #include "util/Error.h"
 #include <cerrno>
 

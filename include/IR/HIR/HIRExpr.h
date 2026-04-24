@@ -13,6 +13,10 @@ struct HIRMethodDecl;
 
 using std::unique_ptr;
 
+struct HIRMethodDecl;
+
+using std::unique_ptr;
+
 enum class HIRExprCategory {
   Value,
   Place,

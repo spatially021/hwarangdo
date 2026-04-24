@@ -6,19 +6,12 @@
 #include "IR/HIR/HIRStmt.h"
 #include "IR/HIR/HIRSymbol.h"
 #include "SemanticAnalyzer/SymbolTable.h"
-<<<<<<< HEAD
 #include "SemanticAnalyzer/symbol/Symbol.h"
 #include "SemanticAnalyzer/symbol/TypeSymbol.h"
-=======
->>>>>>> dd7486765f77f2c69a9a91ef8a8c9197d27e5710
 #include "util/Error.h"
 #include "util/Guard.h"
 #include <memory>
 #include <utility>
-<<<<<<< HEAD
-=======
-
->>>>>>> dd7486765f77f2c69a9a91ef8a8c9197d27e5710
 using std::unique_ptr;
 
 void HIRBuilder::visit(LiteralExpr *expr) {
@@ -28,13 +21,7 @@ void HIRBuilder::visit(LiteralExpr *expr) {
 
   auto *ty = lowerType(expr->resolvedType);
 
-<<<<<<< HEAD
   exprResult = std::make_unique<HIRLiteralExpr>(ty, expr->resolvedLit);
-=======
-  exprResult = std::make_unique<HIRLiteralExpr>(ty,
-                                                expr->resolvedLit // 우선 copy
-  );
->>>>>>> dd7486765f77f2c69a9a91ef8a8c9197d27e5710
 }
 
 void HIRBuilder::visit(BinaryExpr *expr) {
@@ -45,7 +32,6 @@ void HIRBuilder::visit(BinaryExpr *expr) {
                                  std::move(left), std::move(right));
 }
 void HIRBuilder::visit(NameExpr *expr) {
-<<<<<<< HEAD
   if (expr == nullptr) {
     Error::internal("nameExpr is nullptr");
   }
@@ -73,23 +59,11 @@ void HIRBuilder::visit(NameExpr *expr) {
   }
 }
 
-=======
-  if (expr->valueSymbol) {
-    auto name = lowerPlace(expr);
-    if (name == nullptr) {
-      Error::internal("nameExpr is nullptr");
-    }
-    exprResult = std::move(name);
-  } else if (expr->typeSymbol) {
-  }
-}
->>>>>>> dd7486765f77f2c69a9a91ef8a8c9197d27e5710
 void HIRBuilder::visit(UnaryExpr *expr) {
   auto operand = lowerExpr(expr->right.get());
   exprResult = make_unique<HIRUnaryExpr>(lowerType(expr->resolvedType),
                                          expr->op, std::move(operand));
 }
-<<<<<<< HEAD
 
 void HIRBuilder::visit(CallExpr *expr) {
   if (expr->receiver == nullptr) { // 해당 객체 내에서 this생략한 call
@@ -164,21 +138,6 @@ void HIRBuilder::visit(DefaultValueExpr *) {}
 void HIRBuilder::visit(Range *) {
   // for내부에서 처리
 }
-=======
-void HIRBuilder::visit(CallExpr *expr) {}
-void HIRBuilder::visit(AssignExpr *expr) {}
-void HIRBuilder::visit(MemberExpr *expr) {}
-void HIRBuilder::visit(ArrayAccessExpr *expr) {}
-void HIRBuilder::visit(TernaryExpr *expr) {}
-void HIRBuilder::visit(ThisExpr *expr) {}
-void HIRBuilder::visit(SuperExpr *expr) {}
-void HIRBuilder::visit(CastExpr *expr) {}
-void HIRBuilder::visit(BuiltInNameExpr *expr) {}
-void HIRBuilder::visit(SpawnExpr *expr) {}
-void HIRBuilder::visit(ViewExpr *expr) {}
-void HIRBuilder::visit(DefaultValueExpr *expr) {}
-void HIRBuilder::visit(Range *expr) {}
->>>>>>> dd7486765f77f2c69a9a91ef8a8c9197d27e5710
 void HIRBuilder::visit(CaseValueExpr *expr) {}
 void HIRBuilder::visit(MatchExpr *expr) {}
 
@@ -258,7 +217,6 @@ void HIRBuilder::visit(ClassDecl *decl) {
 
   TypeGuard typeGuard(currentType, it->second);
 
-<<<<<<< HEAD
   if (decl->baseClass.has_value()) {
     it = program->typeDeclMap.find(decl->symbol->base);
     if (it == program->typeDeclMap.end()) {
@@ -267,8 +225,6 @@ void HIRBuilder::visit(ClassDecl *decl) {
     currentType->base = it->second->type;
   }
 
-=======
->>>>>>> dd7486765f77f2c69a9a91ef8a8c9197d27e5710
   {
     BoolGuard fieldGuard(isField, true);
     for (auto &f : decl->fields) {
@@ -367,11 +323,6 @@ void HIRBuilder::visit(VarDecl *decl) {
     }
   }
 }
-<<<<<<< HEAD
-=======
-void HIRBuilder::visit(ArrayDecl *decl) { // TODO:arrayDecl 설계 및 구현 필요.
-}
->>>>>>> dd7486765f77f2c69a9a91ef8a8c9197d27e5710
 void HIRBuilder::visit(InitDecl *decl) { bindMethod(decl); }
 
 void HIRBuilder::visit(TypeNode *) {}

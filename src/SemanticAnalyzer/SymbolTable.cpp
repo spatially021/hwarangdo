@@ -194,36 +194,15 @@ bool SymbolTable::addValue(unique_ptr<ValueSymbol> symbol) {
 
 bool SymbolTable::addMethod(unique_ptr<MethodSymbol> symbol) {
   auto &bucket = current->methodMap[symbol->name];
-  auto raw = symbol.get();
+  MethodSymbol *raw = symbol.get();
 
-  if (hasSameSig(bucket, raw)) {
+  if (Helper::hasSameSig(bucket, raw)) {
     return false;
   }
 
   current->methodOwn.push_back(std::move(symbol));
   bucket.push_back(raw);
   return true;
-}
-bool SymbolTable::hasSameSig(vector<MethodSymbol *> vec, MethodSymbol *symbol) {
-  bool flag = true;
-
-  for (auto &m : vec) {
-    if (m->paramTypes.size() != symbol->paramTypes.size()) {
-      continue;
-    }
-    bool flag_ = true;
-    for (unsigned int i = 0; i < m->paramTypes.size(); ++i) {
-      if (m->paramTypes[i] != symbol->paramTypes[i]) {
-        flag_ = false;
-        break;
-      }
-    }
-    if (flag_) {
-      flag = true;
-      break;
-    }
-  }
-  return flag;
 }
 
 TypeSymbol *SymbolTable::getType(str name) {

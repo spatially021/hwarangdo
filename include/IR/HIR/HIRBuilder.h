@@ -11,7 +11,6 @@
 #include "IR/HIR/HIRSymbol.h"
 #include "IR/HIR/HIRType.h"
 #include "SemanticAnalyzer/SymbolTable.h"
-#include "SemanticAnalyzer/symbol/MethodSymbol.h"
 #include "SemanticAnalyzer/symbol/TypeSymbol.h"
 #include "SemanticAnalyzer/symbol/ValueSymbol.h"
 #include "util/Error.h"
@@ -92,6 +91,7 @@ private:
   std::unique_ptr<HIRValueExpr> lowerVariantValue(MemberExpr *expr);
   std::unique_ptr<HIRFieldPlaceExpr> lowerMember(MemberExpr *expr);
   std::unique_ptr<HIRPlaceExpr> lowerArrayAccess(ArrayAccessExpr *expr);
+  std::unique_ptr<HIRValueExpr> lowerCallArg(Expr *arg, Param *param);
 
   // helper
   std::unique_ptr<HIRExpr>
@@ -128,85 +128,25 @@ private:
     Error::internal(decl->token, "unmatched decl type");
   }
 
-  inline int allocLocalID() {
-    if (currentMethod == nullptr) {
-      Error::internal("current method is nullptr");
-    }
-    assert(currentMethod);
-    return currentMethod->nextLocalId++;
-  }
+  int allocLocalID();
 
-  inline int allocMethodID() {
-    assert(currentType);
-    return currentType->nextMethodID++;
-  }
+  int allocMethodID();
 
-  inline int allocParamID() {
-    assert(currentMethod);
-    return currentMethod->nextParamID++;
-  }
+  int allocParamID();
+  int allocFieldID();
 
-  inline int allocFieldID() {
-    assert(currentType);
-    return currentType->nextFieldId++;
-  }
+  void bindLocal(ValueSymbol *symbol, unique_ptr<HIRLocal> local);
 
-  inline void bindLocal(ValueSymbol *symbol, unique_ptr<HIRLocal> local) {
-    assert(currentBlock);
-    assert(currentMethod);
-    currentBlock->localMap.emplace(symbol, local.get());
-    currentMethod->locals.push_back(std::move(local));
-  }
+  void bindField(ValueSymbol *symbol, unique_ptr<HIRField> field);
+  void bindMethod(FuncDecl *decl);
 
-  inline void bindField(ValueSymbol *symbol, unique_ptr<HIRField> field) {
-    assert(currentType);
-    currentType->fieldMap.emplace(symbol, field.get());
-    currentType->fields.push_back(std::move(field));
-  }
+  pair<bool, HIRLocal *> lookupLocal(ValueSymbol *symbol);
+  pair<bool, HIRParam *> lookupParam(ValueSymbol *symbol);
+  pair<bool, HIRField *> lookupField(ValueSymbol *symbol);
+  pair<bool, HIRField *> lookupField(HIRTypeDecl *type, ValueSymbol *symbol);
 
-  inline void bindMethod(FuncDecl *decl) {
-    auto method = lowerMethodDecl(decl);
-    auto raw = method.get();
-
-    auto it = program->typeDeclMap.find(decl->methodSymbol->onwer);
-
-    if (it == program->typeDeclMap.end()) {
-      Error::internal(decl->token, "fail to find owner type");
-    }
-
-    it->second->methods.push_back(std::move(method));
-    currentMethod = raw;
-  }
-
-  inline pair<bool, HIRLocal *> lookupLocal(ValueSymbol *symbol) {
-    auto it = currentBlock->localMap.find(symbol);
-    return {it != currentBlock->localMap.end(), it->second};
-  }
-  inline pair<bool, HIRParam *> lookupParam(ValueSymbol *symbol) {
-    auto it = currentMethod->paramMap.find(symbol);
-    return {it != currentMethod->paramMap.end(), it->second};
-  }
-  inline pair<bool, HIRField *> lookupField(ValueSymbol *symbol) {
-    auto it = currentType->fieldMap.find(symbol);
-    return {it != currentType->fieldMap.end(), it->second};
-  }
-  inline pair<bool, HIRField *> lookupField(HIRTypeDecl *type,
-                                            ValueSymbol *symbol) {
-    auto it = type->fieldMap.find(symbol);
-    return {it != type->fieldMap.end(), it->second};
-  }
-
-  inline bool isTypeReceiver(Expr *expr) {
-    if (auto name = dynamic_cast<NameExpr *>(expr)) {
-      return name->resolved->type == Symbol::SymbolType::TYPE;
-    }
-    return false;
-  }
-
-  inline pair<bool, HIREnumVariant *> lookupVariant(EnumVariantSymbol *symbol) {
-    auto it = program->variantMap.find(symbol);
-    return {it != program->variantMap.end(), it->second};
-  }
+  bool isTypeReceiver(Expr *expr);
+  pair<bool, HIREnumVariant *> lookupVariant(EnumVariantSymbol *symbol);
 
   inline std::unique_ptr<HIRLoadExpr>
   load(std::unique_ptr<HIRPlaceExpr> place) {

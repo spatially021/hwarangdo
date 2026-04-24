@@ -82,6 +82,7 @@ void HIRBuilder::visit(CallExpr *expr) {
     }
   } else {
     exprResult = lowerCall(expr);
+    return;
   }
 }
 void HIRBuilder::visit(AssignExpr *expr) { exprResult = lowerAssign(expr); }
@@ -123,7 +124,7 @@ void HIRBuilder::visit(SelfExpr *) {
   return;
 }
 void HIRBuilder::visit(RootExpr *) {
-  exprResult = make_unique<HIRRootExpr>(program->rootType.get());
+  exprResult = make_unique<HIRRootExpr>(program->rootType);
   return;
 }
 void HIRBuilder::visit(CastExpr *expr) {
@@ -133,7 +134,7 @@ void HIRBuilder::visit(CastExpr *expr) {
 void HIRBuilder::visit(BuiltInNameExpr *expr) {}
 void HIRBuilder::visit(SpawnExpr *expr) {}
 void HIRBuilder::visit(ViewExpr *expr) {}
-void HIRBuilder::visit(DefaultValueExpr *expr) {}
+void HIRBuilder::visit(DefaultValueExpr *) {}
 void HIRBuilder::visit(Range *) {
   // for내부에서 처리
 }

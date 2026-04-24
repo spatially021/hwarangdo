@@ -158,7 +158,7 @@ void Linker::visit(ClassDecl *decl) {
     }
     for (auto &s : trait->traitSigs) {
       auto &bucket = t->traitSigs[s->name];
-      if (!hasSameSig(bucket, s.get())) {
+      if (!Helper::hasSameSig(bucket, s.get())) {
         Error::diagnostic(s->token, "undeclared trait sig : " + s->name);
       }
     }
@@ -212,6 +212,7 @@ void Linker::visit(ImplDecl *decl) {
 
   for (auto &a : decl->LinkedImplMethods) {
     a->accept(this);
+
     MethodSymbol *methodSymbol = a->methodSymbol;
     if (methodSymbol == nullptr) {
       Error::internal(a->token, "not built methodSymbol : " + a->name);

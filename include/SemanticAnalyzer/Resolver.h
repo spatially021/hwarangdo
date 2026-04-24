@@ -4,6 +4,8 @@
 #include "AST/Expr.h"
 #include "AST/Visitor.h"
 #include "SemanticAnalyzer/ResolvedLit.h"
+#include "SemanticAnalyzer/Scope.h"
+#include "SemanticAnalyzer/symbol/MethodSymbol.h"
 #include "SemanticAnalyzer/symbol/Symbol.h"
 #include "SemanticAnalyzer/symbol/TypeSymbol.h"
 #include "SemanticAnalyzer/symbol/ValueSymbol.h"
@@ -13,6 +15,13 @@
 #include <cstddef>
 
 class SymbolTable;
+
+enum class ArgMatchKind {
+  Exact,        // 타입 완전 일치
+  DefaultArg,   // 호출 인자가 '_' 이고 해당 파라미터에 기본값 존재
+  ImplicitCast, // 안전한 암묵 형변환 가능
+  Invalid       // 매칭 불가
+};
 
 class Resolver : public ASTVisitor {
   using str = string const &;
@@ -44,7 +53,14 @@ private:
   Scope *currentBase = nullptr;
 
   void ResolveEnumVariant(CallExpr *expr);
-  void ResolveCall(CallExpr *expr);
+  void ResolveCall(CallExpr *expr, Scope *scope);
+  ArgMatchKind matchArgument(TypeSymbol *arg, TypeSymbol *param,
+                             bool hasInit = false);
+  int rankOf(const ArgMatchKind &kind);
+
+  bool isBetterThan(const vector<ArgMatchKind> &a,
+                    const vector<ArgMatchKind> &b);
+
   bool isAssignable(TypeSymbol *from, TypeSymbol *to);
   bool isBinaryOperatalbe(Operator op, TypeSymbol *left, TypeSymbol *right);
 
@@ -156,5 +172,8 @@ private:
     }
     return false;
   }
-  llvm::APInt resolveFixedArraySize(Expr *expr) ;
+  llvm::APInt resolveFixedArraySize(Expr *expr);
+
+  pair<bool, MethodSymbol *> lookupMethod(str name, Scope *scope,
+                                          vector<TypeSymbol *> args);
 };

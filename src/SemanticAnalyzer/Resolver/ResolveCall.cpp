@@ -6,6 +6,8 @@
 #include "SemanticAnalyzer/symbol/TypeSymbol.h"
 #include "SemanticAnalyzer/symbol/ValueSymbol.h"
 #include "util/Error.h"
+#include <cstddef>
+#include <vector>
 
 inline Expr::Ptr cloneExpr(const Expr::Ptr &expr) {
   return expr ? expr->deepCopy() : nullptr;
@@ -67,66 +69,119 @@ void Resolver::ResolveEnumVariant(CallExpr *expr) {
   expr->resolvedType = expr->receiver->resolvedType;
 }
 
-void Resolver::ResolveCall(CallExpr *expr) {
-  auto *method = checkedSymbolCast<MethodSymbol>(expr->resolved, expr->token,
-                                                 "expected method symbol");
-
-  auto *funcDecl = dynamic_cast<FuncDecl *>(method->decl);
-  if (!funcDecl) {
-    Error::internal(expr->token, "method decl is not FuncDecl");
+void Resolver::ResolveCall(CallExpr *expr, Scope *scope) {
+  auto &bucket = scope->methodMap[expr->methodName];
+  vector<TypeSymbol *> args; // nullptr -> defaultValue
+  for (auto &a : expr->arguments) {
+    a->accept(this);
+    args.push_back(a->resolvedType);
   }
-
-  if (expr->arguments.size() != funcDecl->params.size()) {
-    Error::diagnostic(expr->token, "mismatch argument count");
-  }
-
-  for (size_t i = 0; i < expr->arguments.size(); ++i) {
-    auto *arg = expr->arguments[i].get();
-    arg->accept(this);
-
-    if (!arg->resolvedType) {
-      Error::internal(arg->token, "unresolved argument type");
+  vector<pair<vector<ArgMatchKind>, MethodSymbol *>> candidates;
+  for (auto &m : bucket) {
+    if (m->paramTypes.size() != args.size()) {
+      continue;
     }
 
-    auto *paramType = funcDecl->params[i]->symbol->typeSymbol;
-    if (!paramType) {
-      Error::internal(funcDecl->params[i]->token, "unresolved parameter type");
+    vector<ArgMatchKind> kinds;
+    bool viable = true;
+
+    auto func = dynamic_cast<FuncDecl *>(m->decl);
+    if (func == nullptr) {
+      Error::internal(expr->token, "illegal ast kind");
     }
 
-    if (arg->resolvedType == table->getDefaultV()) {
-      auto &param = funcDecl->params[i];
-      if (!param->defaultValue.has_value()) {
-        Error::diagnostic(expr->token,
-                          "this argument has no default value: " + param->name);
+    for (size_t i = 0; i < m->paramTypes.size(); ++i) {
+      auto kind = matchArgument(args[i], m->paramTypes[i],
+                                func->params[i]->defaultValue.has_value());
+      if (kind == ArgMatchKind::Invalid) {
+        viable = false;
+        break;
       }
+      kinds.push_back(kind);
+    }
 
-      auto defaultExpr = cloneExpr(*param->defaultValue);
-      defaultExpr->accept(this);
-
-      if (!canImplicitlyConvert(defaultExpr->resolvedType, paramType)) {
-        Error::diagnostic(expr->token,
-                          "default value type does not match parameter type");
+    if (viable) {
+      candidates.push_back({std::move(kinds), m});
+    }
+  }
+  vector<size_t> bestIdx;
+  for (size_t i = 0; i < candidates.size(); ++i) {
+    bool beaten = false;
+    for (size_t j = 0; j < candidates.size(); ++j) {
+      if (i == j)
+        continue;
+      if (isBetterThan(candidates[j].first, candidates[i].first)) {
+        beaten = true;
+        break;
       }
+    }
+    if (!beaten) {
+      bestIdx.push_back(i);
+    }
+  }
 
-      defaultExpr->resolvedType =
-          implicitCasting(defaultExpr->resolvedType, paramType);
+  if (bestIdx.empty()) {
+    Error::diagnostic(expr->token, "unknown call");
+  }
 
-      expr->arguments[i] = defaultExpr;
+  if (bestIdx.size() == 1) {
+    auto best = candidates[bestIdx[0]].second;
+    expr->resolved = best;
+    expr->resolvedType = best->returnType;
+    return;
+  }
+
+  Error::diagnostic(expr->token, "ambiguous overload call");
+}
+int Resolver::rankOf(const ArgMatchKind &kind) {
+  switch (kind) {
+  case ArgMatchKind::Exact:
+  case ArgMatchKind::DefaultArg:
+    return 0;
+  case ArgMatchKind::ImplicitCast:
+    return 1;
+  case ArgMatchKind::Invalid:
+    return 999;
+  }
+  return 999;
+}
+
+bool Resolver::isBetterThan(const vector<ArgMatchKind> &a,
+                            const vector<ArgMatchKind> &b) {
+  bool better = false;
+  for (size_t i = 0; i < a.size(); ++i) {
+    int ar = rankOf(a[i]);
+    int br = rankOf(b[i]);
+    if (ar > br) {
+      return false; // 한 위치라도 더 나쁘면 우세 아님
+    }
+    if (ar < br) {
+      better = true;
+    }
+  }
+
+  return better;
+}
+
+ArgMatchKind Resolver::matchArgument(TypeSymbol *arg, TypeSymbol *param,
+                                     bool hasInit) {
+  if (arg == table->getDefaultV()) {
+    if (hasInit) {
+      return ArgMatchKind::DefaultArg;
     } else {
-      if (!canImplicitlyConvert(arg->resolvedType, paramType)) {
-        Error::diagnostic(expr->token, "unmatched argument type");
-      }
-
-      arg->resolvedType = implicitCasting(arg->resolvedType, paramType);
+      return ArgMatchKind::Invalid;
     }
   }
 
-  if (!method->returnType) {
-    Error::internal(expr->token, "unresolved return type");
+  if (arg == param) {
+    return ArgMatchKind::Exact;
   }
 
-  // 중요: resolved는 계속 callee(MethodSymbol)로 유지
-  expr->resolvedType = method->returnType;
+  if (canImplicitlyConvert(arg, param)) {
+    return ArgMatchKind::ImplicitCast;
+  }
+
+  return ArgMatchKind::Invalid;
 }
 
 void Resolver::visit(CallExpr *expr) {
@@ -142,8 +197,7 @@ void Resolver::visit(CallExpr *expr) {
       Error::diagnostic(expr->token,
                         "cannot find method name : " + expr->methodName);
     }
-    expr->resolved = it->second.get();
-    ResolveCall(expr);
+    ResolveCall(expr, currentType->memberScope);
     return;
   }
 
@@ -187,15 +241,8 @@ void Resolver::visit(CallExpr *expr) {
                       "memberScope is nullptr: " + ownerType->name);
     }
 
-    auto it = scope->methodMap.find(expr->methodName);
-    if (it == scope->methodMap.end()) {
-      Error::diagnostic(expr->token,
-                        "unknown method name: " + expr->methodName);
-    }
-
     expr->callType = CallExpr::CallType::FUNC_CALL;
-    expr->resolved = it->second.get();
-    ResolveCall(expr);
+    ResolveCall(expr, scope);
     return;
   }
 

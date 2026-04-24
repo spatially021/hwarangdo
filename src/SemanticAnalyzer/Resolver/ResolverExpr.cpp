@@ -12,7 +12,6 @@
 #include "enums/Operator.h"
 #include "util/Error.h"
 #include "util/Guard.h"
-#include <cstddef>
 #include <memory>
 #include <string>
 #include <vector>
@@ -100,6 +99,10 @@ void Resolver::visit(NameExpr *expr) {
       }
       // TODO: 추후 static메서드 추가시 추가 적용 필요.
       Error::internal(expr->token, "expect enum");
+    }
+
+    if (currentType == nullptr) {
+      Error::internal("currentType is nullptr");
     }
 
     if (currentType->baseName.has_value() && currentType->base) {
@@ -289,26 +292,19 @@ void Resolver::visit(SpawnExpr *expr) {
     }
     args.push_back(a->resolvedType);
   }
-  auto it = expr->spawnType->resolved->memberScope->methodMap.find("init");
-  if (it == expr->spawnType->resolved->memberScope->methodMap.end()) {
-    if (args.size() != 0) {
+  auto [result, method] =
+      lookupMethod("init", expr->spawnType->resolved->memberScope, args);
+
+  if (!args.empty()) {
+    if (!result) {
       Error::diagnostic(expr->token,
                         "type '" + expr->spawnType->resolved->name +
                             "' does not have init but arguments were provided");
     }
-  } else {
-    auto init = it->second.get();
-    if (init->paramTypes.size() != args.size()) {
-      Error::diagnostic(expr->token, "unmatched init argument number");
-    }
-    for (size_t i = 0; i < init->paramTypes.size(); ++i) {
-      if (!isAssignable(args[i], init->paramTypes[i])) {
-        Error::diagnostic(expr->args[i]->token,
-                          "unmatched argument type expect '" +
-                              init->paramTypes[i]->name + "' but " +
-                              args[i]->name);
-      }
-    }
+  }
+
+  if (!result) {
+    Error::diagnostic(expr->token, "unmatched init argument number");
   }
 
   vector<TypeSymbol *> temp;

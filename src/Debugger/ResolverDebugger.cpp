@@ -106,10 +106,10 @@ void ResolverDebugger::debug(Scope *scope) {
   if (!scope->methodMap.empty()) {
     cout << ident() << "<methods>\n";
     depth++;
-    for (auto &m : scope->methodMap) {
-      if (m.second == nullptr)
-        continue;
-      cout << ident() << m.second->name << "\n";
+    for (auto &map : scope->methodMap) {
+      for (auto &m : map.second) {
+        cout << ident() << m->name << "\n";
+      }
     }
     depth--;
   }

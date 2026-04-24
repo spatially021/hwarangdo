@@ -151,7 +151,7 @@ private:
   bool addValue(unique_ptr<ValueSymbol> symbol);
   bool addType(unique_ptr<TypeSymbol> symbol);
   bool addMethod(unique_ptr<MethodSymbol> symbol);
-  bool hasSameSig(vector<MethodSymbol *> vec, MethodSymbol *method);
+
   ValueSymbol *getValue(str name);
 
   friend class Resolver;

@@ -33,6 +33,7 @@ enum class HIRTypeKind {
   Root,
 
   NUL,
+  DEFAULT,
 };
 
 class TypeSymbol;
@@ -47,6 +48,10 @@ struct HIRType {
 
 struct HIRVoidType : HIRType {
   HIRVoidType() : HIRType(HIRTypeKind::Void, "void") {}
+};
+
+struct HIRDefaultType : HIRType {
+  HIRDefaultType() : HIRType(HIRTypeKind::DEFAULT, "@default") {}
 };
 
 struct HIRErrorType : HIRType {

@@ -45,6 +45,7 @@ enum class HIRNodeKind {
   MatchExpr,
   EnumConstructExpr,
   TernaryExpr,
+  DefaultValueExpr,
 
   // place
   LocalPlaceExpr,

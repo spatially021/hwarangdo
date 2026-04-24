@@ -49,8 +49,9 @@ struct HIRProgram : HIRNode {
 
   HIRVoidType *voidType = nullptr;
   HIRErrorType *errorType = nullptr;
+  HIRDefaultType *defaultType = nullptr;
 
-  unique_ptr<HIRType> rootType = nullptr;
+  HIRType *rootType = nullptr;
 
   std::vector<unique_ptr<HIRType>> builtIn;
 
@@ -71,11 +72,22 @@ struct HIRProgram : HIRNode {
       typeCache.emplace(table->getBuilt(entry.name), raw);
     }
 
-    builtIn.push_back(make_unique<HIRVoidType>());
-    builtIn.push_back(make_unique<HIRVoidType>());
-    builtIn.push_back(make_unique<HIRErrorType>());
+    unique_ptr<HIRVoidType> vt = make_unique<HIRVoidType>();
+    voidType = vt.get();
+    builtIn.push_back(std::move(vt));
+
+    unique_ptr<HIRErrorType> et = make_unique<HIRErrorType>();
+    errorType = et.get();
+    builtIn.push_back(std::move(et));
+
+    unique_ptr<HIRDefaultType> dt = make_unique<HIRDefaultType>();
+    defaultType = dt.get();
+    builtIn.push_back(std::move(dt));
+
     rootScope = table->rootScope.get();
-    rootType = make_unique<HIRType>(HIRTypeKind::Root, "root");
+    auto rt = make_unique<HIRType>(HIRTypeKind::Root, "root");
+    rootType = rt.get();
+    builtIn.push_back(std::move(rt));
   }
 
   void linkRoot() {

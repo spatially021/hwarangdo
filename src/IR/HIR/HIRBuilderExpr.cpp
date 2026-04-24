@@ -1,3 +1,4 @@
+#include "AST/Decl.h"
 #include "AST/Expr.h"
 #include "IR/HIR/HIRBuilder.h"
 #include "IR/HIR/HIRExpr.h"
@@ -6,6 +7,7 @@
 #include "SemanticAnalyzer/symbol/Symbol.h"
 #include "util/Error.h"
 #include <cassert>
+#include <cstddef>
 #include <memory>
 #include <utility>
 
@@ -16,7 +18,7 @@ unique_ptr<HIRExpr> HIRBuilder::lowerExpr(Expr *expr) {
   exprResult.reset();
   expr->accept(this);
   if (exprResult == nullptr) {
-    Error::internal("expr result nullptr");
+    Error::internal(expr->token, "expr result nullptr");
   }
   return std::move(exprResult);
 }
@@ -61,9 +63,13 @@ std::unique_ptr<HIRExpr> HIRBuilder::lowerCall(CallExpr *expr) {
   }
   HIRMethodDecl *methodDecl = nullptr;
   if (auto method = dynamic_cast<MethodSymbol *>(expr->resolved)) {
-    auto it = currentType->methodMap.find(method);
+    auto typeIt = program->typeDeclMap.find(expr->receiver->resolvedType);
+    if (typeIt == program->typeDeclMap.end()) {
+      Error::internal("fail to get receiver's typeDecl");
+    }
+    auto it = typeIt->second->methodMap.find(method);
     if (it == currentType->methodMap.end()) {
-      Error::internal("fail to find methodDecl");
+      Error::internal(expr->token, "fail to find methodDecl");
     }
     methodDecl = it->second;
   } else {
@@ -71,9 +77,11 @@ std::unique_ptr<HIRExpr> HIRBuilder::lowerCall(CallExpr *expr) {
   }
 
   vector<unique_ptr<HIRExpr>> args;
-
-  for (auto &a : expr->arguments) {
-    args.push_back(lowerExpr(a.get()));
+  for (size_t i = 0; i < expr->arguments.size(); ++i) {
+    auto decl = dynamic_cast<FuncDecl *>(
+        dynamic_cast<MethodSymbol *>(expr->resolved)->decl);
+    args.push_back(
+        lowerCallArg(expr->arguments[i].get(), decl->params[i].get()));
   }
 
   auto it = program->typeCache.find(expr->resolvedType);
@@ -81,9 +89,18 @@ std::unique_ptr<HIRExpr> HIRBuilder::lowerCall(CallExpr *expr) {
   if (it == program->typeCache.end()) {
     Error::internal("fail to find return type");
   }
-
   return make_unique<HIRMethodCallExpr>(std::move(receiver), methodDecl,
                                         std::move(args), it->second);
+}
+
+unique_ptr<HIRValueExpr> HIRBuilder::lowerCallArg(Expr *expr, Param *param) {
+  if (dynamic_cast<DefaultValueExpr *>(expr)) {
+    if (!param->defaultValue.has_value()) {
+      Error::internal(expr->token, "parameter has no default value");
+    }
+    return lowerValue(param->defaultValue.value().get());
+  }
+  return lowerValue(expr);
 }
 
 unique_ptr<HIRExpr> HIRBuilder::lowerAssign(AssignExpr *expr) {

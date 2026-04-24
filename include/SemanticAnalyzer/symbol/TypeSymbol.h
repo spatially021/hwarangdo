@@ -8,6 +8,7 @@
 #include "enums/StorageKind.h"
 #include "util/Error.h"
 #include <llvm/ADT/APInt.h>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -35,9 +36,9 @@ public:
     ARRAY,
   } kind;
 
-  Decl *decl;
-  TypeSymbol *base;
-  optional<string> baseName;
+  Decl *decl = nullptr;
+  TypeSymbol *base = nullptr;
+  optional<string> baseName = nullopt;
   vector<TypeSymbol *> traits;
 
   // class/struct
@@ -56,7 +57,6 @@ public:
   unordered_map<string, vector<TraitSig *>> traitSigs;
 
   bool addMethod(MethodSymbol *symbol);
-  bool hasSameSig(vector<MethodSymbol *> vec, MethodSymbol *symbol);
 
 protected:
   void _anchor() override {};

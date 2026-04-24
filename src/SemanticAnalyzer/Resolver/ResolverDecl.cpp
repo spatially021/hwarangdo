@@ -47,9 +47,13 @@ void Resolver::visit(ImplDecl *decl) {
     Error::internal(decl->token, "fail to find impl");
   }
   ScopeGuard _(*table, implIt->second->memberScope);
+  TypeContextGuard __(currentType, implIt->second->target);
+  auto prev = currentSelf;
+  currentSelf = implIt->second->target->memberScope;
   for (auto &m : decl->LinkedImplMethods) {
     m->accept(this);
   }
+  currentSelf = prev;
 }
 
 void Resolver::visit(TraitDecl *decl) {
@@ -62,9 +66,13 @@ void Resolver::visit(TraitDecl *decl) {
 void Resolver::visit(FuncDecl *decl) {
 
   ScopeGuard _(*table, decl->methodSymbol->scope);
-  decl->body->accept(this);
-
   auto symbol = decl->methodSymbol;
+
+  for (auto &p : decl->params) {
+    p->accept(this);
+    symbol->paramTypes.push_back(p->symbol->typeSymbol);
+  }
+  decl->body->accept(this);
 
   if (decl->returnType.has_value()) {
     auto rt = decl->returnType.value().get();
@@ -188,6 +196,9 @@ void Resolver::visit(Param *param) {
   param->symbol->typeSymbol = param->type->resolved;
   if (!param->symbol->typeSymbol) {
     Error::internal(param->token, "param type is unlinked");
+  }
+  if (param->defaultValue.has_value()) {
+    param->defaultValue.value()->accept(this);
   }
 }
 

@@ -23,6 +23,4 @@ private:
             type->kind == TypeSymbol::TypeKind::STRUCT ||
             type->kind == TypeSymbol::TypeKind::ENUM);
   }
-
-  bool hasSameSig(vector<TraitSig *> vec, TraitSig *sig);
 };

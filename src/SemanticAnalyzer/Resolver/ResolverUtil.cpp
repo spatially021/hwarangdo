@@ -1,5 +1,6 @@
 #include "AST/Expr.h"
 #include "SemanticAnalyzer/Resolver.h"
+#include "SemanticAnalyzer/symbol/MethodSymbol.h"
 #include "SemanticAnalyzer/symbol/TypeSymbol.h"
 #include "SemanticAnalyzer/symbol/ValueSymbol.h"
 #include "util/Error.h"
@@ -286,4 +287,27 @@ llvm::APInt Resolver::resolveFixedArraySize(Expr *expr) {
   }
 
   return value.zextOrTrunc(128);
+}
+
+pair<bool, MethodSymbol *> Resolver::lookupMethod(str name, Scope *scope,
+                                                  vector<TypeSymbol *> args) {
+
+  auto &bucket = scope->methodMap[name];
+  for (auto &m : bucket) {
+    if (m->paramTypes.size() != args.size()) {
+      continue;
+    }
+    bool flag = true;
+    for (unsigned int i = 0; i < args.size(); ++i) {
+      if (m->paramTypes[i] != args[i]) {
+        flag = false;
+        break;
+      }
+    }
+    if (flag) {
+      return {true, m};
+    }
+  }
+
+  return {false, nullptr};
 }

@@ -1,4 +1,5 @@
 #include "IR/HIR/HIRLinker.h"
+#include "AST/Decl.h"
 #include "SemanticAnalyzer/symbol/TypeSymbol.h"
 #include <memory>
 
@@ -21,7 +22,9 @@ TypeSymbol *HIRLinker::getTypeSymbolFromDecl(Decl *decl,
   if (dynamic_cast<TraitDecl *>(decl)) {
     return nullptr;
   }
-
+  if (dynamic_cast<ImplDecl *>(decl)) {
+    return nullptr;
+  }
   Error::internal(decl->token, "unmatched decl type");
 }
 

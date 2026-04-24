@@ -248,3 +248,8 @@ struct HIRMatchExpr : HIRValueExpr {
       : HIRValueExpr(HIRNodeKind::MatchExpr, ty, s), target(t),
         arms(std::move(a)), isExhaustive(exhaustive) {}
 };
+
+struct HIRDefaultValueExpr : HIRValueExpr {
+  HIRDefaultValueExpr(HIRType *ty, SourceSpan s = {})
+      : HIRValueExpr(HIRNodeKind::DefaultValueExpr, ty, s) {}
+};

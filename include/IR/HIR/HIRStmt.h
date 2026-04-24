@@ -1,6 +1,5 @@
 #pragma once
 
-#include "IR/HIR/HIRExpr.h"
 #include "IR/HIR/HIRNode.h"
 #include "IR/HIR/HIRSymbol.h"
 #include "SemanticAnalyzer/symbol/ValueSymbol.h"
@@ -86,16 +85,30 @@ struct HIRContinueStmt : HIRStmt {
   HIRContinueStmt(SourceSpan s = {}) : HIRStmt(HIRNodeKind::ContinueStmt, s) {}
 };
 
-struct HIRCaseStmt : HIRStmt {
-  std::vector<std::unique_ptr<HIRExpr>> selectors; // literal or enum variant
+enum class HIRBranchKind {
+  Match,
+  Swtich,
 
+};
+
+struct HIRValueExpr;
+
+struct HIRCase : HIRStmt {
+  std::vector<std::unique_ptr<HIRValueExpr>>
+      selectors; // literal or enum variant
   std::unique_ptr<HIRBlockStmt> body;
+  bool isDefault = false;
+  HIRCase(vector<std::unique_ptr<HIRValueExpr>> sl, unique_ptr<HIRBlockStmt> b,
+          bool d = false, SourceSpan s = {})
+      : HIRStmt(HIRNodeKind::Case, s), selectors(std::move(sl)),
+        body(std::move(b)), isDefault(d) {}
 };
 
 struct HIRSwitchStmt : HIRStmt {
-  HIRExpr *condition;
-
-  std::vector<std::unique_ptr<HIRCaseStmt>> cases;
-
-  HIRBlockStmt *defaultBlock; // nullable
+  std::unique_ptr<HIRValueExpr> cond;
+  std::vector<std::unique_ptr<HIRCase>> cases;
+  HIRSwitchStmt(unique_ptr<HIRValueExpr> c, vector<unique_ptr<HIRCase>> ca,
+                SourceSpan s = {})
+      : HIRStmt(HIRNodeKind::SwitchStmt, s), cond(std::move(c)),
+        cases(std::move(ca)) {}
 };

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "IR/HIR/HIRNode.h"
+#include "IR/HIR/HIRStmt.h"
 #include "IR/HIR/HIRSymbol.h"
 #include "IR/HIR/HIRType.h"
 #include "SemanticAnalyzer/ResolvedLit.h"
@@ -8,6 +9,7 @@
 #include "vector"
 #include <memory>
 #include <utility>
+#include <vector>
 
 struct HIRMethodDecl;
 
@@ -236,21 +238,14 @@ struct HIRWildcardPattern : HIRPattern {
       : HIRPattern(HIRNodeKind::WildcardPattern, s) {}
 };
 
-struct HIRMatchArm {
-  HIRPattern *pattern = nullptr;
-  struct HIRBlockStmt *body = nullptr;
-  HIRExpr *resultValue = nullptr; // << expr; lowered result
-};
-
 struct HIRMatchExpr : HIRValueExpr {
-  HIRExpr *target = nullptr;
-  std::vector<HIRMatchArm> arms;
-  bool isExhaustive = false;
+  unique_ptr<HIRValueExpr> cond = nullptr;
+  vector<unique_ptr<HIRCase>> cases;
 
-  HIRMatchExpr(HIRType *ty, HIRExpr *t, std::vector<HIRMatchArm> a,
-               bool exhaustive, SourceSpan s = {})
-      : HIRValueExpr(HIRNodeKind::MatchExpr, ty, s), target(t),
-        arms(std::move(a)), isExhaustive(exhaustive) {}
+  HIRMatchExpr(HIRType *ty, unique_ptr<HIRValueExpr> c,
+               vector<unique_ptr<HIRCase>> ca, SourceSpan s = {})
+      : HIRValueExpr(HIRNodeKind::MatchExpr, ty, s), cond(std::move(c)),
+        cases(std::move(ca)) {}
 };
 
 struct HIRDefaultValueExpr : HIRValueExpr {

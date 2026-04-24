@@ -29,6 +29,7 @@ enum class HIRNodeKind {
   BreakStmt,
   ContinueStmt,
   SwitchStmt,
+  Case,
   OnExitStmt,
 
   // expr

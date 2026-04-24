@@ -2,10 +2,7 @@
 #include "AST/Decl.h"
 #include "AST/Expr.h"
 #include "AST/Stmt.h"
-<<<<<<< HEAD
 #include "SemanticAnalyzer/ResolvedLit.h"
-=======
->>>>>>> dd7486765f77f2c69a9a91ef8a8c9197d27e5710
 #include "SemanticAnalyzer/Resolver.h"
 #include "SemanticAnalyzer/symbol/MethodSymbol.h"
 #include "SemanticAnalyzer/symbol/Symbol.h"
@@ -13,10 +10,7 @@
 #include "SemanticAnalyzer/symbol/ValueSymbol.h"
 #include "util/Error.h"
 #include "util/Guard.h"
-<<<<<<< HEAD
 #include <llvm/ADT/APInt.h>
-=======
->>>>>>> dd7486765f77f2c69a9a91ef8a8c9197d27e5710
 #include <string>
 
 void Resolver::visit(ClassDecl *decl) {

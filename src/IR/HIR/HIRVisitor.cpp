@@ -12,6 +12,7 @@
 #include "util/Guard.h"
 #include <memory>
 #include <utility>
+#include <vector>
 using std::unique_ptr;
 
 void HIRBuilder::visit(LiteralExpr *expr) {
@@ -185,10 +186,11 @@ void HIRBuilder::visit(WhileStmt *stmt) {
   emit(make_unique<HIRWhileStmt>(std::move(cond), std::move(body)));
 }
 void HIRBuilder::visit(SwitchStmt *stmt) {
-  unique_ptr<HIRExpr> value = lowerExpr(stmt->value.get());
-  HIRLocal *temp = makeTemp(value->type);
-  unique_ptr<HIRLocalPlaceExpr> tempPlace =
-      make_unique<HIRLocalPlaceExpr>(temp);
+  unique_ptr<HIRValueExpr> cond = lowerValue(stmt->value.get());
+  vector<unique_ptr<HIRCase>> cases;
+  for (auto &c : stmt->clauses) {
+  }
+  emit(make_unique<HIRSwitchStmt>(std::move(cond), std::move(cases)));
 }
 void HIRBuilder::visit(Case *) {}
 

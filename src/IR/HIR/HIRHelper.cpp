@@ -1,12 +1,17 @@
 
 #include "AST/Decl.h"
 #include "IR/HIR/HIRBuilder.h"
+#include "IR/HIR/HIRDecl.h"
 #include "IR/HIR/HIRExpr.h"
 #include "IR/HIR/HIRSymbol.h"
+#include "IR/HIR/HIRType.h"
+#include "SemanticAnalyzer/symbol/MethodSymbol.h"
 #include "SemanticAnalyzer/symbol/ValueSymbol.h"
 #include "util/Error.h"
+#include "util/Guard.h"
 #include <cassert>
 #include <memory>
+#include <utility>
 using std::unique_ptr;
 
 unique_ptr<HIRSelfExpr> HIRBuilder::lowerImplictSelf() {
@@ -73,13 +78,20 @@ int HIRBuilder::allocMethodID() {
 }
 
 int HIRBuilder::allocParamID() {
-  assert(currentMethod);
+  if (currentMethod == nullptr) {
+    Error::internal("currentMethod is nullptr");
+  }
   return currentMethod->nextParamID++;
 }
 
 int HIRBuilder::allocFieldID() {
   assert(currentType);
   return currentType->nextFieldId++;
+}
+
+int HIRBuilder::allocRootID() {
+  assert(program);
+  return program->nextRootId++;
 }
 
 void HIRBuilder::bindLocal(ValueSymbol *symbol, unique_ptr<HIRLocal> local) {
@@ -90,19 +102,18 @@ void HIRBuilder::bindLocal(ValueSymbol *symbol, unique_ptr<HIRLocal> local) {
 }
 
 void HIRBuilder::bindMethod(FuncDecl *decl) {
-  auto method = lowerMethodDecl(decl);
-  auto raw = method.get();
-
   auto it = program->typeDeclMap.find(decl->methodSymbol->onwer);
-
   if (it == program->typeDeclMap.end()) {
-    Error::internal(decl->token, "fail to find owner type");
+    Error::internal(decl->token, "fail to find method's owner type");
   }
   auto type = it->second;
-  type->methods.push_back(std::move(method));
-  type->methodMap.emplace(decl->methodSymbol, raw);
-
-  currentMethod = raw;
+  auto mIT = type->methodMap.find(decl->methodSymbol);
+  if (mIT == type->methodMap.end()) {
+    Error::internal(decl->token, "fail to find method");
+  }
+  auto method = mIT->second;
+  MethodGuard _(currentMethod, method);
+  method->body = lowerStmtAsBlock(decl->body.get());
 }
 
 void HIRBuilder::bindField(ValueSymbol *symbol, unique_ptr<HIRField> field) {
@@ -148,4 +159,11 @@ pair<bool, HIREnumVariant *>
 HIRBuilder::lookupVariant(EnumVariantSymbol *symbol) {
   auto it = program->variantMap.find(symbol);
   return {it != program->variantMap.end(), it->second};
+}
+
+pair<bool, HIRMethodDecl *> HIRBuilder::lookupMethod(HIRTypeDecl *type,
+                                                     MethodSymbol *symbol) {
+  auto it = type->methodMap.find(symbol);
+  bool b = it != type->methodMap.end();
+  return {b, b ? it->second : nullptr};
 }

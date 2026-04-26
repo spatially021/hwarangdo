@@ -65,6 +65,10 @@ void Builder::visit(ViewExpr *expr) {
   expr->left->accept(this);
   expr->target->accept(this);
 }
+void Builder::visit(DestroyExpr *expr){
+  expr->storage->accept(this);
+  expr->target->accept(this);
+}
 void Builder::visit(DefaultValueExpr *) {}
 void Builder::visit(Range *expr) {
   expr->from->accept(this);

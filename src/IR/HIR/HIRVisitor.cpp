@@ -5,6 +5,7 @@
 #include "IR/HIR/HIRExpr.h"
 #include "IR/HIR/HIRStmt.h"
 #include "IR/HIR/HIRSymbol.h"
+#include "IR/HIR/HIRType.h"
 #include "SemanticAnalyzer/SymbolTable.h"
 #include "SemanticAnalyzer/symbol/Symbol.h"
 #include "SemanticAnalyzer/symbol/TypeSymbol.h"
@@ -13,6 +14,7 @@
 #include <memory>
 #include <utility>
 #include <vector>
+
 using std::unique_ptr;
 
 void HIRBuilder::visit(LiteralExpr *expr) {
@@ -132,77 +134,42 @@ void HIRBuilder::visit(CastExpr *expr) {
   exprResult = lowerCast(expr);
   return;
 }
-void HIRBuilder::visit(BuiltInNameExpr *expr) {}
-void HIRBuilder::visit(SpawnExpr *expr) {}
-void HIRBuilder::visit(ViewExpr *expr) {}
+void HIRBuilder::visit(BuiltInNameExpr *) {}
+void HIRBuilder::visit(SpawnExpr *expr) {
+  exprResult = lowerSpawn(expr);
+  return;
+}
+void HIRBuilder::visit(ViewExpr *expr) {
+  exprResult = lowerView(expr);
+  return;
+}
+void HIRBuilder::visit(DestroyExpr *expr) {
+  Error::internal(expr->token, "not allowed destroy in expression");
+}
 void HIRBuilder::visit(DefaultValueExpr *) {}
 void HIRBuilder::visit(Range *) {
   // for내부에서 처리
 }
-void HIRBuilder::visit(CaseValueExpr *expr) {}
-void HIRBuilder::visit(MatchExpr *expr) {}
+void HIRBuilder::visit(CaseValueExpr *) {}
+void HIRBuilder::visit(MatchExpr *expr) { exprResult = lowerMatch(expr); }
 
 // Statement HIRBuilder::visitor methods
-void HIRBuilder::visit(ExprStmt *stmt) {
-  auto expr = lowerExpr(stmt->expr.get());
-  emit(make_unique<HIRExprStmt>(std::move(expr)));
-}
+void HIRBuilder::visit(ExprStmt *stmt) { emit(lowerExprStmt(stmt)); }
 void HIRBuilder::visit(BlockStmt *stmt) {
   BoolGuard _(isField, false);
   emit(lowerBlock(stmt));
 }
-void HIRBuilder::visit(IfStmt *stmt) {
-  unique_ptr<HIRExpr> cond = lowerExpr(stmt->condition.get());
-  unique_ptr<HIRBlockStmt> thenBlock = lowerStmtAsBlock(stmt->thenBranch.get());
-  unique_ptr<HIRBlockStmt> elseBlock =
-      stmt->elseBranch ? lowerStmtAsBlock(stmt->elseBranch.get()) : nullptr;
-  emit(make_unique<HIRIfStmt>(std::move(cond), std::move(thenBlock),
-                              std::move(elseBlock)));
-}
-void HIRBuilder::visit(ForStmt *stmt) {
-  HIRLocal *local = nullptr;
-
-  if (auto d = dynamic_cast<DeclStmt *>(stmt->initializer.get())) {
-    if (auto v = dynamic_cast<VarDecl *>(d->decl.get())) {
-      local = lowerLocal(v);
-    } else {
-      Error::internal(stmt->token, "for initializer decl is not VarDecl");
-    }
-  } else {
-    Error::internal(stmt->token, "for initializer is not DeclStmt");
-  }
-
-  auto from = lowerExpr(stmt->range->from.get());
-  auto to = lowerExpr(stmt->range->to.get());
-  auto step = lowerExpr(stmt->range->step.get());
-  auto body = lowerStmtAsBlock(stmt->body.get());
-
-  emit(make_unique<HIRForRangeStmt>(local, std::move(from), std::move(to),
-                                    std::move(step), std::move(body)));
-}
-void HIRBuilder::visit(WhileStmt *stmt) {
-  unique_ptr<HIRExpr> cond = lowerExpr(stmt->condition.get());
-  unique_ptr<HIRBlockStmt> body = lowerStmtAsBlock(stmt->body.get());
-  emit(make_unique<HIRWhileStmt>(std::move(cond), std::move(body)));
-}
-void HIRBuilder::visit(SwitchStmt *stmt) {
-  unique_ptr<HIRValueExpr> cond = lowerValue(stmt->value.get());
-  vector<unique_ptr<HIRCase>> cases;
-  for (auto &c : stmt->clauses) {
-  }
-  emit(make_unique<HIRSwitchStmt>(std::move(cond), std::move(cases)));
-}
+void HIRBuilder::visit(IfStmt *stmt) { emit(lowerIf(stmt)); }
+void HIRBuilder::visit(ForStmt *stmt) { emit(lowerFor(stmt)); }
+void HIRBuilder::visit(WhileStmt *stmt) { emit(lowerWhile(stmt)); }
+void HIRBuilder::visit(SwitchStmt *stmt) { emit(lowerSwitch(stmt)); }
 void HIRBuilder::visit(Case *) {}
 
-void HIRBuilder::visit(ReturnStmt *stmt) {
-  std::unique_ptr<HIRExpr> expr = nullptr;
-  if (stmt->value) {
-    expr = lowerExpr(stmt->value.get());
-  }
-  emit(make_unique<HIRReturnStmt>(std::move(expr)));
-}
+void HIRBuilder::visit(ReturnStmt *stmt) { emit(lowerReturn(stmt)); }
 
-void HIRBuilder::visit(ValueTransferStmt *stmt) {}
+void HIRBuilder::visit(ValueTransferStmt *stmt) {
+  emit(lowerValueTransfer(stmt));
+}
 void HIRBuilder::visit(BreakStmt *) { emit(make_unique<HIRBreakStmt>()); }
 void HIRBuilder::visit(ContinueStmt *) { emit(make_unique<HIRContinueStmt>()); }
 void HIRBuilder::visit(DeclStmt *stmt) { stmt->decl->accept(this); }
@@ -297,7 +264,7 @@ void HIRBuilder::visit(TraitSig *) {}
 void HIRBuilder::visit(FuncDecl *decl) { bindMethod(decl); }
 void HIRBuilder::visit(VarDecl *decl) {
   if (decl->isRoot) {
-    // TODO:전역 구현
+    // process in program
   } else {
     if (isField) {
       auto field = lowerField(decl);

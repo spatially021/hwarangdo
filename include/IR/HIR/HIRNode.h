@@ -31,6 +31,8 @@ enum class HIRNodeKind {
   SwitchStmt,
   Case,
   OnExitStmt,
+  ValueTransferStmt,
+  DestroyStmt,
 
   // expr
   LiteralExpr,

@@ -4,11 +4,9 @@
 #include "IR/HIR/HIRExpr.h"
 #include "IR/HIR/HIRSymbol.h"
 #include "util/Error.h"
-#include "util/Guard.h"
 #include <cassert>
 #include <memory>
 #include <utility>
-#include <vector>
 
 HIRLocal *HIRBuilder::lowerLocal(VarDecl *decl) {
   unique_ptr<HIRLocal> local = make_unique<HIRLocal>();
@@ -54,29 +52,6 @@ HIRField *HIRBuilder::lowerField(VarDecl *decl) {
   auto raw = field.get();
   bindField(decl->symbol, std::move(field));
   return raw;
-}
-
-unique_ptr<HIRMethodDecl> HIRBuilder::lowerMethodDecl(FuncDecl *decl) {
-  assert(decl);
-  assert(decl->methodSymbol);
-  auto method = make_unique<HIRMethodDecl>(currentType, allocMethodID(),
-                                           decl->name, decl->methodSymbol);
-
-  auto *raw = method.get();
-
-  method->isAsync = false;
-  method->isInit = decl->methodSymbol->isInit;
-  method->returnType = lowerType(decl->methodSymbol->returnType);
-  vector<unique_ptr<HIRParam>> params;
-  for (auto &param : decl->params) {
-    params.push_back(lowerParam(param.get()));
-  }
-  method->setParam(std::move(params));
-  {
-    MethodGuard _(currentMethod, raw);
-    method->body = lowerStmtAsBlock(decl->body.get());
-  }
-  return method;
 }
 
 unique_ptr<HIREnumVariant> HIRBuilder::lowerEnumVariant(EnumDecl::Variant *v) {

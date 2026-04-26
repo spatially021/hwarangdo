@@ -11,6 +11,7 @@
 #include "IR/HIR/HIRSymbol.h"
 #include "IR/HIR/HIRType.h"
 #include "SemanticAnalyzer/SymbolTable.h"
+#include "SemanticAnalyzer/symbol/MethodSymbol.h"
 #include "SemanticAnalyzer/symbol/TypeSymbol.h"
 #include "SemanticAnalyzer/symbol/ValueSymbol.h"
 #include "util/Error.h"
@@ -59,24 +60,29 @@ private:
                                            StorageKind storage);
 
   // decl
-  std::unique_ptr<HIRMethodDecl> lowerMethodDecl(FuncDecl *decl);
   HIRLocal *lowerLocal(VarDecl *decl);
   HIRField *lowerField(VarDecl *decl);
   unique_ptr<HIRParam> lowerParam(Param *param);
   std::unique_ptr<HIREnumVariant> lowerEnumVariant(EnumDecl::Variant *variant);
 
   // stmt
-  std::unique_ptr<HIRStmt> lowerStmt(/* AST stmt */);
   std::unique_ptr<HIRBlockStmt> lowerBlock(BlockStmt *stmt);
   std::unique_ptr<HIRBlockStmt> lowerStmtAsBlock(Stmt *stmt);
-  std::unique_ptr<HIRStmt> lowerSwitch(/* AST switch */);
-  std::unique_ptr<HIRStmt> lowerOnExit(/* AST onexit */);
+  std::unique_ptr<HIRStmt> lowerSwitch(SwitchStmt *stmt);
+  std::unique_ptr<HIRCase> lowerCase(Case *stmt);
+  std::unique_ptr<HIRStmt> lowerFor(ForStmt *stmt);
+  std::unique_ptr<HIRStmt> lowerIf(IfStmt *stmt);
+  std::unique_ptr<HIRStmt> lowerWhile(WhileStmt *stmt);
+  std::unique_ptr<HIRStmt> lowerReturn(ReturnStmt *stmt);
+  std::unique_ptr<HIRStmt> lowerValueTransfer(ValueTransferStmt *stmt);
+  std::unique_ptr<HIRStmt> lowerExprStmt(ExprStmt *stmt);
+  std::unique_ptr<HIRStmt> lowerDestroyStmt(DestroyExpr *expr);
 
   // expr
   std::unique_ptr<HIRExpr> lowerExpr(Expr *expr);
-  std::unique_ptr<HIRExpr> lowerMatch(/* AST match */);
-  std::unique_ptr<HIRExpr> lowerSpawn(/* AST spawn */);
-  std::unique_ptr<HIRExpr> lowerView(/* AST view */);
+  std::unique_ptr<HIRExpr> lowerMatch(MatchExpr *expr);
+  std::unique_ptr<HIRExpr> lowerSpawn(SpawnExpr *expr);
+  std::unique_ptr<HIRExpr> lowerView(ViewExpr *expr);
   std::unique_ptr<HIRExpr> lowerCall(CallExpr *expr);
   std::unique_ptr<HIRExpr> lowerImplictCall(CallExpr *expr);
   std::unique_ptr<HIRExpr> lowerAssign(AssignExpr *expr);
@@ -129,14 +135,12 @@ private:
   }
 
   int allocLocalID();
-
   int allocMethodID();
-
   int allocParamID();
   int allocFieldID();
+  int allocRootID();
 
   void bindLocal(ValueSymbol *symbol, unique_ptr<HIRLocal> local);
-
   void bindField(ValueSymbol *symbol, unique_ptr<HIRField> field);
   void bindMethod(FuncDecl *decl);
 
@@ -144,6 +148,7 @@ private:
   pair<bool, HIRParam *> lookupParam(ValueSymbol *symbol);
   pair<bool, HIRField *> lookupField(ValueSymbol *symbol);
   pair<bool, HIRField *> lookupField(HIRTypeDecl *type, ValueSymbol *symbol);
+  pair<bool, HIRMethodDecl *> lookupMethod(HIRTypeDecl *, MethodSymbol *symbol);
 
   bool isTypeReceiver(Expr *expr);
   pair<bool, HIREnumVariant *> lookupVariant(EnumVariantSymbol *symbol);

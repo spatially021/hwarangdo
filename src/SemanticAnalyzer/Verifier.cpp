@@ -44,6 +44,10 @@ void Verifier::visit(CallExpr *expr) {
   } else {
     unresolved(expr, "callExpr unresolved");
   }
+
+  if (expr->resolvedType == nullptr) {
+    unresolved(expr, "callExpr's resolvedType is unresolved");
+  }
 }
 void Verifier::visit(AssignExpr *expr) {
   expr->target->accept(this);
@@ -87,14 +91,22 @@ void Verifier::visit(SpawnExpr *expr) {
     p->accept(this);
   }
   if (expr->resolvedType == nullptr) {
-    unresolved(expr, "castExpr is unresolved");
+    unresolved(expr, "spawnExpr is unresolved");
   }
 }
 void Verifier::visit(ViewExpr *expr) {
   expr->left->accept(this);
   expr->target->accept(this);
   if (expr->resolvedType == nullptr) {
-    unresolved(expr, "castExpr is unresolved");
+    unresolved(expr, "viewExpr is unresolved");
+  }
+}
+
+void Verifier::visit(DestroyExpr *expr) {
+  expr->storage->accept(this);
+  expr->target->accept(this);
+  if (expr->resolvedType == nullptr) {
+    unresolved(expr, "destroyExpr is unresolved");
   }
 }
 void Verifier::visit(DefaultValueExpr *) {}

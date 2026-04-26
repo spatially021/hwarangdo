@@ -395,7 +395,7 @@ int main(int argc, char *argv[]) {
   try {
     vector<HIRSource *> sources;
     for (auto &s : program->sources) {
-      HIRLinker linker(hirProgram.get(), s.get());
+      HIRLinker linker(hirProgram.get(), s.get(), &analyzer.symbolTable);
       hirProgram->sources.push_back(linker.link());
     }
     hirProgram->linkRoot();

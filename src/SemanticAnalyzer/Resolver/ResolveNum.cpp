@@ -6,66 +6,11 @@
 #include "llvm/ADT/APInt.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Support/Error.h"
-#include <cstddef>
 #include <llvm/ADT/APFloat.h>
 
 const string max32 = "2147483647";
 const string max64 = "9223372036854775807";
 const string max128 = "170141183460469231731687303715884105727";
-
-static int compareUnsignedDecimal(const std::string &a, const std::string &b) {
-  if (a.size() < b.size())
-    return -1;
-  if (a.size() > b.size())
-    return 1;
-  if (a < b)
-    return -1;
-  if (a > b)
-    return 1;
-  return 0;
-}
-
-ResolvedLit Resolver::resolveLitInt(LiteralExpr *expr) {
-  std::string s = expr->value;
-
-  size_t pos = s.find_first_not_of('0');
-  if (pos == std::string::npos) {
-    s = "0";
-  } else {
-    s = s.substr(pos);
-  }
-
-  unsigned bits = 0;
-
-  if (compareUnsignedDecimal(s, max32) <= 0) {
-    bits = 32;
-  } else if (compareUnsignedDecimal(s, max64) <= 0) {
-    bits = 64;
-  } else if (compareUnsignedDecimal(s, max128) <= 0) {
-    bits = 128;
-  } else {
-    Error::diagnostic(expr->token, "unsupported integer bit width");
-  }
-
-  ResolvedLit resolvedLit;
-
-  switch (bits) {
-  case 32:
-    resolvedLit.type = table->getType("i32");
-    break;
-  case 64:
-    resolvedLit.type = table->getType("i64");
-    break;
-  case 128:
-    resolvedLit.type = table->getType("i128");
-    break;
-  default:
-    Error::internal(expr->token, "invalid integer literal bit width");
-  }
-
-  resolvedLit.value = IntPayload(llvm::APInt(bits, llvm::StringRef(s), 10));
-  return resolvedLit;
-}
 
 bool Resolver::fitsFloatRange(const llvm::APFloat &base,
                               const llvm::fltSemantics &sem) {

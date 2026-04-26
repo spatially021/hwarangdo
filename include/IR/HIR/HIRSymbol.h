@@ -41,6 +41,16 @@ struct HIRLocal {
   bool isMutable = true;
   bool isInitialized = false;
 };
+
+struct HIRRoot {
+  int id = -1;
+  std::string name;
+  HIRType *type = nullptr;
+  ValueSymbol *symbol = nullptr;
+  bool isMutable = true;
+  bool isInitialized = false;
+};
+
 enum class HIREnumVariantKind {
   Unit,    // payload 없음
   Payload, // payload 하나 있음

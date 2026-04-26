@@ -12,6 +12,7 @@
 #include "enums/Operator.h"
 #include "util/Error.h"
 #include "util/Guard.h"
+#include "util/TypeResolver.h"
 #include <memory>
 #include <string>
 #include <vector>
@@ -20,7 +21,7 @@ void Resolver::visit(LiteralExpr *expr) {
   ResolvedLit r;
   switch (expr->token.kind) {
   case TKind::LIT_INT:
-    r = resolveLitInt(expr);
+    r = TypeResolver::resolveLitInt(expr, table);
     expr->resolvedType = r.type;
     expr->resolvedLit = r;
     break;
@@ -179,11 +180,19 @@ void Resolver::visit(MemberExpr *expr) {
   }
 
   auto s = expr->object->resolvedType;
+
   if (dynamic_cast<GenericSymbol *>(s)) {
     Error::diagnostic(expr->token, "cannot access field with handle : " +
                                        expr->object->token.text);
   }
-  auto scope = s->memberScope;
+
+  Scope *scope = nullptr;
+  if (s == table->main) {
+    scope = table->rootScope.get();
+  } else {
+    scope = s->memberScope;
+  }
+
   if (!scope)
     Error::diagnostic(expr->token, "type has no members : " + expr->token.text);
 
@@ -276,6 +285,7 @@ void Resolver::visit(SpawnExpr *expr) {
                         "expect world or arena but " + expr->left->token.text);
     }
   }
+  expr->spawnType->accept(this);
 
   if (!expr->spawnType->resolved) {
     Error::internal(expr->token, "fail to resolve spawn type");
@@ -310,6 +320,7 @@ void Resolver::visit(SpawnExpr *expr) {
   vector<TypeSymbol *> temp;
   temp.push_back(expr->spawnType->resolved);
   expr->resolvedType = table->GenericInsGetOrCreate(table->getHandle(), temp);
+  expr->resolvedInit = method;
 }
 
 void Resolver::visit(ViewExpr *expr) {
@@ -321,6 +332,44 @@ void Resolver::visit(ViewExpr *expr) {
   }
   if (expr->left->resolvedType != table->getBuiltName()) {
     Error::internal(expr->token, "unmatched type : " + expr->left->token.text);
+  }
+
+  expr->target->accept(this);
+  auto generic = dynamic_cast<GenericSymbol *>(expr->target->resolvedType);
+  if (!generic) {
+    Error::diagnostic(expr->token, expr->target->token.text +
+                                       " - in view only allowed handle : " +
+                                       expr->target->resolvedType->name);
+  }
+  if (generic->origin != table->getHandle()) {
+    Error::diagnostic(expr->token, "in view only allowed handle : " +
+                                       expr->target->token.text);
+  }
+
+  if (!canPlaceView(
+          expr->target)) { // spawnExpr등 올수 없는 형태의 표현식인지 확인
+    Error::diagnostic(expr->token, "this expression not allowed here");
+  }
+
+  if (auto h = dynamic_cast<GenericSymbol *>(expr->target->resolvedType)) {
+    if (h->origin != table->getHandle()) {
+      Error::diagnostic(expr->token, "in view only allowed handle");
+    }
+    expr->resolvedType = h->args[0];
+  } else {
+    Error::diagnostic(expr->token, "in view only allowed handle");
+  }
+}
+
+void Resolver::visit(DestroyExpr *expr) {
+  expr->storage->accept(this);
+  if (!expr->storage->resolvedType) {
+    Error::internal(expr->storage->token,
+                    "fail to resolve type : " + expr->storage->token.text);
+  }
+  if (expr->storage->resolvedType != table->getBuiltName()) {
+    Error::internal(expr->token,
+                    "unmatched type : " + expr->storage->token.text);
   }
 
   expr->target->accept(this);

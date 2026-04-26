@@ -118,7 +118,7 @@ class Case : public ASTNode {
 public:
   vector<ExprPtr> values;
   Stmt::Ptr body;
-  bool isDefault;
+  bool isDefault = false;
   void accept(ASTVisitor *visitor) override { visitor->visit(this); }
   Case(Token t, vector<ExprPtr> v, Stmt::Ptr b, bool is = false)
       : ASTNode(NKind::SWITCH_CASE, t), values(std::move(v)), body(b),

@@ -43,7 +43,6 @@ public:
   ValueSymbol *resolveValue(str name);
   ValueSymbol *lookLocalValue(str name, Scope *localScope);
 
-  ResolvedLit resolveLitInt(LiteralExpr *expr);
   ResolvedLit resolveLitFloat(LiteralExpr *expr);
   ResolvedLit resolveChar(LiteralExpr *expr);
   ResolvedLit resolveString(LiteralExpr *expr);

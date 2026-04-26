@@ -10,6 +10,7 @@
 #include "SemanticAnalyzer/symbol/ValueSymbol.h"
 #include "util/Error.h"
 #include "util/Guard.h"
+#include "util/TypeResolver.h"
 #include <llvm/ADT/APInt.h>
 #include <string>
 
@@ -102,9 +103,6 @@ void Resolver::visit(VarDecl *decl) {
   if (decl->init) {
     decl->init->accept(this);
   }
-  decl->type->accept(this);
-
-  decl->symbol->typeSymbol = decl->type->resolved;
 
   if (!decl->type->resolved) {
     Error::internal(decl->token, "decl->type->resolved is nullptr");
@@ -115,77 +113,12 @@ void Resolver::visit(VarDecl *decl) {
 }
 
 void Resolver::visit(TypeNode *type) {
-  if (dynamic_cast<BuiltinTypeNode *>(type) ||
-      dynamic_cast<IdentifierTypeNode *>(type)) {
-    auto symbol = table->getType(type);
-    if (!symbol)
-      Error::diagnostic(type->token, "unknown type : " + type->token.text);
-    type->resolved = symbol;
-  } else if (auto a = dynamic_cast<ArrayTypeNode *>(type)) {
-
-    a->elementType->accept(this);
-    llvm::APInt size = resolveFixedArraySize(a->fixedSize.get());
-    a->resolved = table->arrayTypeGetOrCreate(a->elementType->resolved, size);
-
-  } else if (auto g = dynamic_cast<GenericTypeNode *>(type)) {
-    auto ar = g->typeArgs;
-    TypeSymbol *orign = nullptr;
-    vector<TypeSymbol *> args;
-    for (auto &t : g->typeArgs) {
-      t->accept(this);
-      if (!t->resolved) {
-        Error::internal(t->token,
-                        "fail to resolve args Type : " + t->token.text);
-      }
-      args.push_back(t->resolved);
-    }
-
-    switch (g->gKind) {
-    case GenericTypeNode::GenericKind::HANDLE:
-
-      if (args.size() != 1) {
-        Error::diagnostic(g->token, "Handle need one type but '" +
-                                        to_string(args.size()) + "'");
-      }
-
-      if (ar[0]->resolved->kind == TypeSymbol::TypeKind::PRIMITIVE) {
-        Error::diagnostic(ar[0]->token, "not allowed handle target type : " +
-                                            ar[0]->token.text);
-      }
-      if (ar[0]->resolved->type == Symbol::SymbolType::MAIN) {
-        Error::diagnostic(ar[0]->token, "not allowed handle target type : " +
-                                            ar[0]->token.text);
-      }
-
-      orign = table->getHandle();
-      break;
-    case GenericTypeNode::GenericKind::OPTION:
-      if (args.size() != 1) {
-        Error::diagnostic(g->token, "Option need one type but '" +
-                                        to_string(args.size()) + "'");
-      }
-      orign = table->getOption();
-      break;
-    case GenericTypeNode::GenericKind::RESULT:
-      if (args.size() != 2) {
-        Error::diagnostic(g->token, "Result neet two type but '" +
-                                        to_string(args.size()) + "'");
-      }
-      if (args[1]->kind != TypeSymbol::TypeKind::ERROR) {
-        Error::diagnostic(g->token, "Result's second type is Error but '" +
-                                        args[1]->name);
-      }
-      break;
-    }
-    g->resolved = table->GenericInsGetOrCreate(orign, args);
-  } else {
-    Error::diagnostic(type->token, "unknown type : " + type->token.text);
-  }
+  TypeResolver::resolveTypeNode(type, table);
 }
 void Resolver::visit(ASTNode *) {}
 
 void Resolver::visit(TraitSig *sig) {
-  sig->type->accept(this);
+
   for (auto p : sig->params) {
     p->accept(this);
     p->symbol->typeSymbol = p->type->resolved;

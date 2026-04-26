@@ -25,6 +25,8 @@ struct HIRSource : HIRNode {
   std::vector<std::unique_ptr<HIRMethodDecl>> methodDecls;
   std::vector<std::unique_ptr<HIRTypeDecl>> typeDecls;
   std::vector<std::unique_ptr<HIRType>> types;
+  vector<unique_ptr<HIRHandleType>> handles;
+  vector<unique_ptr<HIRObserverType>> observers;
   SourceFile *source = nullptr;
   HIRSource(SourceFile *s) : HIRNode(HIRNodeKind::Source), source(s) {}
 };
@@ -39,8 +41,9 @@ struct HIRProgram : HIRNode {
 
   unordered_map<TypeSymbol *, HIRType *> typeCache;
   unordered_map<TypeSymbol *, HIRTypeDecl *> typeDeclMap;
-
   unordered_map<EnumVariantSymbol *, HIREnumVariant *> variantMap;
+  unordered_map<HIREntityType *, HIRHandleType *> handleCache;
+  unordered_map<HIREntityType *, HIRObserverType *> observerCache;
 
   std::vector<unique_ptr<HIRField>> roots;
   unordered_map<ValueSymbol *, HIRField *> rootMap;
@@ -75,6 +78,7 @@ struct HIRProgram : HIRNode {
     unique_ptr<HIRVoidType> vt = make_unique<HIRVoidType>();
     voidType = vt.get();
     builtIn.push_back(std::move(vt));
+    typeCache.emplace(table->getBuilt("void"), voidType);
 
     unique_ptr<HIRErrorType> et = make_unique<HIRErrorType>();
     errorType = et.get();

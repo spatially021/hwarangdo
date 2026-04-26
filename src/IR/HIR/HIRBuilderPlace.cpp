@@ -142,6 +142,14 @@ std::unique_ptr<HIRFieldPlaceExpr> HIRBuilder::lowerMember(MemberExpr *expr) {
   if (it == program->typeDeclMap.end()) {
     Error::internal(expr->token, "unknown type");
   }
+
+  if (dynamic_cast<HIRRootExpr *>(receiver.get())) {
+    auto rIt = program->rootMap.find(value);
+    if (rIt != program->rootMap.end()) {
+      return make_unique<HIRFieldPlaceExpr>(std::move(receiver), rIt->second);
+    }
+  }
+
   if (auto [cond, result] = lookupField(it->second, value); cond) {
     return make_unique<HIRFieldPlaceExpr>(std::move(receiver), result);
   }

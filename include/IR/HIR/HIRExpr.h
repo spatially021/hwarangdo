@@ -98,7 +98,7 @@ struct HIRRootExpr : HIRValueExpr {
 };
 
 struct HIRFieldPlaceExpr : HIRPlaceExpr {
-  unique_ptr<HIRValueExpr> receiver = nullptr; // value or observer
+  unique_ptr<HIRValueExpr> receiver = nullptr; // value or observer or root
   HIRField *field = nullptr;
 
   HIRFieldPlaceExpr(unique_ptr<HIRValueExpr> obj, HIRField *f,
@@ -195,23 +195,24 @@ struct HIRSpawnExpr : HIRValueExpr {
   StorageKind storage = StorageKind::World;
   HIREntityType *entityType = nullptr;
   HIRMethodDecl *initMethod = nullptr; // 없으면 기본 생성 의미
-  std::vector<HIRExpr *> args;
+  std::vector<unique_ptr<HIRExpr>> args;
 
   HIRSpawnExpr(HIRHandleType *outType, StorageKind st, HIREntityType *ent,
-               HIRMethodDecl *init, std::vector<HIRExpr *> a, SourceSpan s = {})
+               HIRMethodDecl *init, std::vector<unique_ptr<HIRExpr>> a,
+               SourceSpan s = {})
       : HIRValueExpr(HIRNodeKind::SpawnExpr, outType, s), storage(st),
         entityType(ent), initMethod(init), args(std::move(a)) {}
 };
 
 struct HIRViewExpr : HIRValueExpr {
   StorageKind storage = StorageKind::World;
-  HIRExpr *handle = nullptr;
+  unique_ptr<HIRValueExpr> handle = nullptr;
   HIREntityType *entityType = nullptr;
 
-  HIRViewExpr(HIRObserverType *outType, StorageKind st, HIRExpr *h,
-              HIREntityType *ent, SourceSpan s = {})
-      : HIRValueExpr(HIRNodeKind::ViewExpr, outType, s), storage(st), handle(h),
-        entityType(ent) {}
+  HIRViewExpr(HIRObserverType *outType, StorageKind st,
+              unique_ptr<HIRValueExpr> h, HIREntityType *ent, SourceSpan s = {})
+      : HIRValueExpr(HIRNodeKind::ViewExpr, outType, s), storage(st),
+        handle(std::move(h)), entityType(ent) {}
 };
 
 struct HIRPattern : HIRNode {

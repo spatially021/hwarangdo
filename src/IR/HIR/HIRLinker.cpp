@@ -1,10 +1,15 @@
 #include "IR/HIR/HIRLinker.h"
 #include "AST/Decl.h"
+#include "IR/HIR/HIRDecl.h"
+#include "IR/HIR/HIRType.h"
+#include "SemanticAnalyzer/symbol/MethodSymbol.h"
 #include "SemanticAnalyzer/symbol/TypeSymbol.h"
+#include "util/Error.h"
+#include "util/Guard.h"
 #include <memory>
+#include <utility>
 
 using std::unique_ptr;
-
 TypeSymbol *HIRLinker::getTypeSymbolFromDecl(Decl *decl,
                                              HIRTypeDeclKind &kind) {
   if (auto *c = dynamic_cast<ClassDecl *>(decl)) {
@@ -164,5 +169,60 @@ unique_ptr<HIRSource> HIRLinker::link() {
   for (auto &d : source->decls) {
     lowerTypeShell(d.get());
   }
+  for (auto &d : source->decls) {
+    if (auto *c = dynamic_cast<ClassDecl *>(d.get())) {
+      auto it = program->typeDeclMap.find(c->symbol);
+      if (it == program->typeDeclMap.end()) {
+        Error::internal(d->token, "fail to get method's owner type");
+      }
+      for (auto &m : c->methods) {
+        lowerMethodDeclShell(m.get(), it->second);
+      }
+    }
+    if (auto *i = dynamic_cast<ImplDecl *>(d.get())) {
+      auto symbol = table->getType(i->target);
+      auto it = program->typeDeclMap.find(symbol);
+      if (it == program->typeDeclMap.end()) {
+        Error::internal(i->token, "fail to find impl target type");
+      }
+      for (auto &m : i->LinkedImplMethods) {
+        lowerMethodDeclShell(m.get(), it->second);
+      }
+    }
+  }
   return std::move(hirSource);
+}
+
+void HIRLinker::lowerMethodDeclShell(FuncDecl *decl, HIRTypeDecl *currentType) {
+  assert(decl);
+  assert(decl->methodSymbol);
+
+  auto method = make_unique<HIRMethodDecl>(
+      currentType, currentType->nextMethodID++, decl->name, decl->methodSymbol);
+
+  auto *raw = method.get();
+
+  method->isAsync = false;
+  method->isInit = decl->methodSymbol->isInit;
+  method->returnType = lowerType(decl->methodSymbol->returnType);
+  vector<unique_ptr<HIRParam>> params;
+
+  {
+    MethodGuard _(currentMethod, raw);
+    for (auto &param : decl->params) {
+      params.push_back(lowerParam(param.get()));
+    }
+    method->setParam(std::move(params));
+  }
+  currentType->methods.push_back(std::move(method));
+  currentType->methodMap.emplace(decl->methodSymbol, raw);
+}
+
+unique_ptr<HIRParam> HIRLinker::lowerParam(Param *decl) {
+  unique_ptr<HIRParam> param = make_unique<HIRParam>();
+  param->symbol = decl->symbol;
+  param->name = decl->symbol->name;
+  param->id = currentMethod->nextParamID++;
+  param->type = lowerType(decl->symbol->typeSymbol);
+  return param;
 }

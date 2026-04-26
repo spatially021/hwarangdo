@@ -269,30 +269,13 @@ ValueSymbol *Resolver::lookupEnumVariant(TypeSymbol *enumType,
   return it->second;
 }
 
-llvm::APInt Resolver::resolveFixedArraySize(Expr *expr) {
-  expr->accept(this);
-
-  auto lit = dynamic_cast<LiteralExpr *>(expr);
-  if (!lit || !lit->resolvedLit.isInt()) {
-    Error::diagnostic(expr->token, "array size must be integer literal");
-  }
-
-  llvm::APInt value = lit->resolvedLit.asInt().value;
-
-  if (value.isNegative()) {
-    Error::diagnostic(expr->token, "array size cannot be negative");
-  }
-  if (value == 0) {
-    Error::diagnostic(expr->token, "array size must be greater than zero");
-  }
-
-  return value.zextOrTrunc(128);
-}
-
 pair<bool, MethodSymbol *> Resolver::lookupMethod(str name, Scope *scope,
                                                   vector<TypeSymbol *> args) {
 
   auto &bucket = scope->methodMap[name];
+  if (bucket.empty() && args.empty()) {
+    return {true, nullptr};
+  }
   for (auto &m : bucket) {
     if (m->paramTypes.size() != args.size()) {
       continue;

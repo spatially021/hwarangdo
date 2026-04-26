@@ -78,6 +78,12 @@ void ParserDebugger::visit(ViewExpr *expr) {
   expr->target->accept(this);
   cout << ")";
 }
+void ParserDebugger::visit(DestroyExpr *expr) {
+  expr->storage->accept(this);
+  cout << ".destroy(";
+  expr->target->accept(this);
+  cout << ")";
+}
 
 void ParserDebugger::visit(DefaultValueExpr *) { cout << "_"; }
 void ParserDebugger::visit(Range *expr) {

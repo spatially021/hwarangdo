@@ -173,6 +173,17 @@ Ptr Parser::postfix() {
           Ptr target = expression();
           consume(TKind::RIGHT_PAREN, "expect ')' after arguments");
           return make_shared<ViewExpr>(t, expr, target);
+        } else if (check(TKind::IDENTIFIER) && peek().text == "destroy") {
+          advance(); // destroy 처리
+          consume(TKind::LEFT_PAREN, "expect '(' after destroy");
+          Ptr target = expression();
+          consume(TKind::RIGHT_PAREN, "expect ')' after arguments");
+          return make_shared<DestroyExpr>(t, expr, target);
+        }
+
+        else {
+          Error::diagnostic(peek(),
+                            "unknown storage's method : " + peek().text);
         }
       }
 

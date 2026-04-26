@@ -9,6 +9,7 @@
 #include "SemanticAnalyzer/symbol/ValueSymbol.h"
 #include "util/Error.h"
 #include "util/Guard.h"
+#include "util/TypeResolver.h"
 #include <cassert>
 #include <memory>
 #include <utility>
@@ -55,6 +56,10 @@ void Linker::visit(SpawnExpr *expr) {
 }
 void Linker::visit(ViewExpr *expr) {
   expr->left->accept(this);
+  expr->target->accept(this);
+}
+void Linker::visit(DestroyExpr *expr) {
+  expr->storage->accept(this);
   expr->target->accept(this);
 }
 void Linker::visit(DefaultValueExpr *) {}
@@ -262,9 +267,14 @@ void Linker::visit(FuncDecl *decl) {
 
   decl->body->accept(this);
 }
-void Linker::visit(VarDecl *) {}
+void Linker::visit(VarDecl *decl) {
+  decl->type->accept(this);
+  decl->symbol->typeSymbol = decl->type->resolved;
+}
 
-void Linker::visit(TypeNode *) {}
+void Linker::visit(TypeNode *type) {
+  TypeResolver::resolveTypeNode(type, table);
+}
 void Linker::visit(ASTNode *) {}
 
 void Linker::visit(TraitSig *sig) {
@@ -273,7 +283,10 @@ void Linker::visit(TraitSig *sig) {
   }
   sig->type->accept(this);
 }
-void Linker::visit(Param *) {}
+void Linker::visit(Param *param) {
+  param->type->accept(this);
+  param->symbol->typeSymbol = param->type->resolved;
+}
 
 void Linker::visit(InitDecl *decl) {
   ScopeGuard _(*table, decl->methodSymbol->scope);

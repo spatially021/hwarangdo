@@ -1,9 +1,11 @@
 #include "IR/HIR/HIRBuilder.h"
 #include "IR/HIR/HIRType.h"
 #include "SemanticAnalyzer/symbol/TypeSymbol.h"
+#include "enums/StorageKind.h"
 #include "util/Error.h"
 #include <cassert>
 #include <memory>
+#include <utility>
 
 HIRType *HIRBuilder::lowerType(TypeSymbol *symbol) {
   HIRType *type = getOrCreateType(symbol);
@@ -95,6 +97,7 @@ HIRType *HIRBuilder::getOrCreateType(TypeSymbol *symbol) {
 
     type = hirType.get();
     program->typeCache.emplace(symbol, type);
+    source->types.push_back(std::move(hirType));
     return type;
   }
 }
@@ -110,4 +113,47 @@ HIREntityType *HIRBuilder::lowerEntityType(TypeSymbol *symbol) {
   } else {
     Error::internal("not entity type");
   }
+}
+
+HIRHandleType *HIRBuilder::getOrCreateHandleType(HIREntityType *entity,
+                                                 StorageKind storage) {
+  auto it = program->handleCache.find(entity);
+  HIRHandleType *result = nullptr;
+  if (it == program->handleCache.end()) {
+    unique_ptr<HIRHandleType> handle =
+        make_unique<HIRHandleType>(entity, storage);
+    result = handle.get();
+    program->handleCache.emplace(entity, result);
+    source->handles.push_back(std::move(handle));
+
+  } else {
+    result = it->second;
+  }
+
+  if (result == nullptr) {
+    Error::internal("fail to get or create handle");
+  }
+
+  return result;
+}
+
+HIRObserverType *HIRBuilder::getOrCreateObserverType(HIREntityType *entity,
+                                                     StorageKind kind) {
+  auto it = program->observerCache.find(entity);
+  HIRObserverType *result = nullptr;
+  if (it == program->observerCache.end()) {
+    unique_ptr<HIRObserverType> observer =
+        make_unique<HIRObserverType>(entity, kind);
+    result = observer.get();
+    program->observerCache.emplace(entity, result);
+    source->observers.push_back(std::move(observer));
+  } else {
+    result = it->second;
+  }
+
+  if (result == nullptr) {
+    Error::internal("fail to get or create observer");
+  }
+
+  return result;
 }

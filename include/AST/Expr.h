@@ -436,6 +436,8 @@ public:
     return make_shared<SpawnExpr>(token, left ? left->deepCopy() : nullptr,
                                   spawnType, std::move(copiedArgs));
   }
+
+  MethodSymbol *resolvedInit = nullptr;
 };
 
 class ViewExpr : public Expr {
@@ -449,6 +451,20 @@ public:
   Ptr deepCopy() const override {
     return make_shared<ViewExpr>(token, left ? left->deepCopy() : nullptr,
                                  target ? target->deepCopy() : nullptr);
+  }
+};
+
+class DestroyExpr : public Expr {
+public:
+  ExprPtr storage = nullptr;
+  ExprPtr target = nullptr;
+  DestroyExpr(Token t, ExprPtr s, ExprPtr tg)
+      : Expr(NKind::DESTROY_EXPR, t), storage(std::move(s)),
+        target(std::move(tg)) {}
+  void accept(ASTVisitor *visitor) override { visitor->visit(this); }
+
+  Ptr deepCopy() const override {
+    return make_shared<DestroyExpr>(token, storage, target);
   }
 };
 

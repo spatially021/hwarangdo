@@ -1,5 +1,6 @@
 #include "AST/Decl.h"
 #include "AST/Expr.h"
+#include "AST/Stmt.h"
 #include "SemanticAnalyzer/Resolver.h"
 #include "SemanticAnalyzer/Scope.h"
 #include "SemanticAnalyzer/symbol/MethodSymbol.h"
@@ -127,6 +128,9 @@ void Resolver::ResolveCall(CallExpr *expr, Scope *scope) {
   if (bestIdx.size() == 1) {
     auto best = candidates[bestIdx[0]].second;
     expr->resolved = best;
+    if (best->returnType == nullptr) {
+      Error::internal(expr->token, "methodSymbol's returnType is nullptr");
+    }
     expr->resolvedType = best->returnType;
     return;
   }

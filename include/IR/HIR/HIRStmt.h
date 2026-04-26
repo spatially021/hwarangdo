@@ -2,11 +2,14 @@
 
 #include "IR/HIR/HIRNode.h"
 #include "IR/HIR/HIRSymbol.h"
+#include "IR/HIR/HIRType.h"
 #include "SemanticAnalyzer/symbol/ValueSymbol.h"
+#include "enums/StorageKind.h"
 #include <memory>
 #include <unordered_map>
 #include <utility>
 #include <vector>
+
 struct HIRStmt : HIRNode {
   explicit HIRStmt(HIRNodeKind k, SourceSpan s = {}) : HIRNode(k, s) {}
   virtual ~HIRStmt() = default;
@@ -111,4 +114,20 @@ struct HIRSwitchStmt : HIRStmt {
                 SourceSpan s = {})
       : HIRStmt(HIRNodeKind::SwitchStmt, s), cond(std::move(c)),
         cases(std::move(ca)) {}
+};
+
+struct HIRValueTransferStmt : HIRStmt {
+  unique_ptr<HIRValueExpr> value;
+  HIRValueTransferStmt(unique_ptr<HIRValueExpr> v, SourceSpan s = {})
+      : HIRStmt(HIRNodeKind::ValueTransferStmt, s), value(std::move(v)) {}
+};
+
+struct HIRDestroyStmt : HIRStmt {
+  StorageKind storage;
+  unique_ptr<HIRValueExpr> handle = nullptr;
+  HIREntityType *entity = nullptr;
+  HIRDestroyStmt(unique_ptr<HIRValueExpr> h, HIREntityType *e, StorageKind sk,
+                 SourceSpan s = {})
+      : HIRStmt(HIRNodeKind::DestroyStmt, s), storage(sk), handle(std::move(h)),
+        entity(e) {}
 };

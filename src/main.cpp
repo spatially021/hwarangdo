@@ -7,6 +7,7 @@
 #include "IR/HIR/HIRBuilder.h"
 #include "IR/HIR/HIRLinker.h"
 #include "IR/HIR/HIRProgram.h"
+#include "IR/HIR/HIRVerifier.h"
 #include "Inputs.h"
 #include "Lexer.h"
 #include "Parser.h"
@@ -300,8 +301,8 @@ int main(int argc, char *argv[]) {
 
       for (const auto &tok : stream.tokens) {
         std::cout << "[" << tokenToString(tok.kind) << "] " << tok.text
-                  << " (line " << tok.line << ", col " << tok.col << ")"
-                  << std::endl;
+                  << " (line " << tok.span.lineStart << ", col "
+                  << tok.span.colStart << ")" << std::endl;
       }
     }
     cout << "=========================" << endl;
@@ -399,6 +400,7 @@ int main(int argc, char *argv[]) {
       hirProgram->sources.push_back(linker.link());
     }
     hirProgram->linkRoot();
+    hirProgram->linkSecondPass();
     for (auto &s : hirProgram->sources) {
       HIRBuilder builder(&analyzer.symbolTable, hirProgram.get(), s.get());
       builder.build();
@@ -406,6 +408,15 @@ int main(int argc, char *argv[]) {
 
   } catch (std::runtime_error &e) {
     cout << Color::RED << "error occur while hir building\n"
+         << Color::RESET << e.what() << "\n";
+    return -1;
+  }
+
+  try {
+    HIRVerifier hirVerifer(hirProgram.get());
+    hirVerifer.verify();
+  } catch (std::runtime_error &e) {
+    cout << Color::RED << "error occur while hir verifying\n"
          << Color::RESET << e.what() << "\n";
     return -1;
   }

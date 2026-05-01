@@ -30,7 +30,7 @@ TypeSymbol *HIRLinker::getTypeSymbolFromDecl(Decl *decl,
   if (dynamic_cast<ImplDecl *>(decl)) {
     return nullptr;
   }
-  Error::internal(decl->token, "unmatched decl type");
+  Error::internal(decl->span, "unmatched decl type");
 }
 
 HIREntityType *HIRLinker::lowerEntityType(TypeSymbol *symbol) {
@@ -151,7 +151,7 @@ void HIRLinker::lowerTypeShell(Decl *decl) {
 
   HIRType *type = lowerType(typeSymbol);
   if (type == nullptr) {
-    Error::internal(decl->token, "lowerType returned nullptr");
+    Error::internal(decl->span, "lowerType returned nullptr");
   }
 
   auto ty = make_unique<HIRTypeDecl>(kind, typeSymbol->name, type);
@@ -159,7 +159,7 @@ void HIRLinker::lowerTypeShell(Decl *decl) {
   auto *raw = ty.get();
   auto [it, inserted] = program->typeDeclMap.emplace(typeSymbol, raw);
   if (!inserted) {
-    Error::internal(decl->token, "duplicate HIR type shell for type");
+    Error::internal(decl->span, "duplicate HIR type shell for type");
   }
 
   hirSource->typeDecls.push_back(std::move(ty));
@@ -173,7 +173,7 @@ unique_ptr<HIRSource> HIRLinker::link() {
     if (auto *c = dynamic_cast<ClassDecl *>(d.get())) {
       auto it = program->typeDeclMap.find(c->symbol);
       if (it == program->typeDeclMap.end()) {
-        Error::internal(d->token, "fail to get method's owner type");
+        Error::internal(d->span, "fail to get method's owner type");
       }
       for (auto &m : c->methods) {
         lowerMethodDeclShell(m.get(), it->second);
@@ -183,7 +183,7 @@ unique_ptr<HIRSource> HIRLinker::link() {
       auto symbol = table->getType(i->target);
       auto it = program->typeDeclMap.find(symbol);
       if (it == program->typeDeclMap.end()) {
-        Error::internal(i->token, "fail to find impl target type");
+        Error::internal(i->span, "fail to find impl target type");
       }
       for (auto &m : i->LinkedImplMethods) {
         lowerMethodDeclShell(m.get(), it->second);

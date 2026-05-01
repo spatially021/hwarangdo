@@ -144,7 +144,9 @@ void Verifier::visit(BuiltInNameExpr *) {}
 void Verifier::visit(IfStmt *stmt) {
   stmt->condition->accept(this);
   stmt->thenBranch->accept(this);
-  stmt->elseBranch->accept(this);
+  if (stmt->elseBranch) {
+    stmt->elseBranch->accept(this);
+  }
 }
 void Verifier::visit(ForStmt *stmt) {
   stmt->initializer->accept(this);
@@ -237,5 +239,5 @@ void Verifier::visit(InitDecl *decl) {
 }
 
 void Verifier::unresolved(ASTNode *node, const string &msg) {
-  Error::internal(node->token, msg);
+  Error::internal(node->span, msg);
 }

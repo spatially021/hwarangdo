@@ -22,21 +22,30 @@ inline void throwError(const std::string &msg) {
 
 [[noreturn]]
 void Error::diagnostic(const Token &token, const std::string &message) {
-  std::ostringstream oss;
-  oss << "[error] " << token.path << " " << token.line << ":" << token.col
-      << ": " << message;
-
-  throwError(oss.str());
+  diagnostic(token.span, message);
 }
 
 [[noreturn]]
-void Error::diagnostic(const Token &primary, const std::string &message,
-                       const Token &secondary, const std::string &note) {
+void Error::diagnostic(const SourceSpan &span, const std::string &message) {
   std::ostringstream oss;
-  oss << "[error] " << primary.path << " " << primary.line << ":" << primary.col
-      << ": " << message << "\n"
-      << "  note: " << primary.path << " " << secondary.line << ":"
-      << secondary.col << ": " << note;
+
+  oss << "[error] " << span.path << " ";
+
+  if (span.lineStart == span.lineEnd) {
+    if (span.colStart == span.colEnd) {
+      // point
+      oss << span.lineStart << ":" << span.colStart;
+    } else {
+      // same line range
+      oss << span.lineStart << ":" << span.colStart << "-" << span.colEnd;
+    }
+  } else {
+    // multi-line range
+    oss << span.lineStart << ":" << span.colStart << " - " << span.lineEnd
+        << ":" << span.colEnd;
+  }
+
+  oss << ": " << message;
 
   throwError(oss.str());
 }
@@ -57,9 +66,30 @@ void Error::internal(const std::string &message) {
 }
 [[noreturn]]
 void Error::internal(const Token &token, const std::string &message) {
+  internal(token.span, message);
+}
+
+[[noreturn]] void Error::internal(const SourceSpan &span, str message) {
   std::ostringstream oss;
-  oss << "[internal compiler error]\n"
-      << token.path << " " << token.line << ":" << token.col << ": " << message;
+
+  oss << "[internal compiler error]\n" << span.path << " ";
+
+  if (span.lineStart == span.lineEnd) {
+    if (span.colStart == span.colEnd) {
+      // point
+      oss << span.lineStart << ":" << span.colStart;
+    } else {
+      // same line range
+      oss << span.lineStart << ":" << span.colStart << "-" << span.colEnd;
+    }
+  } else {
+    // multi-line range
+    oss << span.lineStart << ":" << span.colStart << " - " << span.lineEnd
+        << ":" << span.colEnd;
+  }
+
+  oss << ": " << message;
+
   throwError(oss.str());
 }
 

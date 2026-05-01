@@ -1,0 +1,6 @@
+class Main{
+    public init(){
+        if (true) {
+        }
+    }
+}

@@ -86,7 +86,7 @@ void ResolverDebugger::debug(Scope *scope) {
         Error::internal("uninited node");
       }
       cout << ident() << v.second->name
-           << " [line : " << v.second->node->token.line << "] - ";
+           << " [line : " << v.second->node->span.lineStart << "] - ";
       if (v.second->typeSymbol) {
         if (v.second->typeSymbol->name == "") {
           cout << magic_enum::enum_name(v.second->typeSymbol->kind);

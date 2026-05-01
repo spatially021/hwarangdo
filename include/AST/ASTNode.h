@@ -1,6 +1,7 @@
 #pragma once
 
 #include "BuiltInType.h"
+#include "SourceSpan.h"
 #include "Token.h"
 #include "Visitor.h"
 #include "util/Error.h"
@@ -97,9 +98,8 @@ using ExprPtr = shared_ptr<Expr>;
 class ASTNode {
 public:
   NKind kind;
-  Token token;
-
-  ASTNode(NKind k, Token t) : kind(k), token(t) {}
+  SourceSpan span;
+  ASTNode(NKind k, SourceSpan s) : kind(k), span(s) {}
 
   virtual ~ASTNode() = default;
   virtual void accept(ASTVisitor *visitor) = 0;
@@ -114,7 +114,7 @@ public:
 
   string type;
   virtual ~TypeNode() = default;
-  TypeNode(NKind k, Token t) : ASTNode(k, t) { type = t.text; }
+  TypeNode(NKind k, Token t) : ASTNode(k, t.span) { type = t.text; }
 
   void accept(ASTVisitor *visitor) override { visitor->visit(this); }
   TypeSymbol *resolved = nullptr;
@@ -141,7 +141,7 @@ public:
 
   BuiltinTypeNode(Token t, Category c, Token s = {})
       : TypeNode(NKind::BUILT_IN_TYPE, t), category(c) {
-    if (s.kind == TKind::EMPTY) {
+    if (s.text == "") {
       switch (category) {
       case Category::Int:
         type = BuiltInType::I32;
@@ -153,7 +153,14 @@ public:
       case Category::STRING:
         type = BuiltInType::C8;
         break;
+      case Category::Bool:
+        type = BuiltInType::B;
+        break;
+      case Category::Void:
+        type = BuiltInType::VOID;
+        break;
       default:
+        Error::internal(t, "unknown builtInType");
         break;
       }
     } else {
@@ -204,8 +211,8 @@ public:
 class IdentifierTypeNode : public TypeNode {
 public:
   string name; // ex: Player, Transform
-  IdentifierTypeNode(Token t, const string &n)
-      : TypeNode(NKind::IDENTIFIER_TYPE, t), name(n) {}
+  IdentifierTypeNode(Token s, const string &n)
+      : TypeNode(NKind::IDENTIFIER_TYPE, s), name(n) {}
   void accept(ASTVisitor *visitor) override { visitor->visit(this); }
 };
 
@@ -216,8 +223,8 @@ class ArrayTypeNode : public TypeNode {
 public:
   TypeNode::Ptr elementType;
   ExprPtr fixedSize; // nullopt => dynamic / slice
-  ArrayTypeNode(Token t, TypeNode::Ptr elem, ExprPtr size)
-      : TypeNode(NKind::ARRAY_TYPE, t), elementType(std::move(elem)),
+  ArrayTypeNode(Token s, TypeNode::Ptr elem, ExprPtr size)
+      : TypeNode(NKind::ARRAY_TYPE, s), elementType(std::move(elem)),
         fixedSize(size) {}
   void accept(ASTVisitor *visitor) override { visitor->visit(this); }
 };
@@ -235,14 +242,14 @@ public:
     RESULT,
 
   } gKind;
-  GenericTypeNode(Token t, const string &base, vector<TypeNode::Ptr> args)
-      : TypeNode(NKind::GENERIC_TYPE, t), typeArgs(std::move(args)) {
+  GenericTypeNode(Token s, const string &base, vector<TypeNode::Ptr> args)
+      : TypeNode(NKind::GENERIC_TYPE, s), typeArgs(std::move(args)) {
     if (base == "Handle") {
       gKind = GenericKind::HANDLE;
     }
 
     else {
-      Error::diagnostic(t, "unknwon genertic type : " + t.text);
+      Error::diagnostic(span, "unknwon genertic type : " + s.text);
     }
   }
   void accept(ASTVisitor *visitor) override { visitor->visit(this); }

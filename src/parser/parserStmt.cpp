@@ -1,6 +1,7 @@
 #include "AST/Expr.h"
 #include "AST/Stmt.h"
 #include "Parser.h"
+#include "SourceSpan.h"
 #include "Token.h"
 #include "util/Error.h"
 #include <memory>
@@ -12,15 +13,14 @@ using namespace std;
 Ptr Parser::expressionStmt() {
   Token t = peek();
   Expr::Ptr expr = expression();
-  consume(TKind::SEMICOLON,
-          "expect ';' after expression statement : " + expr->token.text);
-  return make_shared<ExprStmt>(t, expr);
+  consume(TKind::SEMICOLON, "expect ';' after expression statement");
+  return make_shared<ExprStmt>(makeSpan(t.span, expr->span), expr);
 }
 
 Ptr Parser::declStmt() {
   Token t = peek();
   Decl::Ptr decl = declaration(contexts.back());
-  return make_shared<DeclStmt>(t, decl);
+  return make_shared<DeclStmt>(makeSpan(t.span, decl->span), decl);
 }
 
 Ptr Parser::ifStmt() {
@@ -37,7 +37,9 @@ Ptr Parser::ifStmt() {
     elseBranch = bodyStmt();
   }
 
-  return make_shared<IfStmt>(t, condition, thenBranch, elseBranch);
+  return make_shared<IfStmt>(
+      makeSpan(t.span, elseBranch ? elseBranch->span : thenBranch->span),
+      condition, thenBranch, elseBranch);
 }
 
 Ptr Parser::blockStmt() {
@@ -48,8 +50,8 @@ Ptr Parser::blockStmt() {
   }
 
   consume(TKind::RIGHT_BRACE, "expect '}' end of block");
-
-  return make_shared<BlockStmt>(t, s);
+  auto end = previous();
+  return make_shared<BlockStmt>(makeSpan(t, end), s);
 }
 
 Ptr Parser::bodyStmt() {
@@ -73,9 +75,10 @@ Ptr Parser::forStmt() {
   Expr::Ptr from = expression();
   consume(TKind::DOUBLE_DOT, "range need '..'");
   Expr::Ptr to = expression();
-  shared_ptr<Range> range = make_shared<Range>(from->token, from, to);
+  shared_ptr<Range> range =
+      make_shared<Range>(makeSpan(from->span, to->span), from, to);
   Ptr body = bodyStmt();
-  return make_shared<ForStmt>(t, init, range, body);
+  return make_shared<ForStmt>(makeSpan(t.span, body->span), init, range, body);
 }
 
 Ptr Parser::whileStmt() {
@@ -85,7 +88,7 @@ Ptr Parser::whileStmt() {
   Expr::Ptr conditon = expression();
   consume(TKind::RIGHT_PAREN, "expect ')' after condition");
   Ptr body = bodyStmt();
-  return make_shared<WhileStmt>(t, conditon, body);
+  return make_shared<WhileStmt>(makeSpan(t.span, body->span), conditon, body);
 }
 
 Ptr Parser::switchStmt() {
@@ -100,8 +103,8 @@ Ptr Parser::switchStmt() {
   while (!check(TKind::RIGHT_BRACE) && !isAtEnd()) {
     cases.push_back(caseStmt());
   }
-
-  return make_shared<SwitchStmt>(t, value, cases);
+  auto end = previous();
+  return make_shared<SwitchStmt>(makeSpan(t, end), value, cases);
 }
 
 shared_ptr<Case> Parser::caseStmt(bool isSwtich) {
@@ -128,7 +131,9 @@ shared_ptr<Case> Parser::caseStmt(bool isSwtich) {
       body = bodyStmt();
     } else
       Error::diagnostic(peek(), "expect '{' after '=>'");
-    return make_shared<Case>(tok, values, body);
+
+    auto end = previous();
+    return make_shared<Case>(makeSpan(tok, end), values, body);
   } else if (check(TKind::DEFAULT)) {
     if (!isSwtich) {
       Error::diagnostic(tok, "in match not allowed 'default'");
@@ -141,7 +146,8 @@ shared_ptr<Case> Parser::caseStmt(bool isSwtich) {
       body = bodyStmt();
     else
       Error::diagnostic(peek(), "expect '{' after '=>'");
-    return make_shared<Case>(tok, values, body, true);
+    return make_shared<Case>(makeSpan(tok.span, body->span), values, body,
+                             true);
   } else if (!check(TKind::UNDERBAR)) {
     if (isSwtich) {
       Error::diagnostic(tok, "in switch not allowed '_'");
@@ -154,7 +160,8 @@ shared_ptr<Case> Parser::caseStmt(bool isSwtich) {
       body = bodyStmt();
     else
       Error::diagnostic(peek(), "expect '{' after '=>'");
-    return make_shared<Case>(tok, values, body, true);
+    return make_shared<Case>(makeSpan(tok.span, body->span), values, body,
+                             true);
   } else {
     if (isSwtich) {
       Error::diagnostic(peek(),
@@ -174,7 +181,8 @@ Ptr Parser::returnStmt() {
   else
     expr = expression();
   consume(TKind::SEMICOLON, "expect ';' after return statement");
-  return make_shared<ReturnStmt>(t, expr);
+  auto end = previous();
+  return make_shared<ReturnStmt>(makeSpan(t, end), expr);
 }
 
 Ptr Parser::valueTransferStmt() {
@@ -182,7 +190,8 @@ Ptr Parser::valueTransferStmt() {
   advance(); //<<처리
   Expr::Ptr expr = expression();
   consume(TKind::SEMICOLON, "expect ';' after valueTransferOperator statement");
-  return make_shared<ValueTransferStmt>(t, expr);
+  auto end = previous();
+  return make_shared<ValueTransferStmt>(makeSpan(t, end), expr);
 }
 
 Ptr Parser::tryStmt() {
@@ -192,8 +201,8 @@ Ptr Parser::tryStmt() {
   vector<shared_ptr<CatchClause>> catches;
   while (check(TKind::CATCH))
     catches.push_back(dynamic_pointer_cast<CatchClause>(catchStmt()));
-
-  return make_shared<TryCatchStmt>(t, body, catches);
+  auto end = previous();
+  return make_shared<TryCatchStmt>(makeSpan(t, end), body, catches);
 }
 
 Ptr Parser::catchStmt() {
@@ -211,8 +220,8 @@ Ptr Parser::catchStmt() {
   Ptr body = bodyStmt();
 
   TypeNode::Ptr type = typeNodeConvertor(errorType);
-
-  return make_shared<CatchClause>(t, type, name, body);
+  auto end = previous();
+  return make_shared<CatchClause>(makeSpan(t, end), type, name, body);
 }
 
 Ptr Parser::onexitStmt() {
@@ -220,12 +229,12 @@ Ptr Parser::onexitStmt() {
   advance(); // onexit 처리
   consume(TKind::LEFT_BRACE, "expect '{' after onexit");
   Ptr body = blockStmt();
-  return make_shared<OnexitStmt>(t, body);
+  return make_shared<OnexitStmt>(makeSpan(t.span, body->span), body);
 }
 
 Ptr Parser::throwStmt() {
   Token t = peek();
   advance(); // throw 처리
   Expr::Ptr expr = expression();
-  return make_shared<ThrowStmt>(t, expr);
+  return make_shared<ThrowStmt>(makeSpan(t.span, expr->span), expr);
 }

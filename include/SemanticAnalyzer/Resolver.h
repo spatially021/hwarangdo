@@ -9,6 +9,7 @@
 #include "SemanticAnalyzer/symbol/Symbol.h"
 #include "SemanticAnalyzer/symbol/TypeSymbol.h"
 #include "SemanticAnalyzer/symbol/ValueSymbol.h"
+#include "SourceSpan.h"
 #include "SymbolTable.h"
 #include "util/Error.h"
 #include <cassert>
@@ -141,8 +142,8 @@ private:
   // "\\n"
   // "\\uAC00"
   // "\\U0001F600"
-  uint32_t decodeCharLiteral(const Token &token, str s);
-  uint32_t decodeOneUtf8CodePoint(const Token &token, str s, size_t &i);
+  uint32_t decodeCharLiteral(const SourceSpan &token, str s);
+  uint32_t decodeOneUtf8CodePoint(const SourceSpan &token, str s, size_t &i);
 
   bool fitsFloatRange(const llvm::APFloat &base, const llvm::fltSemantics &sem);
   llvm::APFloat convertFloatTo(const llvm::APFloat &base,
@@ -162,7 +163,7 @@ private:
   }
 
   ValueSymbol *lookupEnumVariant(TypeSymbol *enumType, const string &name,
-                                 Token token);
+                                 SourceSpan &token);
   TypeSymbol *getTargetType();
 
   inline bool isTypeReceiver(Expr *expr) {

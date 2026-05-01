@@ -44,8 +44,8 @@ void Resolver::visit(LiteralExpr *expr) {
     expr->resolvedLit = r;
     break;
   case TKind::LIT_BOOL:
-    expr->resolvedType = table->getType("bool");
-    r.type = table->getType("bool");
+    expr->resolvedType = table->getBool();
+    r.type = table->getBool();
     r.value = expr->value == "true";
     expr->resolvedLit = r;
     break;
@@ -58,13 +58,11 @@ void Resolver::visit(BinaryExpr *expr) {
   expr->right->accept(this);
 
   if (expr->left->resolvedType == nullptr) {
-    Error::internal(expr->left->token,
-                    "lhs is nullptr : " + expr->left->token.text);
+    Error::internal(expr->left->span, "lhs is nullptr");
   }
 
   if (expr->right->resolvedType == nullptr) {
-    Error::internal(expr->right->token,
-                    "rhs is nullptr : " + expr->right->token.text);
+    Error::internal(expr->right->span, "rhs is nullptr");
   }
 
   if (isBinaryOperatalbe(expr->op, expr->left->resolvedType,
@@ -72,18 +70,18 @@ void Resolver::visit(BinaryExpr *expr) {
     auto temp = binaryResult(expr->op, expr->left->resolvedType,
                              expr->right->resolvedType);
     if (!temp) {
-      Error::internal(expr->token, "fail to get binaryResult");
+      Error::internal(expr->span, "fail to get binaryResult");
     }
     expr->resolvedType = temp;
   } else {
-    Error::diagnostic(expr->token, "leftExpr and rightExpr cannot operate. [ " +
-                                       expr->left->resolvedType->name + " " +
-                                       expr->opRaw.text + " " +
-                                       expr->right->resolvedType->name + " ]");
+    Error::diagnostic(expr->span, "leftExpr and rightExpr cannot operate. [ " +
+                                      expr->left->resolvedType->name + " " +
+                                      expr->opRaw.text + " " +
+                                      expr->right->resolvedType->name + " ]");
   }
 
   if (!expr->resolvedType) {
-    Error::internal(expr->token, "unresolved type : " + expr->token.text);
+    Error::internal(expr->span, "unresolved type");
   }
 }
 void Resolver::visit(NameExpr *expr) {
@@ -99,7 +97,7 @@ void Resolver::visit(NameExpr *expr) {
         return;
       }
       // TODO: 추후 static메서드 추가시 추가 적용 필요.
-      Error::internal(expr->token, "expect enum");
+      Error::internal(expr->span, "expect enum");
     }
 
     if (currentType == nullptr) {
@@ -111,7 +109,7 @@ void Resolver::visit(NameExpr *expr) {
     }
 
     if (!symbol) {
-      Error::diagnostic(expr->token, "undeclared variable: " + expr->name);
+      Error::diagnostic(expr->span, "undeclared variable: " + expr->name);
     }
   }
 
@@ -119,11 +117,11 @@ void Resolver::visit(NameExpr *expr) {
   expr->resolvedType = symbol->typeSymbol;
 
   if (!expr->resolvedType) {
-    Error::internal(expr->token, "type symbol is nullptr: " + expr->token.text);
+    Error::internal(expr->span, "type symbol is nullptr");
   }
 
   if (dynamic_cast<HandleSymbol *>(expr->resolvedType)) {
-    Error::internal(expr->token, "handle gotten");
+    Error::internal(expr->span, "handle gotten");
   }
 }
 
@@ -131,16 +129,16 @@ void Resolver::visit(UnaryExpr *expr) {
   expr->right->accept(this);
 
   if (expr->tOp.kind == TKind::BANG) {
-    if (expr->right->resolvedType == table->getType("bool")) {
+    if (table->isBool(expr->right->resolvedType)) {
       expr->resolvedType = expr->right->resolvedType;
       expr->op = Operator::L_NOT;
-    } else if (expr->right->resolvedType == table->getType("int")) {
+    } else if (table->isInt(expr->right->resolvedType)) {
       expr->resolvedType = expr->right->resolvedType;
       expr->op = Operator::B_NOT;
     } else
-      Error::diagnostic(expr->token, "bad operand type " +
-                                         expr->right->resolvedType->name +
-                                         " for unary operator '!'");
+      Error::diagnostic(expr->span, "bad operand type " +
+                                        expr->right->resolvedType->name +
+                                        " for unary operator '!'");
   } else if (expr->tOp.kind == TKind::PLUS || expr->tOp.kind == TKind::MINUS) {
     if (expr->tOp.kind == TKind::PLUS) {
       expr->op = Operator::PLUS;
@@ -150,7 +148,7 @@ void Resolver::visit(UnaryExpr *expr) {
     if (table->isNumberic(expr->right->resolvedType))
       expr->resolvedType = expr->right->resolvedType;
     else
-      Error::diagnostic(expr->token,
+      Error::diagnostic(expr->span,
                         "bad operand type " + expr->right->resolvedType->name +
                             " for unary operator '" + expr->tOp.text + "'");
   }
@@ -160,8 +158,9 @@ void Resolver::visit(AssignExpr *expr) {
   expr->target->accept(this);
   expr->value->accept(this);
   if (!isAssignable(expr->target->resolvedType, expr->value->resolvedType)) {
-    Error::diagnostic(expr->token, "unmatched assign type");
+    Error::diagnostic(expr->span, "unmatched assign type");
   }
+
   expr->resolvedType =
       implicitCasting(expr->target->resolvedType, expr->value->resolvedType);
 }
@@ -170,11 +169,10 @@ void Resolver::visit(MemberExpr *expr) {
   expr->object->accept(this);
   auto symbol = static_cast<TypeSymbol *>(expr->object->resolvedType);
   if (!symbol) {
-    Error::internal(expr->token,
-                    "fail to cast symbol : " + expr->object->token.text);
+    Error::internal(expr->span, "fail to cast symbol");
   }
   if (symbol->kind == TypeSymbol::TypeKind::ENUM) {
-    expr->resolved = lookupEnumVariant(symbol, expr->member, expr->token);
+    expr->resolved = lookupEnumVariant(symbol, expr->member, expr->span);
     expr->resolvedType = symbol;
     return;
   }
@@ -182,8 +180,7 @@ void Resolver::visit(MemberExpr *expr) {
   auto s = expr->object->resolvedType;
 
   if (dynamic_cast<GenericSymbol *>(s)) {
-    Error::diagnostic(expr->token, "cannot access field with handle : " +
-                                       expr->object->token.text);
+    Error::diagnostic(expr->span, "cannot access field with handle");
   }
 
   Scope *scope = nullptr;
@@ -194,15 +191,15 @@ void Resolver::visit(MemberExpr *expr) {
   }
 
   if (!scope)
-    Error::diagnostic(expr->token, "type has no members : " + expr->token.text);
+    Error::diagnostic(expr->span, "type has no members ");
 
   auto it = scope->value.find(expr->member);
   if (it == scope->value.end())
-    Error::diagnostic(expr->token, "undeclared member '" + expr->member + "'");
+    Error::diagnostic(expr->span, "undeclared member '" + expr->member + "'");
 
   auto member = it->second.get();
   if (!member)
-    Error::diagnostic(expr->token, "member '" + expr->member + "' is null");
+    Error::diagnostic(expr->span, "member '" + expr->member + "' is null");
 
   expr->resolved = member;
   expr->resolvedType = member->typeSymbol;
@@ -212,10 +209,10 @@ void Resolver::visit(ArrayAccessExpr *expr) {
   expr->object->accept(this);
   expr->index->accept(this);
   if (!table->isInt(expr->index->resolvedType))
-    Error::diagnostic(expr->token, "array index must be integer type");
+    Error::diagnostic(expr->span, "array index must be integer type");
   auto arr = static_cast<TypeSymbol *>(expr->object->resolvedType);
   if (arr->decl->kind != NKind::ARRAY_DECL)
-    Error::diagnostic(expr->token, "type is not indexable");
+    Error::diagnostic(expr->span, "type is not indexable");
   expr->resolvedType = static_cast<ArrayDecl *>(arr->decl)->baseType;
 }
 
@@ -224,7 +221,7 @@ void Resolver::visit(TernaryExpr *expr) {
   expr->then->accept(this);
   expr->else_->accept(this);
   if (!isCastable(expr->then->resolvedType, expr->else_->resolvedType)) {
-    Error::diagnostic(expr->token, "unmatch then to else type");
+    Error::diagnostic(expr->span, "unmatch then to else type");
   }
 }
 void Resolver::visit(ThisExpr *expr) {
@@ -233,7 +230,7 @@ void Resolver::visit(ThisExpr *expr) {
 }
 void Resolver::visit(SuperExpr *expr) {
   if (currentType->base == nullptr) {
-    Error::diagnostic(expr->token, "this class has no baseClass");
+    Error::diagnostic(expr->span, "this class has no baseClass");
   }
   expr->resolved = currentType->base;
   expr->resolvedType = currentType->base;
@@ -252,7 +249,7 @@ void Resolver::visit(CastExpr *expr) {
   expr->left->accept(this);
   expr->type->accept(this);
   if (expr->type->resolved == nullptr) {
-    Error::internal(expr->token, "type node is nullptr : " + expr->token.text);
+    Error::internal(expr->span, "type node is nullptr");
   }
   expr->resolvedType = expr->type->resolved;
 }
@@ -274,31 +271,29 @@ void Resolver::visit(BuiltInNameExpr *expr) {
 void Resolver::visit(SpawnExpr *expr) {
   expr->left->accept(this);
   if (expr->left->kind != NKind::BUILTIN_NAME_EXPR) {
-    Error::diagnostic(expr->token,
-                      "expect world or arena but " + expr->left->token.text);
+    Error::diagnostic(expr->left->span, "expect world or arena");
   }
 
   if (auto b = dynamic_cast<BuiltInNameExpr *>(expr->left.get())) {
     if (b->storageType != BuiltInNameExpr::StorageType::WORLD &&
         b->storageType != BuiltInNameExpr::StorageType::ARENA) {
-      Error::diagnostic(expr->token,
-                        "expect world or arena but " + expr->left->token.text);
+      Error::diagnostic(expr->left->span, "expect world or arena");
     }
   }
   expr->spawnType->accept(this);
 
   if (!expr->spawnType->resolved) {
-    Error::internal(expr->token, "fail to resolve spawn type");
+    Error::internal(expr->span, "fail to resolve spawn type");
   }
   if (!expr->spawnType->resolved->memberScope) {
-    Error::internal(expr->token,
-                    expr->token.text + "'s memberScope is nullptr");
+    Error::internal(expr->span,
+                    expr->spawnType->type + "'s memberScope is nullptr");
   }
   vector<TypeSymbol *> args;
   for (auto &a : expr->args) {
     a->accept(this);
     if (!a->resolvedType) {
-      Error::internal(a->token, "fail to resolve type : " + a->token.text);
+      Error::internal(a->span, "fail to resolve type");
     }
     args.push_back(a->resolvedType);
   }
@@ -307,14 +302,14 @@ void Resolver::visit(SpawnExpr *expr) {
 
   if (!args.empty()) {
     if (!result) {
-      Error::diagnostic(expr->token,
+      Error::diagnostic(expr->span,
                         "type '" + expr->spawnType->resolved->name +
                             "' does not have init but arguments were provided");
     }
   }
 
   if (!result) {
-    Error::diagnostic(expr->token, "unmatched init argument number");
+    Error::diagnostic(expr->span, "unmatched init argument number");
   }
 
   vector<TypeSymbol *> temp;
@@ -327,103 +322,97 @@ void Resolver::visit(ViewExpr *expr) {
   expr->left->accept(this);
 
   if (!expr->left->resolvedType) {
-    Error::internal(expr->left->token,
-                    "fail to resolve type : " + expr->left->token.text);
+    Error::internal(expr->left->span, "fail to resolve type");
   }
   if (expr->left->resolvedType != table->getBuiltName()) {
-    Error::internal(expr->token, "unmatched type : " + expr->left->token.text);
+    Error::internal(expr->span, "unmatched type");
   }
 
   expr->target->accept(this);
   auto generic = dynamic_cast<GenericSymbol *>(expr->target->resolvedType);
   if (!generic) {
-    Error::diagnostic(expr->token, expr->target->token.text +
-                                       " - in view only allowed handle : " +
-                                       expr->target->resolvedType->name);
+    Error::diagnostic(expr->span, " - in view only allowed handle ");
   }
   if (generic->origin != table->getHandle()) {
-    Error::diagnostic(expr->token, "in view only allowed handle : " +
-                                       expr->target->token.text);
+    Error::diagnostic(expr->span, "in view only allowed handle");
   }
 
   if (!canPlaceView(
           expr->target)) { // spawnExpr등 올수 없는 형태의 표현식인지 확인
-    Error::diagnostic(expr->token, "this expression not allowed here");
+    Error::diagnostic(expr->span, "this expression not allowed here");
   }
 
   if (auto h = dynamic_cast<GenericSymbol *>(expr->target->resolvedType)) {
     if (h->origin != table->getHandle()) {
-      Error::diagnostic(expr->token, "in view only allowed handle");
+      Error::diagnostic(expr->span, "in view only allowed handle");
     }
     expr->resolvedType = h->args[0];
   } else {
-    Error::diagnostic(expr->token, "in view only allowed handle");
+    Error::diagnostic(expr->span, "in view only allowed handle");
   }
 }
 
 void Resolver::visit(DestroyExpr *expr) {
   expr->storage->accept(this);
   if (!expr->storage->resolvedType) {
-    Error::internal(expr->storage->token,
-                    "fail to resolve type : " + expr->storage->token.text);
+    Error::internal(expr->storage->span, "fail to resolve type");
   }
   if (expr->storage->resolvedType != table->getBuiltName()) {
-    Error::internal(expr->token,
-                    "unmatched type : " + expr->storage->token.text);
+    Error::internal(expr->span, "unmatched type");
   }
 
   expr->target->accept(this);
   auto generic = dynamic_cast<GenericSymbol *>(expr->target->resolvedType);
   if (!generic) {
-    Error::diagnostic(expr->token, expr->target->token.text +
-                                       " - in view only allowed handle : " +
-                                       expr->target->resolvedType->name);
+    Error::diagnostic(expr->span, " in view only allowed handle");
   }
   if (generic->origin != table->getHandle()) {
-    Error::diagnostic(expr->token, "in view only allowed handle : " +
-                                       expr->target->token.text);
+    Error::diagnostic(expr->span, "in view only allowed handle");
   }
 
   if (!canPlaceView(
           expr->target)) { // spawnExpr등 올수 없는 형태의 표현식인지 확인
-    Error::diagnostic(expr->token, "this expression not allowed here");
+    Error::diagnostic(expr->span, "this expression not allowed here");
   }
 
   if (auto h = dynamic_cast<GenericSymbol *>(expr->target->resolvedType)) {
     if (h->origin != table->getHandle()) {
-      Error::diagnostic(expr->token, "in view only allowed handle");
+      Error::diagnostic(expr->span, "in view only allowed handle");
     }
     expr->resolvedType = h->args[0];
   } else {
-    Error::diagnostic(expr->token, "in view only allowed handle");
+    Error::diagnostic(expr->span, "in view only allowed handle");
   }
 }
 
 void Resolver::visit(DefaultValueExpr *expr) {
   expr->resolvedType = table->getDefaultV();
   if (!expr->resolvedType) {
-    Error::internal(expr->token,
-                    "resolved Type is nullptr : " + expr->token.text);
+    Error::internal(expr->span, "resolved Type is nullptr");
   }
 }
 
 void Resolver::visit(Range *expr) {
   expr->from->accept(this);
   if (!table->isInt(expr->from->resolvedType)) {
-    Error::diagnostic(expr->token, "in for-range start only allowed int type");
+    Error::diagnostic(expr->span, "in for-range start only allowed int type");
   }
 
   expr->to->accept(this);
   if (!table->isInt(expr->to->resolvedType)) {
-    Error::diagnostic(expr->token, "in for-range end only allowed int type");
+    Error::diagnostic(expr->span, "in for-range end only allowed int type");
   }
 
   if (!expr->step) {
-    expr->step = make_shared<LiteralExpr>(expr->token, "1");
+    Token step;
+    step.span = expr->span;
+    step.kind = TKind::LIT_INT;
+    step.text = "1";
+    expr->step = make_shared<LiteralExpr>(expr->span, step, "1");
   }
   expr->step->accept(this);
   if (!table->isInt(expr->step->resolvedType)) {
-    Error::diagnostic(expr->token, "in for-range step only allowed int type");
+    Error::diagnostic(expr->span, "in for-range step only allowed int type");
   }
 }
 
@@ -435,67 +424,65 @@ void Resolver::visit(CaseValueExpr *expr) {
     if (expr->value->kind == NKind::MEMBER_EXPR) {
       auto temp = dynamic_cast<MemberExpr *>(expr->value.get());
       if (temp->object->resolvedType != type) {
-        Error::diagnostic(expr->token, "unmatch enum type expect " +
-                                           type->name + " but " +
-                                           temp->object->resolvedType->name);
+        Error::diagnostic(expr->span, "unmatch enum type expect " + type->name +
+                                          " but " +
+                                          temp->object->resolvedType->name);
       }
       variantName = temp->member;
-    } else if (expr->value->kind == NKind::NAME_EXPR) {
-      variantName = expr->value->token.text;
+    } else if (auto temp = dynamic_cast<NameExpr *>(expr->value.get())) {
+      variantName = temp->name;
     } else {
-      Error::internal(expr->token, "illegal expr kind");
+      Error::internal(expr->span, "illegal expr kind");
     }
 
-    expr->variant = lookupEnumVariant(type, variantName, expr->token);
+    expr->variant = lookupEnumVariant(type, variantName, expr->span);
   } else {
     expr->value->accept(this);
     if (isLit(expr->value)) {
       if (expr->arg) {
-        Error::internal(expr->token, "case value is lit but has payload");
+        Error::internal(expr->span, "case value is lit but has payload");
       }
       if (auto s = dynamic_cast<SwitchStmt *>(currentSwitch)) {
         if (!canImplicitlyConvert(expr->value->resolvedType,
                                   s->value->resolvedType)) {
-          Error::diagnostic(expr->token, "unmatched case valueType");
+          Error::diagnostic(expr->span, "unmatched case valueType");
         }
       } else if (auto m = dynamic_cast<MatchExpr *>(currentSwitch)) {
         if (!canImplicitlyConvert(expr->value->resolvedType,
                                   m->value->resolvedType)) {
-          Error::diagnostic(expr->token, "unmatched case valueType");
+          Error::diagnostic(expr->span, "unmatched case valueType");
         }
       } else {
-        Error::internal(expr->token, "currentSwitch is not swtich or match");
+        Error::internal(expr->span, "currentSwitch is not swtich or match");
       }
 
     } else {
-      Error::diagnostic(expr->token, "in caseValue allow literal or Enum");
+      Error::diagnostic(expr->span, "in caseValue allow literal or Enum");
     }
     return;
   }
 
   auto variant = dynamic_cast<EnumVariantSymbol *>(expr->variant);
   if (!variant) {
-    Error::diagnostic(expr->token, "in caseValue allow literal or Enum");
+    Error::diagnostic(expr->span, "in caseValue allow literal or Enum");
   }
   if (variant->payloadType) {
     if (!expr->arg) {
-      Error::diagnostic(expr->token,
-                        "this variant has payload but not declare");
+      Error::diagnostic(expr->span, "this variant has payload but not declare");
     }
 
     if (expr->arg->kind != NKind::NAME_EXPR) {
-      Error::internal(expr->token, "illegal expr kind");
+      Error::internal(expr->span, "illegal expr kind");
     }
     expr->arg->resolvedType = variant->payloadType;
     if (!expr->arg->resolvedType) {
-      Error::internal(expr->arg->token,
-                      "unresolved type : " + expr->arg->token.text);
+      Error::internal(expr->arg->span, "unresolved type ");
     }
     if (!canImplicitlyConvert(expr->arg->resolvedType, variant->payloadType)) {
-      Error::diagnostic(expr->token, "unmatched payload type");
+      Error::diagnostic(expr->span, "unmatched payload type");
     }
     auto symbol = make_unique<ValueSymbol>();
-    symbol->name = expr->arg->token.text;
+    symbol->name = variant->name;
     symbol->kind = ValueSymbol::Kind::VAR;
     symbol->typeSymbol = expr->arg->resolvedType;
     auto raw = symbol.get();
@@ -506,7 +493,7 @@ void Resolver::visit(CaseValueExpr *expr) {
     return;
   }
   if (expr->arg) {
-    Error::diagnostic(expr->token, "variant has no payload but declared");
+    Error::diagnostic(expr->span, "variant has no payload but declared");
   }
 }
 
@@ -538,7 +525,7 @@ void Resolver::visit(MatchExpr *expr) {
       continue;
     }
     if (!isAssignable(matchType, c->transferType)) {
-      Error::diagnostic(c->token, "inconsistent value transfer type");
+      Error::diagnostic(c->span, "inconsistent value transfer type");
     }
   }
 

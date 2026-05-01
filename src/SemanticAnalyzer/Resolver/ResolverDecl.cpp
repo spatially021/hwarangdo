@@ -16,7 +16,7 @@
 
 void Resolver::visit(ClassDecl *decl) {
   if (!decl->symbol) {
-    Error::internal(decl->token, "StructDecl symbol not initialized");
+    Error::internal(decl->span, "StructDecl symbol not initialized");
   }
   ScopeGuard _(*table, decl->symbol->memberScope);
   TypeContextGuard __(currentType, decl->symbol);
@@ -33,7 +33,7 @@ void Resolver::visit(ClassDecl *decl) {
 
 void Resolver::visit(StructDecl *decl) {
   if (!decl->symbol) {
-    Error::internal(decl->token, "StructDecl symbol not initialized");
+    Error::internal(decl->span, "StructDecl symbol not initialized");
   }
   ScopeGuard _(*table, decl->symbol->memberScope);
   TypeContextGuard __(currentType, decl->symbol);
@@ -45,7 +45,7 @@ void Resolver::visit(EnumDecl *) {}
 void Resolver::visit(ImplDecl *decl) {
   auto implIt = table->implMap.find(decl);
   if (implIt == table->implMap.end()) {
-    Error::internal(decl->token, "fail to find impl");
+    Error::internal(decl->span, "fail to find impl");
   }
   ScopeGuard _(*table, implIt->second->memberScope);
   TypeContextGuard __(currentType, implIt->second->target);
@@ -73,6 +73,8 @@ void Resolver::visit(FuncDecl *decl) {
     p->accept(this);
     symbol->paramTypes.push_back(p->symbol->typeSymbol);
   }
+  auto prev = currentMethod;
+  currentMethod = decl->methodSymbol;
   decl->body->accept(this);
 
   if (decl->returnType.has_value()) {
@@ -81,7 +83,7 @@ void Resolver::visit(FuncDecl *decl) {
     auto type = rt->resolved;
     for (auto r : symbol->returns) {
       if (!isAssignable(type, r->returnType)) {
-        Error::diagnostic(r->token, "unmatched return type");
+        Error::diagnostic(r->span, "unmatched return type");
       }
     }
     symbol->returnType = rt->resolved;
@@ -92,12 +94,14 @@ void Resolver::visit(FuncDecl *decl) {
       auto rt = symbol->returns[0]->returnType;
       for (auto r : symbol->returns) {
         if (!isAssignable(rt, r->returnType)) {
-          Error::diagnostic(r->token, "unmatched return type");
+          Error::diagnostic(r->span, "unmatched return type");
         }
       }
       symbol->returnType = rt;
     }
   }
+
+  currentMethod = prev;
 }
 void Resolver::visit(VarDecl *decl) {
   if (decl->init) {
@@ -105,10 +109,19 @@ void Resolver::visit(VarDecl *decl) {
   }
 
   if (!decl->type->resolved) {
-    Error::internal(decl->token, "decl->type->resolved is nullptr");
+    Error::internal(decl->span, "decl->type->resolved is nullptr");
   }
   if (!decl->symbol->typeSymbol) {
-    Error::internal(decl->token, "typeSymbol is nullptr");
+    Error::internal(decl->span, "typeSymbol is nullptr");
+  }
+  if (decl->symbol->typeSymbol->kind == TypeSymbol::TypeKind::CLASS) {
+    if (decl->init == nullptr) {
+      Error::diagnostic(decl->span, "observer variable must be initialized");
+    }
+    if (currentMethod == nullptr) {
+      Error::diagnostic(decl->span,
+                        "observer variable must be declared in method");
+    }
   }
 }
 
@@ -128,7 +141,7 @@ void Resolver::visit(Param *param) {
   param->type->accept(this);
   param->symbol->typeSymbol = param->type->resolved;
   if (!param->symbol->typeSymbol) {
-    Error::internal(param->token, "param type is unlinked");
+    Error::internal(param->span, "param type is unlinked");
   }
   if (param->defaultValue.has_value()) {
     param->defaultValue.value()->accept(this);
@@ -139,7 +152,7 @@ void Resolver::visit(InitDecl *decl) {
   auto symbol = decl->methodSymbol;
   for (auto r : symbol->returns) {
     if (r->returnType != table->getBuilt("void")) {
-      Error::diagnostic(r->token, "in init cannot declare a return type");
+      Error::diagnostic(r->span, "in init cannot declare a return type");
     }
   }
 

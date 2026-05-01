@@ -3,6 +3,7 @@
 #include "AST/Decl.h"
 #include "AST/Stmt.h"
 #include "AST/Visitor.h"
+#include "SourceSpan.h"
 #include "SymbolTable.h"
 #include "util/Error.h"
 #include <cassert>
@@ -21,7 +22,7 @@ public:
 
   inline void linkRoot() {
     if (!table->main) {
-      Error::diagnostic({}, "has no main");
+      Error::diagnostic(SourceSpan(), "has no main");
     }
     table->main->rootScope = std::move(rootScope);
   }

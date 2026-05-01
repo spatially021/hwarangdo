@@ -39,8 +39,10 @@ Decl::Ptr Parser::declaration(DeclContext context) {
   })) {
     if (check(TKind::CONST)) {
       advance();
-      if (prefix.isConst)
+      if (prefix.isConst) {
         Error::diagnostic(peek(), "duplicate const modifier");
+      }
+
       prefix.isConst = true;
     }
     if (check(TKind::ROOT)) {
@@ -120,22 +122,27 @@ Decl::Ptr Parser::declaration(DeclContext context) {
 
 Stmt::Ptr Parser::statement() {
   switch (peek().kind) {
-  case TKind::SEMICOLON:
-    return make_shared<EmptyStmt>(advance());
-
+  case TKind::SEMICOLON: {
+    return make_shared<EmptyStmt>(advance().span);
+  }
   case TKind::IF:
     return ifStmt();
-
   case TKind::SWITCH:
     return switchStmt();
   case TKind::FOR:
     return forStmt();
   case TKind::WHILE:
     return whileStmt();
-  case TKind::BREAK:
-    return make_shared<BreakStmt>(advance());
-  case TKind::CONTINUE:
-    return make_shared<ContinueStmt>(advance());
+  case TKind::BREAK: {
+    auto tk = advance();
+    return make_shared<BreakStmt>(tk.span, tk);
+  }
+
+  case TKind::CONTINUE: {
+    auto tk = advance();
+    return make_shared<ContinueStmt>(tk.span, tk);
+  }
+
   case TKind::RETURN:
     return returnStmt();
 

@@ -133,6 +133,17 @@ struct HIRAssignExpr : HIRValueExpr {
         rhs(std::move(r)) {}
 };
 
+struct HIRCompoundAssignExpr : HIRValueExpr {
+  unique_ptr<HIRPlaceExpr> lhs;
+  unique_ptr<HIRValueExpr> rhs;
+  Operator op;
+
+  HIRCompoundAssignExpr(unique_ptr<HIRPlaceExpr> l, unique_ptr<HIRValueExpr> r,
+                        Operator o, SourceSpan s = {})
+      : HIRValueExpr(HIRNodeKind::CompoundAssignExpr, l->type, s),
+        lhs(std::move(l)), rhs(std::move(r)), op(o) {}
+};
+
 struct HIRUnaryExpr : HIRValueExpr {
   Operator op;
   unique_ptr<HIRExpr> operand = nullptr;

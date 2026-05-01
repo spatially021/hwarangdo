@@ -19,7 +19,7 @@ using std::unique_ptr;
 
 void HIRBuilder::visit(LiteralExpr *expr) {
   if (!expr->resolvedType) {
-    Error::internal(expr->token, "literal has no resolved type");
+    Error::internal(expr->span, "literal has no resolved type");
   }
 
   auto *ty = lowerType(expr->resolvedType);
@@ -39,26 +39,26 @@ void HIRBuilder::visit(NameExpr *expr) {
     Error::internal("nameExpr is nullptr");
   }
   if (expr->resolved == nullptr) {
-    Error::internal(expr->token, "nameExpr resolved is nullptr");
+    Error::internal(expr->span, "nameExpr resolved is nullptr");
   }
 
   switch (expr->resolved->type) {
   case Symbol::SymbolType::VALUE: {
     auto place = lowerPlace(expr);
     if (place == nullptr) {
-      Error::internal(expr->token, "failed to lower name expr as place");
+      Error::internal(expr->span, "failed to lower name expr as place");
     }
     exprResult = std::move(place);
     return;
   }
 
   case Symbol::SymbolType::TYPE:
-    Error::internal(expr->token,
+    Error::internal(expr->span,
                     "type name cannot be used as standalone expression");
     return;
 
   default:
-    Error::internal(expr->token, "unsupported resolved symbol in name expr");
+    Error::internal(expr->span, "unsupported resolved symbol in name expr");
   }
 }
 
@@ -117,7 +117,7 @@ void HIRBuilder::visit(ThisExpr *) {
 void HIRBuilder::visit(SuperExpr *expr) {
   auto type = currentType->type;
   if (currentType->base == nullptr) {
-    Error::internal(expr->token, "current Type has no parant type");
+    Error::internal(expr->span, "current Type has no parant type");
   }
   exprResult = make_unique<HIRSelfExpr>(HIRSelfKind::This, type, type,
                                         currentType->base);
@@ -144,7 +144,7 @@ void HIRBuilder::visit(ViewExpr *expr) {
   return;
 }
 void HIRBuilder::visit(DestroyExpr *expr) {
-  Error::internal(expr->token, "not allowed destroy in expression");
+  Error::internal(expr->span, "not allowed destroy in expression");
 }
 void HIRBuilder::visit(DefaultValueExpr *) {}
 void HIRBuilder::visit(Range *) {
@@ -181,7 +181,7 @@ void HIRBuilder::visit(ClassDecl *decl) {
   auto it = program->typeDeclMap.find(decl->symbol);
 
   if (it == program->typeDeclMap.end()) {
-    Error::internal(decl->token, "not made typeShell");
+    Error::internal(decl->span, "not made typeShell");
   }
 
   TypeGuard typeGuard(currentType, it->second);
@@ -189,7 +189,7 @@ void HIRBuilder::visit(ClassDecl *decl) {
   if (decl->baseClass.has_value()) {
     it = program->typeDeclMap.find(decl->symbol->base);
     if (it == program->typeDeclMap.end()) {
-      Error::internal(decl->token, "not made typeShell");
+      Error::internal(decl->span, "not made typeShell");
     }
     currentType->base = it->second->type;
   }
@@ -215,7 +215,7 @@ void HIRBuilder::visit(StructDecl *decl) {
   auto it = program->typeDeclMap.find(decl->symbol);
 
   if (it == program->typeDeclMap.end()) {
-    Error::internal(decl->token, "not made typeShell");
+    Error::internal(decl->span, "not made typeShell");
   }
 
   TypeGuard typeGuard(currentType, it->second);
@@ -228,7 +228,7 @@ void HIRBuilder::visit(EnumDecl *decl) {
   auto it = program->typeDeclMap.find(decl->symbol);
 
   if (it == program->typeDeclMap.end()) {
-    Error::internal(decl->token, "not made typeShell");
+    Error::internal(decl->span, "not made typeShell");
   }
 
   TypeGuard typeGuard(currentType, it->second);
@@ -246,12 +246,12 @@ void HIRBuilder::visit(EnumDecl *decl) {
 void HIRBuilder::visit(ImplDecl *decl) {
   auto typeSymbol = table->getType(decl->target);
   if (typeSymbol == nullptr) {
-    Error::internal(decl->token, "fail to find impl target symbol");
+    Error::internal(decl->span, "fail to find impl target symbol");
   }
 
   auto it = program->typeDeclMap.find(typeSymbol);
   if (it == program->typeDeclMap.end()) {
-    Error::internal(decl->token, "fail to find typeShell");
+    Error::internal(decl->span, "fail to find typeShell");
   }
 
   TypeGuard typeGuard(currentType, it->second);
@@ -264,7 +264,10 @@ void HIRBuilder::visit(TraitSig *) {}
 void HIRBuilder::visit(FuncDecl *decl) { bindMethod(decl); }
 void HIRBuilder::visit(VarDecl *decl) {
   if (decl->isRoot) {
-    // process in program
+    auto it = program->rootMap.find(decl->symbol);
+    if (it == program->rootMap.end()) {
+      Error::internal(decl->span, "cannot find linked root : " + decl->name);
+    }
   } else {
     if (isField) {
       auto field = lowerField(decl);
@@ -296,6 +299,6 @@ void HIRBuilder::visit(InitDecl *decl) { bindMethod(decl); }
 
 void HIRBuilder::visit(TypeNode *) {}
 void HIRBuilder::visit(ASTNode *node) {
-  Error::internal(node->token, "unknown generic");
+  Error::internal(node->span, "unknown generic");
 }
 void HIRBuilder::visit(Param *) {}

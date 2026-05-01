@@ -9,7 +9,7 @@
 
 unique_ptr<HIRBlockStmt> HIRBuilder::lowerBlock(BlockStmt *stmt) {
 
-  unique_ptr<HIRBlockStmt> block = make_unique<HIRBlockStmt>();
+  unique_ptr<HIRBlockStmt> block = make_unique<HIRBlockStmt>(stmt->span);
   BlockGuard _(currentBlock, block.get());
   for (auto &s : stmt->statements) {
     s->accept(this);
@@ -22,7 +22,7 @@ unique_ptr<HIRBlockStmt> HIRBuilder::lowerStmtAsBlock(Stmt *stmt) {
     return lowerBlock(b);
   }
 
-  unique_ptr<HIRBlockStmt> block = make_unique<HIRBlockStmt>();
+  unique_ptr<HIRBlockStmt> block = make_unique<HIRBlockStmt>(stmt->span);
   BlockGuard _(currentBlock, block.get());
   stmt->accept(this);
   return block;
@@ -35,10 +35,10 @@ unique_ptr<HIRStmt> HIRBuilder::lowerFor(ForStmt *stmt) {
     if (auto v = dynamic_cast<VarDecl *>(d->decl.get())) {
       local = lowerLocal(v);
     } else {
-      Error::internal(stmt->token, "for initializer decl is not VarDecl");
+      Error::internal(stmt->span, "for initializer decl is not VarDecl");
     }
   } else {
-    Error::internal(stmt->token, "for initializer is not DeclStmt");
+    Error::internal(stmt->span, "for initializer is not DeclStmt");
   }
 
   auto from = lowerExpr(stmt->range->from.get());
@@ -109,7 +109,7 @@ unique_ptr<HIRStmt> HIRBuilder::lowerExprStmt(ExprStmt *stmt) {
 unique_ptr<HIRStmt> HIRBuilder::lowerDestroyStmt(DestroyExpr *expr) {
   auto storage = dynamic_cast<BuiltInNameExpr *>(expr->storage.get());
   if (storage == nullptr) {
-    Error::internal(expr->token, "iliegal astNode kind");
+    Error::internal(expr->span, "iliegal astNode kind");
   }
   StorageKind storageKind;
   switch (storage->storageType) {
@@ -120,25 +120,24 @@ unique_ptr<HIRStmt> HIRBuilder::lowerDestroyStmt(DestroyExpr *expr) {
     storageKind = StorageKind::Arena;
     break;
   default:
-    Error::internal(expr->token, "unknown storage kind");
+    Error::internal(expr->span, "unknown storage kind");
   };
 
   NameExpr *name = dynamic_cast<NameExpr *>(expr->target.get());
 
   if (name == nullptr) {
-    Error::internal(expr->token,
-                    "illegal astNode type : " + expr->target->token.text);
+    Error::internal(expr->span, "illegal astNode type");
   }
 
   auto place = lowerPlace(name);
 
   auto handleType = dynamic_cast<HIRHandleType *>(place->type);
   if (handleType == nullptr) {
-    Error::internal(expr->token, "expect handle : " + place->type->name);
+    Error::internal(expr->span, "expect handle : " + place->type->name);
   }
 
   if (handleType->storage != storageKind) {
-    Error::internal(expr->token, "handle storage kind mismatch");
+    Error::internal(expr->span, "handle storage kind mismatch");
   }
 
   HIREntityType *entity = handleType->entityType;

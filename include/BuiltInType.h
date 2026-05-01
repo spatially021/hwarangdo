@@ -23,7 +23,8 @@ enum class BuiltInType {
   S16,
   S32,
   B,
-  FI
+  FI,
+  VOID
 };
 
 struct BuiltinEntry {

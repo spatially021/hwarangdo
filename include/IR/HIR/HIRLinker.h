@@ -28,4 +28,6 @@ public:
   void lowerTypeShell(Decl *decl);
 
   unique_ptr<HIRSource> link();
+
+  void linkSecondPass();
 };

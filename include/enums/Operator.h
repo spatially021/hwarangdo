@@ -1,32 +1,38 @@
 #pragma once
 
 enum class Operator {
-  ADD,
-  SUB,
-  MUL,
-  DIV,
-  REM,
-  POW,
+  // ===== 산술 연산 =====
+  ADD, // +   : 덧셈
+  SUB, // -   : 뺄셈
+  MUL, // *   : 곱셈
+  DIV, // /   : 나눗셈
+  REM, // %   : 나머지
+  POW, // **  : 제곱
 
-  B_AND,
-  B_OR,
-  B_XOR,
+  // ===== 비트 연산 =====
+  B_AND, // &   : 비트 AND
+  B_OR,  // |   : 비트 OR
+  B_XOR, // ^   : 비트 XOR
 
-  AND,
-  OR,
+  // ===== 논리 연산 =====
+  AND, // &&  : 논리 AND
+  OR,  // ||  : 논리 OR
 
-  EQ,
-  NT,
-  LS,
-  LSE,
-  GR,
-  GRE,
+  // ===== 비교 연산 =====
+  EQ,  // ==  : 같음
+  NT,  // !=  : 다름
+  LS,  // <   : 작음
+  LSE, // <=  : 작거나 같음
+  GR,  // >   : 큼
+  GRE, // >=  : 크거나 같음
 
-  LSH,
-  RSH,
+  // ===== 시프트 연산 =====
+  LSH, // <<  : 왼쪽 시프트
+  RSH, // >>  : 오른쪽 시프트
 
-  L_NOT,
-  B_NOT,
-  PLUS,
-  MINUS,
+  // ===== 단항 연산 =====
+  L_NOT, // !   : 논리 NOT (bool)
+  B_NOT, // ~ or ! (int) : 비트 NOT (정수) ※ 문법상 !로 오버로딩됨
+  PLUS,  // +   : 단항 + (값 유지)
+  MINUS, // -   : 단항 - (부호 반전)
 };

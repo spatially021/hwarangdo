@@ -60,7 +60,9 @@ struct HIRProgram : HIRNode {
 
   int nextRootId = 0;
 
-  HIRProgram(SymbolTable *table) : HIRNode(HIRNodeKind::Program) {
+  SymbolTable *table = nullptr;
+
+  HIRProgram(SymbolTable *t) : HIRNode(HIRNodeKind::Program), table(t) {
     for (const auto &entry : builtinEntries) {
       std::unique_ptr<HIRBuiltinType> symbol = std::make_unique<HIRBuiltinType>(
           entry.name, entry.category, table->getBuilt(entry.name));
@@ -120,5 +122,33 @@ struct HIRProgram : HIRNode {
       roots.push_back(std::move(field));
       rootMap.emplace(decl->symbol, raw);
     }
+  }
+
+  void linkSecondPass() {
+    for (auto &s : sources) {
+      for (auto &d : s->source->decls) {
+        if (auto *c = dynamic_cast<ClassDecl *>(d.get())) {
+          if (c->baseClass.has_value()) {
+            auto it = typeDeclMap.find(c->symbol);
+            if (it == typeDeclMap.end()) {
+              Error::internal(d->span, "fail to get type");
+            }
+            auto bIt = typeCache.find(c->symbol->base);
+            if (bIt == typeCache.end()) {
+              Error::internal(c->span, "fail to get baseType");
+            }
+            it->second->base = bIt->second;
+          }
+        }
+      }
+    }
+  }
+
+  HIRType *getBool() {
+    auto it = typeCache.find(table->getBool());
+    if (it == typeCache.end()) {
+      Error::internal("cannot find bool Type");
+    }
+    return it->second;
   }
 };

@@ -111,9 +111,9 @@ void Linker::visit(ClassDecl *decl) {
     auto symbol = static_cast<MainSymbol *>(decl->symbol);
     auto &bucket = symbol->memberScope->methodMap["update"];
     if (bucket.size() == 0) {
-      Error::diagnostic(decl->token, "has no update method");
+      Error::diagnostic(decl->span, "has no update method");
     } else if (bucket.size() > 1) {
-      Error::diagnostic(decl->token, "not allowed update method overloading");
+      Error::diagnostic(decl->span, "not allowed update method overloading");
     }
 
     symbol->main = bucket[0];
@@ -125,20 +125,20 @@ void Linker::visit(ClassDecl *decl) {
       auto symbol = table->getType(s);
       symbol->decl->isExtended = true;
       if (symbol->kind != TypeSymbol::TypeKind::CLASS) {
-        Error::diagnostic(decl->token, s + " is not class");
+        Error::diagnostic(decl->span, s + " is not class");
       }
       decl->symbol->base = symbol;
     } else {
-      Error::diagnostic(decl->token, "unknown parent class '" + s + "'");
+      Error::diagnostic(decl->span, "unknown parent class '" + s + "'");
     }
   }
   for (auto &t : decl->traits) {
     if (!table->isType(t)) {
-      Error::diagnostic(decl->token, "unknown trait '" + t + "'");
+      Error::diagnostic(decl->span, "unknown trait '" + t + "'");
     }
     auto symbol = table->getType(t);
     if (symbol->kind != TypeSymbol::TypeKind::TRAIT) {
-      Error::diagnostic(decl->token, t + " is not trait");
+      Error::diagnostic(decl->span, t + " is not trait");
     }
     decl->symbol->traits.push_back(symbol);
   }
@@ -158,13 +158,12 @@ void Linker::visit(ClassDecl *decl) {
   for (auto &t : decl->symbol->traits) {
     auto trait = dynamic_cast<TraitDecl *>(t->decl);
     if (!trait) {
-      Error::internal(decl->token,
-                      "unmatched decl subClass : " + t->decl->name);
+      Error::internal(decl->span, "unmatched decl subClass : " + t->decl->name);
     }
     for (auto &s : trait->traitSigs) {
       auto &bucket = t->traitSigs[s->name];
       if (!Helper::hasSameSig(bucket, s.get())) {
-        Error::diagnostic(s->token, "undeclared trait sig : " + s->name);
+        Error::diagnostic(s->span, "undeclared trait sig : " + s->name);
       }
     }
   }
@@ -182,7 +181,7 @@ void Linker::visit(EnumDecl *decl) {
       auto t = v->payload.value().get();
       auto s = table->getType(t);
       if (!s)
-        Error::diagnostic(t->token, "unknown type : " + t->token.text);
+        Error::diagnostic(t->span, "unknown type : " + t->type);
       t->resolved = s;
       decl->symbol->variantMap[v->name]->payloadType = table->getType(t);
     }
@@ -191,17 +190,17 @@ void Linker::visit(EnumDecl *decl) {
 void Linker::visit(ImplDecl *decl) {
   auto implIt = table->implMap.find(decl);
   if (implIt == table->implMap.end()) {
-    Error::internal(decl->token, "fail to find impl");
+    Error::internal(decl->span, "fail to find impl");
   }
   ScopeGuard _(*table, implIt->second->memberScope);
   string s = decl->target;
 
   if (!table->isType(s)) {
-    Error::diagnostic(decl->token, "unknown impl target");
+    Error::diagnostic(decl->span, "unknown impl target");
   }
   auto symbol = table->getType(s);
   if (symbol->kind != TypeSymbol::TypeKind::STRUCT) {
-    Error::diagnostic(decl->token, s + " is not struct");
+    Error::diagnostic(decl->span, s + " is not struct");
   }
 
   TypeContextGuard __(currentType, symbol);
@@ -209,10 +208,10 @@ void Linker::visit(ImplDecl *decl) {
   ImplSymbol *impl = implIt->second;
   impl->target = symbol;
   if (impl->target == nullptr) {
-    Error::internal(decl->token, "impl target is nullptr");
+    Error::internal(decl->span, "impl target is nullptr");
   }
   if (impl->target->memberScope == nullptr) {
-    Error::internal(decl->token, "impl target's memberScope is nullptr");
+    Error::internal(decl->span, "impl target's memberScope is nullptr");
   }
 
   for (auto &a : decl->LinkedImplMethods) {
@@ -220,10 +219,10 @@ void Linker::visit(ImplDecl *decl) {
 
     MethodSymbol *methodSymbol = a->methodSymbol;
     if (methodSymbol == nullptr) {
-      Error::internal(a->token, "not built methodSymbol : " + a->name);
+      Error::internal(a->span, "not built methodSymbol : " + a->name);
     }
     if (!symbol->addMethod(methodSymbol)) {
-      Error::diagnostic(a->token, "duplicated impl method");
+      Error::diagnostic(a->span, "duplicated impl method");
     }
     methodSymbol->onwer = symbol;
     methodSymbol->selfScope = symbol->memberScope;
@@ -252,16 +251,16 @@ void Linker::visit(FuncDecl *decl) {
   if (decl->isOverride) {
     if (currentType->base->memberScope->methodMap.find(decl->name) ==
         currentType->base->memberScope->methodMap.end()) {
-      Error::diagnostic(decl->token, "unkwown override target : " + decl->name);
+      Error::diagnostic(decl->span, "unkwown override target : " + decl->name);
     }
   }
 
   if (decl->isFrame) {
     if (!dynamic_cast<MainSymbol *>(currentType)) {
-      Error::diagnostic(decl->token, "frame can only in Main class");
+      Error::diagnostic(decl->span, "frame can only in Main class");
     }
     if (decl->name != "update") {
-      Error::diagnostic(decl->token, "after frame need method name - update");
+      Error::diagnostic(decl->span, "after frame need method name - update");
     }
   }
 

@@ -6,6 +6,7 @@
 #include "SemanticAnalyzer/symbol/MethodSymbol.h"
 #include "SemanticAnalyzer/symbol/TypeSymbol.h"
 #include "SemanticAnalyzer/symbol/ValueSymbol.h"
+#include "SourceSpan.h"
 #include "util/Error.h"
 #include <cstddef>
 #include <vector>
@@ -18,7 +19,7 @@ namespace {
 
 // resolved가 특정 타입 심볼인지 강하게 확인
 template <typename T>
-T *checkedSymbolCast(Symbol *symbol, const Token &token,
+T *checkedSymbolCast(Symbol *symbol, const SourceSpan &token,
                      const std::string &msg) {
   auto *result = dynamic_cast<T *>(symbol);
   if (!result) {
@@ -31,10 +32,10 @@ T *checkedSymbolCast(Symbol *symbol, const Token &token,
 
 void Resolver::ResolveEnumVariant(CallExpr *expr) {
   auto *variant = checkedSymbolCast<EnumVariantSymbol>(
-      expr->resolved, expr->token, "expected enum variant symbol");
+      expr->resolved, expr->span, "expected enum variant symbol");
 
   if (expr->arguments.size() > 1) {
-    Error::diagnostic(expr->token, "enum variant allows at most one payload");
+    Error::diagnostic(expr->span, "enum variant allows at most one payload");
   }
 
   if (expr->arguments.size() == 1) {
@@ -42,28 +43,28 @@ void Resolver::ResolveEnumVariant(CallExpr *expr) {
     arg->accept(this);
 
     if (!arg->resolvedType) {
-      Error::internal(arg->token, "unresolved payload type");
+      Error::internal(arg->span, "unresolved payload type");
     }
 
     if (variant->payloadType == nullptr) {
-      Error::diagnostic(expr->token, "this variant does not take payload: " +
-                                         expr->methodName);
+      Error::diagnostic(expr->span, "this variant does not take payload: " +
+                                        expr->methodName);
     }
 
     if (!isAssignable(variant->payloadType, arg->resolvedType)) {
-      Error::diagnostic(expr->token, "incorrect payload type");
+      Error::diagnostic(expr->span, "incorrect payload type");
     }
 
     arg->resolvedType =
         implicitCasting(arg->resolvedType, variant->payloadType);
   } else {
     if (variant->payloadType != nullptr) {
-      Error::diagnostic(expr->token, expr->methodName + " needs payload");
+      Error::diagnostic(expr->span, expr->methodName + " needs payload");
     }
   }
 
   if (!expr->receiver || !expr->receiver->resolvedType) {
-    Error::internal(expr->token, "unresolved enum receiver type");
+    Error::internal(expr->span, "unresolved enum receiver type");
   }
 
   // EnumName.Variant(...) 의 결과 타입은 enum 자체
@@ -88,7 +89,7 @@ void Resolver::ResolveCall(CallExpr *expr, Scope *scope) {
 
     auto func = dynamic_cast<FuncDecl *>(m->decl);
     if (func == nullptr) {
-      Error::internal(expr->token, "illegal ast kind");
+      Error::internal(expr->span, "illegal ast kind");
     }
 
     for (size_t i = 0; i < m->paramTypes.size(); ++i) {
@@ -122,20 +123,20 @@ void Resolver::ResolveCall(CallExpr *expr, Scope *scope) {
   }
 
   if (bestIdx.empty()) {
-    Error::diagnostic(expr->token, "unknown call");
+    Error::diagnostic(expr->span, "unknown call");
   }
 
   if (bestIdx.size() == 1) {
     auto best = candidates[bestIdx[0]].second;
     expr->resolved = best;
     if (best->returnType == nullptr) {
-      Error::internal(expr->token, "methodSymbol's returnType is nullptr");
+      Error::internal(expr->span, "methodSymbol's returnType is nullptr");
     }
     expr->resolvedType = best->returnType;
     return;
   }
 
-  Error::diagnostic(expr->token, "ambiguous overload call");
+  Error::diagnostic(expr->span, "ambiguous overload call");
 }
 int Resolver::rankOf(const ArgMatchKind &kind) {
   switch (kind) {
@@ -198,7 +199,7 @@ void Resolver::visit(CallExpr *expr) {
     expr->callType = CallExpr::CallType::FUNC_CALL;
     auto it = currentType->memberScope->methodMap.find(expr->methodName);
     if (it == currentType->memberScope->methodMap.end()) {
-      Error::diagnostic(expr->token,
+      Error::diagnostic(expr->span,
                         "cannot find method name : " + expr->methodName);
     }
     ResolveCall(expr, currentType->memberScope);
@@ -211,7 +212,7 @@ void Resolver::visit(CallExpr *expr) {
     if (expr->receiver->resolvedType->kind == TypeSymbol::TypeKind::ENUM) {
       auto it = expr->receiver->resolvedType->variantMap.find(expr->methodName);
       if (it == expr->receiver->resolvedType->variantMap.end()) {
-        Error::diagnostic(expr->token,
+        Error::diagnostic(expr->span,
                           "unknown variant name: " + expr->methodName);
       }
 
@@ -221,28 +222,26 @@ void Resolver::visit(CallExpr *expr) {
       return;
     } else {
       // TODO:정적 메서드 추가시 추가.
-      Error::diagnostic(expr->token, "static method is not supported yet");
+      Error::diagnostic(expr->span, "static method is not supported yet");
     }
-    Error::diagnostic(expr->token, "static method is not supported yet: " +
-                                       expr->methodName);
+    Error::diagnostic(expr->span, "static method is not supported yet: " +
+                                      expr->methodName);
   } else {
     auto *ownerType = expr->receiver->resolvedType;
     if (ownerType == nullptr) {
-      Error::internal(expr->token,
-                      "unresolved type: " + expr->receiver->token.text);
+      Error::internal(expr->span, "unresolved type");
     }
 
     if (auto g = dynamic_cast<GenericSymbol *>(ownerType)) {
       if (g->origin == table->getHandle()) {
-        Error::diagnostic(expr->token, "handle type cannot access member : " +
-                                           g->args[0]->name);
+        Error::diagnostic(expr->span, "handle type cannot access member : " +
+                                          g->args[0]->name);
       }
     }
 
     auto *scope = ownerType->memberScope;
     if (!scope) {
-      Error::internal(expr->token,
-                      "memberScope is nullptr: " + ownerType->name);
+      Error::internal(expr->span, "memberScope is nullptr: " + ownerType->name);
     }
 
     expr->callType = CallExpr::CallType::FUNC_CALL;
@@ -250,6 +249,5 @@ void Resolver::visit(CallExpr *expr) {
     return;
   }
 
-  Error::internal(expr->token,
-                  "unresolved call receiver: " + expr->receiver->token.text);
+  Error::internal(expr->span, "unresolved call receiver");
 }

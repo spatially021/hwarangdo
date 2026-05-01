@@ -1,0 +1,7 @@
+class Main{
+    public init(){
+        string s = "abc";
+        if (s) {
+        }
+    }
+}

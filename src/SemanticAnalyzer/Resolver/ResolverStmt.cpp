@@ -5,7 +5,6 @@
 #include "SemanticAnalyzer/Scope.h"
 #include "SemanticAnalyzer/symbol/MethodSymbol.h"
 #include "SemanticAnalyzer/symbol/TypeSymbol.h"
-#include "SemanticAnalyzer/symbol/ValueSymbol.h"
 #include "util/Error.h"
 #include "util/Guard.h"
 #include <memory>
@@ -20,7 +19,7 @@ void Resolver::visit(BlockStmt *stmt) {
 void Resolver::visit(IfStmt *stmt) {
   stmt->condition->accept(this);
   if (!table->isBool(stmt->condition->resolvedType)) {
-    Error::diagnostic(stmt->condition->token, "condition is not bool type");
+    Error::diagnostic(stmt->condition->span, "condition is not bool type");
   }
 
   stmt->thenBranch->accept(this);
@@ -36,7 +35,7 @@ void Resolver::visit(ForStmt *stmt) {
 void Resolver::visit(WhileStmt *stmt) {
   stmt->condition->accept(this);
   if (!table->isBool(stmt->condition->resolvedType))
-    Error::diagnostic(stmt->condition->token, "condition is not bool type");
+    Error::diagnostic(stmt->condition->span, "condition is not bool type");
   stmt->body->accept(this);
 }
 void Resolver::visit(SwitchStmt *stmt) {
@@ -55,23 +54,18 @@ void Resolver::visit(Case *stmt) {
   for (auto v : stmt->values) {
     auto t = dynamic_pointer_cast<CaseValueExpr>(v);
     if (!t) {
-      Error::internal(stmt->token, "illegal expr kind");
+      Error::internal(stmt->span, "illegal expr kind");
     }
     t->accept(this);
     if (t->payloadType) {
-      auto symbol = make_unique<ValueSymbol>();
-      symbol->name = t->arg->token.text;
-      symbol->kind = ValueSymbol::Kind::VAR;
-      symbol->typeSymbol = t->payloadType;
-      symbol->node = stmt;
-      table->add(std::move(symbol));
+      t->arg->accept(this);
     }
   }
   table->exit();
   stmt->body->accept(this);
   if (dynamic_cast<MatchExpr *>(currentSwitch)) {
     if (stmt->transfers.empty()) {
-      Error::diagnostic(stmt->token,
+      Error::diagnostic(stmt->span,
                         "at least one value transfer need in match's case");
     }
     TypeSymbol *type = nullptr;
@@ -82,7 +76,7 @@ void Resolver::visit(Case *stmt) {
         continue;
       }
       if (!isAssignable(t->resolvedType, type)) {
-        Error::diagnostic(t->token, "inconsistent value transfer");
+        Error::diagnostic(t->span, "inconsistent value transfer");
       }
     }
 
@@ -107,10 +101,10 @@ void Resolver::visit(ReturnStmt *stmt) {
 
 void Resolver::visit(ValueTransferStmt *stmt) {
   if (!currentCase) {
-    Error::diagnostic(stmt->token, "<< allow in case statement");
+    Error::diagnostic(stmt->span, "<< allow in case statement");
   }
   if (dynamic_cast<SwitchStmt *>(currentSwitch)) {
-    Error::diagnostic(stmt->token, "<< not allow in swtich statement");
+    Error::diagnostic(stmt->span, "<< not allow in swtich statement");
   } else if (!dynamic_cast<MatchExpr *>(currentSwitch)) {
     Error::internal("illegal node kind");
   }

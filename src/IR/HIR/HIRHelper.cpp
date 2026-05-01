@@ -62,7 +62,7 @@ unique_ptr<HIRValueExpr> HIRBuilder::lowerValue(Expr *expr) {
     Error::internal("expect value or place type");
   }
   if (rt == nullptr) {
-    Error::internal(expr->token, "fail to get value");
+    Error::internal(expr->span, "fail to get value");
   }
   return rt;
 }
@@ -104,12 +104,12 @@ void HIRBuilder::bindLocal(ValueSymbol *symbol, unique_ptr<HIRLocal> local) {
 void HIRBuilder::bindMethod(FuncDecl *decl) {
   auto it = program->typeDeclMap.find(decl->methodSymbol->onwer);
   if (it == program->typeDeclMap.end()) {
-    Error::internal(decl->token, "fail to find method's owner type");
+    Error::internal(decl->span, "fail to find method's owner type");
   }
   auto type = it->second;
   auto mIT = type->methodMap.find(decl->methodSymbol);
   if (mIT == type->methodMap.end()) {
-    Error::internal(decl->token, "fail to find method");
+    Error::internal(decl->span, "fail to find method");
   }
   auto method = mIT->second;
   MethodGuard _(currentMethod, method);
@@ -124,9 +124,16 @@ void HIRBuilder::bindField(ValueSymbol *symbol, unique_ptr<HIRField> field) {
 }
 
 pair<bool, HIRLocal *> HIRBuilder::lookupLocal(ValueSymbol *symbol) {
-  auto it = currentBlock->localMap.find(symbol);
-  bool b = it != currentBlock->localMap.end();
-  return {b, b ? it->second : nullptr};
+
+  for (auto cb = currentBlock; currentBlock != nullptr;
+       cb = currentBlock->parent) {
+    auto it = cb->localMap.find(symbol);
+    bool b = it != cb->localMap.end();
+    if (b) {
+      return {b, it->second};
+    }
+  }
+  return {false, nullptr};
 }
 
 pair<bool, HIRParam *> HIRBuilder::lookupParam(ValueSymbol *symbol) {

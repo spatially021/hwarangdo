@@ -59,7 +59,7 @@ void TypeResolver::resolveTypeNode(TypeNode *type, SymbolTable *table) {
       dynamic_cast<IdentifierTypeNode *>(type)) {
     auto symbol = table->getType(type);
     if (!symbol)
-      Error::diagnostic(type->token, "unknown type : " + type->token.text);
+      Error::diagnostic(type->span, "unknown type : " + type->type);
     type->resolved = symbol;
   } else if (auto a = dynamic_cast<ArrayTypeNode *>(type)) {
     TypeResolver::resolveTypeNode(a->elementType.get(), table);
@@ -72,8 +72,7 @@ void TypeResolver::resolveTypeNode(TypeNode *type, SymbolTable *table) {
     for (auto &t : g->typeArgs) {
       resolveTypeNode(t.get(), table);
       if (!t->resolved) {
-        Error::internal(t->token,
-                        "fail to resolve args Type : " + t->token.text);
+        Error::internal(t->span, "fail to resolve args Type : " + t->type);
       }
       args.push_back(t->resolved);
     }
@@ -82,43 +81,43 @@ void TypeResolver::resolveTypeNode(TypeNode *type, SymbolTable *table) {
     case GenericTypeNode::GenericKind::HANDLE:
 
       if (args.size() != 1) {
-        Error::diagnostic(g->token, "Handle need one type but '" +
-                                        to_string(args.size()) + "'");
+        Error::diagnostic(g->span, "Handle need one type but '" +
+                                       to_string(args.size()) + "'");
       }
 
       if (ar[0]->resolved->kind != TypeSymbol::TypeKind::CLASS) {
-        Error::diagnostic(ar[0]->token, "not allowed handle target type : " +
-                                            ar[0]->token.text);
+        Error::diagnostic(ar[0]->span,
+                          "not allowed handle target type : " + ar[0]->type);
       }
 
       if (ar[0]->resolved->type == Symbol::SymbolType::MAIN) {
-        Error::diagnostic(ar[0]->token, "not allowed handle target type : " +
-                                            ar[0]->token.text);
+        Error::diagnostic(ar[0]->span,
+                          "not allowed handle target type : " + ar[0]->type);
       }
 
       orign = table->getHandle();
       break;
     case GenericTypeNode::GenericKind::OPTION:
       if (args.size() != 1) {
-        Error::diagnostic(g->token, "Option need one type but '" +
-                                        to_string(args.size()) + "'");
+        Error::diagnostic(g->span, "Option need one type but '" +
+                                       to_string(args.size()) + "'");
       }
       orign = table->getOption();
       break;
     case GenericTypeNode::GenericKind::RESULT:
       if (args.size() != 2) {
-        Error::diagnostic(g->token, "Result neet two type but '" +
-                                        to_string(args.size()) + "'");
+        Error::diagnostic(g->span, "Result neet two type but '" +
+                                       to_string(args.size()) + "'");
       }
       if (args[1]->kind != TypeSymbol::TypeKind::ERROR) {
-        Error::diagnostic(g->token, "Result's second type is Error but '" +
-                                        args[1]->name);
+        Error::diagnostic(g->span, "Result's second type is Error but '" +
+                                       args[1]->name);
       }
       break;
     }
     g->resolved = table->GenericInsGetOrCreate(orign, args);
   } else {
-    Error::diagnostic(type->token, "unknown type : " + type->token.text);
+    Error::diagnostic(type->span, "unknown type : " + type->type);
   }
 }
 
@@ -127,7 +126,7 @@ llvm::APInt TypeResolver::resolveFixedArraySize(Expr *expr,
 
   auto lit = dynamic_cast<LiteralExpr *>(expr);
   if (!lit) {
-    Error::diagnostic(expr->token, "array size must be integer literal");
+    Error::diagnostic(expr->span, "array size must be integer literal");
   }
   ResolvedLit r;
   switch (lit->token.kind) {
@@ -137,19 +136,19 @@ llvm::APInt TypeResolver::resolveFixedArraySize(Expr *expr,
     lit->resolvedLit = r;
     break;
   default:
-    Error::diagnostic(expr->token, "array size must be integer literal");
+    Error::diagnostic(expr->span, "array size must be integer literal");
   }
   if (!lit) {
-    Error::diagnostic(expr->token, "array size must be integer literal");
+    Error::diagnostic(expr->span, "array size must be integer literal");
   }
 
   llvm::APInt value = lit->resolvedLit.asInt().value;
 
   if (value.isNegative()) {
-    Error::diagnostic(expr->token, "array size cannot be negative");
+    Error::diagnostic(expr->span, "array size cannot be negative");
   }
   if (value == 0) {
-    Error::diagnostic(expr->token, "array size must be greater than zero");
+    Error::diagnostic(expr->span, "array size must be greater than zero");
   }
 
   return value.zextOrTrunc(128);

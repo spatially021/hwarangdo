@@ -44,16 +44,16 @@ ResolvedLit Resolver::resolveLitFloat(LiteralExpr *expr) {
                                             llvm::APFloat::rmNearestTiesToEven);
 
   if (!parseResult) {
-    Error::diagnostic(expr->token, "invalid floating-point literal");
+    Error::diagnostic(expr->span, "invalid floating-point literal");
   }
 
   auto parseStatus = *parseResult;
 
   if (parseStatus & llvm::APFloat::opInvalidOp) {
-    Error::diagnostic(expr->token, "invalid floating-point literal");
+    Error::diagnostic(expr->span, "invalid floating-point literal");
   }
   if (parseStatus & llvm::APFloat::opOverflow) {
-    Error::diagnostic(expr->token, "unsupported floating-point literal range");
+    Error::diagnostic(expr->span, "unsupported floating-point literal range");
   }
 
   struct Candidate {
@@ -79,5 +79,5 @@ ResolvedLit Resolver::resolveLitFloat(LiteralExpr *expr) {
     return resolvedLit;
   }
 
-  Error::diagnostic(expr->token, "unsupported floating-point literal range");
+  Error::diagnostic(expr->span, "unsupported floating-point literal range");
 }

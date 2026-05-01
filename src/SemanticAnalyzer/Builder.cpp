@@ -65,7 +65,7 @@ void Builder::visit(ViewExpr *expr) {
   expr->left->accept(this);
   expr->target->accept(this);
 }
-void Builder::visit(DestroyExpr *expr){
+void Builder::visit(DestroyExpr *expr) {
   expr->storage->accept(this);
   expr->target->accept(this);
 }
@@ -146,13 +146,13 @@ void Builder::buildMain(ClassDecl *decl) {
   if (!result.success) {
     switch (result.errorType) {
     case SymbolTable::Result::DUPLICATED:
-      Error::diagnostic(decl->token, "duplicated Main");
+      Error::diagnostic(decl->span, "duplicated Main");
       break;
     case SymbolTable::Result::RESERVED:
-      Error::diagnostic(decl->token, "reserved name : " + decl->name);
+      Error::diagnostic(decl->span, "reserved name : " + decl->name);
       break;
     case SymbolTable::Result::UNKNOWN_SYMBOL:
-      Error::internal(decl->token, "unknown symbol" + decl->name);
+      Error::internal(decl->span, "unknown symbol" + decl->name);
       break;
     case SymbolTable::Result::NONE:
       break;
@@ -195,13 +195,13 @@ void Builder::visit(ClassDecl *decl) {
   if (!result.success) {
     switch (result.errorType) {
     case SymbolTable::Result::DUPLICATED:
-      Error::diagnostic(decl->token, "duplicated class name : " + decl->name);
+      Error::diagnostic(decl->span, "duplicated class name : " + decl->name);
       break;
     case SymbolTable::Result::RESERVED:
-      Error::diagnostic(decl->token, "reserved name : " + decl->name);
+      Error::diagnostic(decl->span, "reserved name : " + decl->name);
       break;
     case SymbolTable::Result::UNKNOWN_SYMBOL:
-      Error::internal(decl->token, "unknown symbol" + decl->name);
+      Error::internal(decl->span, "unknown symbol" + decl->name);
       break;
     case SymbolTable::Result::NONE:
       break;
@@ -225,8 +225,7 @@ void Builder::visit(ClassDecl *decl) {
     if (canInnerDecl(a.get())) {
       a->accept(this);
     } else {
-      Error::diagnostic(a->token,
-                        "not allowed inner decl type : " + a->token.text);
+      Error::diagnostic(a->span, "not allowed inner decl type");
     }
   }
 }
@@ -244,13 +243,13 @@ void Builder::visit(StructDecl *decl) {
   if (!result.success) {
     switch (result.errorType) {
     case SymbolTable::Result::DUPLICATED:
-      Error::diagnostic(decl->token, "duplicated class name : " + decl->name);
+      Error::diagnostic(decl->span, "duplicated class name : " + decl->name);
       break;
     case SymbolTable::Result::RESERVED:
-      Error::diagnostic(decl->token, "reserved name : " + decl->name);
+      Error::diagnostic(decl->span, "reserved name : " + decl->name);
       break;
     case SymbolTable::Result::UNKNOWN_SYMBOL:
-      Error::internal(decl->token, "unknown symbol" + decl->name);
+      Error::internal(decl->span, "unknown symbol" + decl->name);
       break;
     case SymbolTable::Result::NONE:
       break;
@@ -282,13 +281,13 @@ void Builder::visit(EnumDecl *decl) {
   if (!result.success) {
     switch (result.errorType) {
     case SymbolTable::Result::DUPLICATED:
-      Error::diagnostic(decl->token, "duplicated class name : " + decl->name);
+      Error::diagnostic(decl->span, "duplicated class name : " + decl->name);
       break;
     case SymbolTable::Result::RESERVED:
-      Error::diagnostic(decl->token, "reserved name : " + decl->name);
+      Error::diagnostic(decl->span, "reserved name : " + decl->name);
       break;
     case SymbolTable::Result::UNKNOWN_SYMBOL:
-      Error::internal(decl->token, "unknown symbol" + decl->name);
+      Error::internal(decl->span, "unknown symbol" + decl->name);
       break;
     case SymbolTable::Result::NONE:
       break;
@@ -346,13 +345,13 @@ void Builder::visit(TraitDecl *decl) {
   if (!result.success) {
     switch (result.errorType) {
     case SymbolTable::Result::DUPLICATED:
-      Error::diagnostic(decl->token, "duplicated trait name : " + decl->name);
+      Error::diagnostic(decl->span, "duplicated trait name : " + decl->name);
       break;
     case SymbolTable::Result::RESERVED:
-      Error::diagnostic(decl->token, "reserved name : " + decl->name);
+      Error::diagnostic(decl->span, "reserved name : " + decl->name);
       break;
     case SymbolTable::Result::UNKNOWN_SYMBOL:
-      Error::internal(decl->token, "unknown symbol" + decl->name);
+      Error::internal(decl->span, "unknown symbol" + decl->name);
       break;
     case SymbolTable::Result::NONE:
       break;
@@ -387,13 +386,13 @@ void Builder::visit(TraitSig *sig) {
   if (!result.success) {
     switch (result.errorType) {
     case SymbolTable::Result::DUPLICATED:
-      Error::diagnostic(sig->token, "duplicated class name : " + sig->name);
+      Error::diagnostic(sig->span, "duplicated class name : " + sig->name);
       break;
     case SymbolTable::Result::RESERVED:
-      Error::diagnostic(sig->token, "reserved name : " + sig->name);
+      Error::diagnostic(sig->span, "reserved name : " + sig->name);
       break;
     case SymbolTable::Result::UNKNOWN_SYMBOL:
-      Error::internal(sig->token, "unknown symbol" + sig->name);
+      Error::internal(sig->span, "unknown symbol" + sig->name);
       break;
     case SymbolTable::Result::NONE:
       break;
@@ -413,14 +412,14 @@ void Builder::visit(TraitSig *sig) {
     if (!re.success) {
       switch (re.errorType) {
       case SymbolTable::Result::DUPLICATED:
-        Error::diagnostic(a.get()->token,
+        Error::diagnostic(a.get()->span,
                           "duplicated class name : " + a.get()->name);
         break;
       case SymbolTable::Result::RESERVED:
-        Error::diagnostic(a.get()->token, "reserved name : " + a.get()->name);
+        Error::diagnostic(a.get()->span, "reserved name : " + a.get()->name);
         break;
       case SymbolTable::Result::UNKNOWN_SYMBOL:
-        Error::internal(a.get()->token, "unknown symbol" + a.get()->name);
+        Error::internal(a.get()->span, "unknown symbol" + a.get()->name);
         break;
       case SymbolTable::Result::NONE:
         break;
@@ -447,13 +446,13 @@ void Builder::visit(FuncDecl *decl) {
   if (!result.success) {
     switch (result.errorType) {
     case SymbolTable::Result::DUPLICATED:
-      Error::diagnostic(decl->token, "duplicated method name : " + decl->name);
+      Error::diagnostic(decl->span, "duplicated method name : " + decl->name);
       break;
     case SymbolTable::Result::RESERVED:
-      Error::diagnostic(decl->token, "reserved name : " + decl->name);
+      Error::diagnostic(decl->span, "reserved name : " + decl->name);
       break;
     case SymbolTable::Result::UNKNOWN_SYMBOL:
-      Error::internal(decl->token, "unknown symbol" + decl->name);
+      Error::internal(decl->span, "unknown symbol" + decl->name);
       break;
     case SymbolTable::Result::NONE:
       break;
@@ -489,14 +488,14 @@ void Builder::visit(VarDecl *decl) {
     if (!result.success) {
       switch (result.errorType) {
       case SymbolTable::Result::DUPLICATED:
-        Error::diagnostic(decl->token,
+        Error::diagnostic(decl->span,
                           "duplicated root variation name : " + decl->name);
         break;
       case SymbolTable::Result::RESERVED:
-        Error::diagnostic(decl->token, "reserved name : " + decl->name);
+        Error::diagnostic(decl->span, "reserved name : " + decl->name);
         break;
       case SymbolTable::Result::UNKNOWN_SYMBOL:
-        Error::internal(decl->token, "unknown symbol" + decl->name);
+        Error::internal(decl->span, "unknown symbol" + decl->name);
         break;
       case SymbolTable::Result::NONE:
         break;
@@ -506,14 +505,14 @@ void Builder::visit(VarDecl *decl) {
     if (!result.success) {
       switch (result.errorType) {
       case SymbolTable::Result::DUPLICATED:
-        Error::diagnostic(decl->token,
+        Error::diagnostic(decl->span,
                           "duplicated variation name : " + decl->name);
         break;
       case SymbolTable::Result::RESERVED:
-        Error::diagnostic(decl->token, "reserved name : " + decl->name);
+        Error::diagnostic(decl->span, "reserved name : " + decl->name);
         break;
       case SymbolTable::Result::UNKNOWN_SYMBOL:
-        Error::internal(decl->token, "unknown symbol" + decl->name);
+        Error::internal(decl->span, "unknown symbol" + decl->name);
         break;
       case SymbolTable::Result::NONE:
         break;
@@ -541,13 +540,13 @@ void Builder::visit(Param *a) {
   if (!re.success) {
     switch (re.errorType) {
     case SymbolTable::Result::DUPLICATED:
-      Error::diagnostic(a->token, "duplicated class name : " + a->name);
+      Error::diagnostic(a->span, "duplicated class name : " + a->name);
       break;
     case SymbolTable::Result::RESERVED:
-      Error::diagnostic(a->token, "reserved name : " + a->name);
+      Error::diagnostic(a->span, "reserved name : " + a->name);
       break;
     case SymbolTable::Result::UNKNOWN_SYMBOL:
-      Error::internal(a->token, "unknown symbol" + a->name);
+      Error::internal(a->span, "unknown symbol" + a->name);
       break;
     case SymbolTable::Result::NONE:
       break;
@@ -571,13 +570,13 @@ void Builder::visit(InitDecl *decl) {
   if (!result.success) {
     switch (result.errorType) {
     case SymbolTable::Result::DUPLICATED:
-      Error::diagnostic(decl->token, "duplicated method name : " + decl->name);
+      Error::diagnostic(decl->span, "duplicated method name : " + decl->name);
       break;
     case SymbolTable::Result::RESERVED:
-      Error::diagnostic(decl->token, "reserved name : " + decl->name);
+      Error::diagnostic(decl->span, "reserved name : " + decl->name);
       break;
     case SymbolTable::Result::UNKNOWN_SYMBOL:
-      Error::internal(decl->token, "unknown symbol" + decl->name);
+      Error::internal(decl->span, "unknown symbol" + decl->name);
       break;
     case SymbolTable::Result::NONE:
       break;
@@ -601,14 +600,14 @@ void Builder::visit(InitDecl *decl) {
     if (!re.success) {
       switch (re.errorType) {
       case SymbolTable::Result::DUPLICATED:
-        Error::diagnostic(a.get()->token,
+        Error::diagnostic(a.get()->span,
                           "duplicated class name : " + a.get()->name);
         break;
       case SymbolTable::Result::RESERVED:
-        Error::diagnostic(a.get()->token, "reserved name : " + a.get()->name);
+        Error::diagnostic(a.get()->span, "reserved name : " + a.get()->name);
         break;
       case SymbolTable::Result::UNKNOWN_SYMBOL:
-        Error::internal(a.get()->token, "unknown symbol" + a.get()->name);
+        Error::internal(a.get()->span, "unknown symbol" + a.get()->name);
         break;
       case SymbolTable::Result::NONE:
         break;

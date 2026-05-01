@@ -1,0 +1,7 @@
+class Main{
+    public init(){
+        bool a;
+        if (a) {
+        }
+    }
+}

@@ -2,6 +2,7 @@
 #include "AST/Decl.h"
 #include "AST/Stmt.h"
 #include "Parser.h"
+#include "SourceSpan.h"
 #include "Token.h"
 #include "util/Error.h"
 #include <cassert>
@@ -49,7 +50,7 @@ Ptr Parser::classDecl(DeclPrefix prefix) {
   while (!check(TKind::RIGHT_BRACE) && !isAtEnd()) {
     auto b = declaration(CLASSBODY);
     if (!b) {
-      Error::diagnostic(b->token, "not declare statement : " + b->token.text);
+      Error::diagnostic(b->span, "not declare statement");
     }
     if (auto f = dynamic_pointer_cast<VarDecl>(b)) {
       fields.push_back(f);
@@ -63,9 +64,9 @@ Ptr Parser::classDecl(DeclPrefix prefix) {
   }
 
   consume(TKind::RIGHT_BRACE, "expect '}' after class body");
-
-  return make_shared<ClassDecl>(t, name.text, fields, methods, innterDecl, base,
-                                traits, modi);
+  Token end = previous(); // '}' 토큰
+  return make_shared<ClassDecl>(makeSpan(t.span, end.span), name.text, fields,
+                                methods, innterDecl, base, traits, modi);
 }
 
 Ptr Parser::structDecl(DeclPrefix prefix) {
@@ -120,8 +121,9 @@ Ptr Parser::structDecl(DeclPrefix prefix) {
       Error::diagnostic(peek(), "only var or instance declare here");
   }
   consume(TKind::RIGHT_BRACE, "expect '}' after struct body");
-
-  return make_shared<StructDecl>(t, name.text, fields, modi);
+  auto end = previous();
+  return make_shared<StructDecl>(makeSpan(t.span, end.span), name.text, fields,
+                                 modi);
 }
 
 Ptr Parser::varDecl(DeclPrefix prefix) {
@@ -149,8 +151,9 @@ Ptr Parser::varDecl(DeclPrefix prefix) {
   }
 
   consume(TKind::SEMICOLON, "expect ';' after expression.");
-  return make_shared<VarDecl>(t, name.text, type, init, !prefix.isConst,
-                              prefix.isRoot, modi);
+  auto end = previous();
+  return make_shared<VarDecl>(makeSpan(t.span, end.span), name.text, type, init,
+                              !prefix.isConst, prefix.isRoot, modi);
 }
 
 Ptr Parser::functionDecl(DeclPrefix prefix, bool isDynamic) {
@@ -203,9 +206,11 @@ Ptr Parser::functionDecl(DeclPrefix prefix, bool isDynamic) {
   else
     returnType = ty;
 
-  return make_shared<FuncDecl>(t, name.text, params, returnType, stmt, modi,
-                               prefix.isExtern, prefix.isFrame,
-                               prefix.isOverride);
+  auto end = previous();
+
+  return make_shared<FuncDecl>(makeSpan(t.span, end.span), name.text, params,
+                               returnType, stmt, modi, prefix.isExtern,
+                               prefix.isFrame, prefix.isOverride);
 }
 
 Ptr Parser::implDecl(DeclPrefix prefix) {
@@ -248,8 +253,9 @@ Ptr Parser::implDecl(DeclPrefix prefix) {
       Error::diagnostic(peek(), "only function declare in impl body");
   }
   consume(TKind::RIGHT_BRACE, "expect '}' after impl body");
-
-  return make_shared<ImplDecl>(t, target.text, traits, methods, modi);
+  auto end = previous();
+  return make_shared<ImplDecl>(makeSpan(t.span, end.span), target.text, traits,
+                               methods, modi);
 }
 
 Ptr Parser::traitDecl(DeclPrefix prefix) {
@@ -300,15 +306,18 @@ Ptr Parser::traitDecl(DeclPrefix prefix) {
       }
       consume(TKind::RIGHT_PAREN, "expect ')' after parameter");
       consume(TKind::SEMICOLON, "expect ';' after method declare");
+      auto e = previous();
       TypeNode::Ptr returnType = typeNodeConvertor(ty);
-      traitSigs.push_back(
-          make_shared<TraitSig>(tok, returnType, sigName.text, params));
+      traitSigs.push_back(make_shared<TraitSig>(
+          makeSpan(ty.span, e.span), returnType, sigName.text, params));
     } else
       Error::diagnostic(peek(), "expect function interface struct");
   }
 
   consume(TKind::RIGHT_BRACE, "expect '}' after parameter");
-  return make_shared<TraitDecl>(t, name.text, traitSigs, modi);
+  auto end = previous();
+  return make_shared<TraitDecl>(makeSpan(t.span, end.span), name.text,
+                                traitSigs, modi);
 }
 
 Ptr Parser::enumDecl(DeclPrefix prefix) {
@@ -349,17 +358,14 @@ Ptr Parser::enumDecl(DeclPrefix prefix) {
   }
 
   consume(TKind::RIGHT_BRACE, "expect '}' after enum body");
-
-  return make_shared<EnumDecl>(t, name.text, variants, baseEnum, modi);
+  auto end = previous();
+  return make_shared<EnumDecl>(makeSpan(t, end), name.text, variants, baseEnum,
+                               modi);
 }
 
 Ptr Parser::handleDecl(DeclPrefix prefix) {
   Token t = prefix.startToken;
   notFunc(prefix);
-  if (prefix.isRoot) {
-    Error::diagnostic(prefix.startToken, "root not allowed in handle declare");
-  }
-
   advance(); // Handle 처리
   consume(TKind::LESS, "need '<' after handle");
   TypeNode::Ptr inner;
@@ -369,30 +375,11 @@ Ptr Parser::handleDecl(DeclPrefix prefix) {
     Error::diagnostic(prefix.startToken, "after < need type");
   }
   consume(TKind::GREATER, "need '>' after type");
+  auto end = previous();
   Token name = consume(TKind::IDENTIFIER, "expect handle name after handle");
   vector<TypeNode::Ptr> tys;
   tys.push_back(inner);
   TypeNode::Ptr type = make_shared<GenericTypeNode>(t, t.text, tys);
-
-  if (check(TKind::LEFT_BRACKET)) {
-    advance(); //[처리
-    Expr::Ptr s = expression();
-    consume(TKind::RIGHT_BRACKET, "expect ']' after array's size expression");
-
-    Expr::Ptr init = nullptr;
-
-    if (check(TKind::EQUAL)) {
-      advance(); //=처리
-      init = expression();
-    }
-
-    consume(TKind::SEMICOLON, "expect ';' after expression");
-
-    auto aNode = make_shared<ArrayTypeNode>(t, type, s);
-
-    return make_shared<ArrayDecl>(t, name.text, aNode, init, !prefix.isConst,
-                                  prefix.isRoot, prefix.modi);
-  }
 
   Expr::Ptr init = nullptr;
   if (check(TKind::EQUAL)) {
@@ -400,8 +387,9 @@ Ptr Parser::handleDecl(DeclPrefix prefix) {
     init = expression();
   }
   consume(TKind::SEMICOLON, "expect ';' after expression.");
-  return make_shared<VarDecl>(t, name.text, type, init, !prefix.isConst,
-                              prefix.isRoot, prefix.modi);
+  auto e = previous();
+  return make_shared<VarDecl>(makeSpan(t, e), name.text, type, init,
+                              !prefix.isConst, prefix.isRoot, prefix.modi);
 }
 
 Ptr Parser::initDecl(DeclPrefix prefix) {
@@ -448,5 +436,7 @@ Ptr Parser::initDecl(DeclPrefix prefix) {
   consume(TKind::RIGHT_PAREN, "expect ')' after parameter");
   consume(TKind::LEFT_BRACE, "expect '{' before function body");
   Stmt::Ptr stmt = blockStmt();
-  return make_shared<InitDecl>(t, params, stmt, prefix.isOverride);
+  auto end = previous();
+  return make_shared<InitDecl>(makeSpan(t, end), params, stmt,
+                               prefix.isOverride);
 }

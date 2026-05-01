@@ -1,12 +1,6 @@
 #pragma once
 
-struct SourceSpan {
-  int lineStart = 0;
-  int colStart = 0;
-  int lineEnd = 0;
-  int colEnd = 0;
-};
-
+#include "SourceSpan.h"
 enum class HIRNodeKind {
   Program,
   Source,
@@ -38,15 +32,15 @@ enum class HIRNodeKind {
   LiteralExpr,
   LoadExpr,
   AssignExpr,
+  CompoundAssignExpr,
   UnaryExpr,
   BinaryExpr,
   CastExpr,
-  CallExpr,
   MethodCallExpr,
   SpawnExpr,
   ViewExpr,
   MatchExpr,
-  EnumConstructExpr,
+  // EnumConstructExpr,
   TernaryExpr,
   DefaultValueExpr,
 
@@ -55,7 +49,7 @@ enum class HIRNodeKind {
   ParamPlaceExpr,
   FieldPlaceExpr,
   SelfExpr,
-  SuperExpr,
+  // SuperExpr,
   RootExpr,
   TempPlaceExpr,
   ArrayAccessExpr,

@@ -131,7 +131,7 @@ private:
       return nullptr;
     }
 
-    Error::internal(decl->token, "unmatched decl type");
+    Error::internal(decl->span, "unmatched decl type");
   }
 
   int allocLocalID();

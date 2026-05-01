@@ -23,7 +23,7 @@ SymbolTable::SymbolTable() {
   topLevel->parent = builtIn.get();
   current = builtIn.get();
   for (const auto &entry : builtinEntries) {
-    std::unique_ptr<TypeSymbol> symbol;
+    std::unique_ptr<PrimtiveType> symbol;
 
     switch (entry.category) {
     case BuiltinCategory::Int:
@@ -262,6 +262,8 @@ TypeSymbol *SymbolTable::getType(TypeNode *node) {
       return getBuilt("s16");
     case BuiltInType::S32:
       return getBuilt("s32");
+    case BuiltInType::VOID:
+      return getBuilt("void");
     }
   } else {
     return getType(node->type);
@@ -271,8 +273,9 @@ TypeSymbol *SymbolTable::getType(TypeNode *node) {
 
 ValueSymbol *SymbolTable::getValue(str name) {
   for (auto s = current; s != nullptr; s = s->parent) {
-    if (s->value.find(name) != s->value.end())
-      return s->value.find(name)->second.get();
+    auto it = s->value.find(name);
+    if (it != s->value.end())
+      return it->second.get();
   }
   return nullptr;
 }
@@ -356,3 +359,5 @@ ArrayTypeSymbol *SymbolTable::arrayTypeGetOrCreate(TypeSymbol *base,
   }
   return it->second;
 }
+
+TypeSymbol *SymbolTable::getBool() { return getBuilt("bool"); }

@@ -3,6 +3,7 @@
 #include "SemanticAnalyzer/symbol/MethodSymbol.h"
 #include "SemanticAnalyzer/symbol/TypeSymbol.h"
 #include "SemanticAnalyzer/symbol/ValueSymbol.h"
+#include "SourceSpan.h"
 #include "util/Error.h"
 #include <cassert>
 
@@ -256,7 +257,8 @@ TypeSymbol *Resolver::implicitCasting(TypeSymbol *from, TypeSymbol *to) {
 }
 
 ValueSymbol *Resolver::lookupEnumVariant(TypeSymbol *enumType,
-                                         const string &name, Token token) {
+                                         const string &name,
+                                         SourceSpan &token) {
   if (!enumType || enumType->kind != TypeSymbol::TypeKind::ENUM) {
     Error::internal(token, "expected enum type");
   }

@@ -1,6 +1,8 @@
 #pragma once
 
 #include "ASTNode.h"
+#include "SourceSpan.h"
+#include "Token.h"
 #include "Visitor.h"
 #include <memory>
 #include <optional>
@@ -34,7 +36,7 @@ public:
   using Ptr = shared_ptr<Decl>;
   string name; // 대부분의 Decl은 이름을 갖음 (anonymous 경우 빈 문자열 허용)
   AModifier aModifier;
-  Decl(NKind k, Token t, const string &n = "",
+  Decl(NKind k, SourceSpan t, const string &n = "",
        AModifier modi = AModifier::DEFAULT)
       : ASTNode(k, t), name(n), aModifier(modi) {}
   virtual void accept(ASTVisitor *visitor) override { visitor->visit(this); }
@@ -51,7 +53,7 @@ public:
   ExprPtr init;          // 초기화 식 (없을 수 있음)
   bool isMutable = true; // let vs var 등
   bool isRoot = false;
-  VarDecl(Token t, const string &n, TypeNode::Ptr ty, ExprPtr i = nullptr,
+  VarDecl(SourceSpan t, const string &n, TypeNode::Ptr ty, ExprPtr i = nullptr,
           bool mut = true, bool ro = false, AModifier modi = AModifier::DEFAULT)
       : Decl(NKind::VAR_DECL, t, n, modi), type(std::move(ty)), init(i),
         isMutable(mut), isRoot(ro) {
@@ -71,7 +73,7 @@ public:
   ExprPtr init;
   bool isMutalbe = true;
   bool isRoot = false;
-  ArrayDecl(Token t, const string &n, shared_ptr<ArrayTypeNode> ty,
+  ArrayDecl(SourceSpan t, const string &n, shared_ptr<ArrayTypeNode> ty,
             ExprPtr i = nullptr, bool m = true, bool r = false,
             AModifier modi = AModifier::DEFAULT)
       : Decl(NKind::ARRAY_DECL, t, n, modi), type(std::move(ty)), init(i),
@@ -94,7 +96,7 @@ public:
   optional<ExprPtr> defaultValue;
 
   Param(const string &n, TypeNode::Ptr t, optional<ExprPtr> d = nullopt)
-      : ASTNode(NKind::PARAM, t->token), name(n), type(std::move(t)),
+      : ASTNode(NKind::PARAM, t->span), name(n), type(std::move(t)),
         defaultValue(d) {}
   void accept(ASTVisitor *visitor) override { visitor->visit(this); }
   ValueSymbol *symbol = nullptr;
@@ -112,7 +114,7 @@ public:
   bool isFrame = false;
   bool isOverride = false;
 
-  FuncDecl(Token t, const string &n, vector<shared_ptr<Param>> p,
+  FuncDecl(SourceSpan t, const string &n, vector<shared_ptr<Param>> p,
            optional<TypeNode::Ptr> ret, StmtPtr b,
            AModifier modi = AModifier::DEFAULT, bool e = false, bool f = false,
            bool o = false)
@@ -134,7 +136,7 @@ class StructDecl : public Decl {
 public:
   vector<shared_ptr<VarDecl>> fields;
 
-  StructDecl(Token t, const string &n, vector<shared_ptr<VarDecl>> f,
+  StructDecl(SourceSpan t, const string &n, vector<shared_ptr<VarDecl>> f,
              AModifier modi = AModifier::DEFAULT)
       : Decl(NKind::STRUCT_DECL, t, n, modi), fields(std::move(f)) {
     aModifier = modi;
@@ -155,7 +157,7 @@ public:
   optional<string> baseClass; // 단일 상속 (필요시 벡터로 변경)
   vector<string> traits;      // trait/interface 목록
 
-  ClassDecl(Token t, const string &n, vector<shared_ptr<VarDecl>> f,
+  ClassDecl(SourceSpan t, const string &n, vector<shared_ptr<VarDecl>> f,
             vector<shared_ptr<FuncDecl>> m, vector<shared_ptr<Decl>> i,
             optional<string> base = nullopt, vector<string> tr = {},
             AModifier modi = AModifier::DEFAULT)
@@ -188,7 +190,7 @@ public:
   vector<shared_ptr<Variant>> variants;
   optional<string> baseEnum; // for aliasing
 
-  EnumDecl(Token t, const string &n, vector<shared_ptr<Variant>> v = {},
+  EnumDecl(SourceSpan t, const string &n, vector<shared_ptr<Variant>> v = {},
            optional<string> base = nullopt, AModifier modi = AModifier::DEFAULT)
       : Decl(NKind::ENUM_DECL, t, n, modi), variants(std::move(v)),
         baseEnum(base) {
@@ -208,7 +210,7 @@ public:
   vector<string> traits;
   vector<shared_ptr<FuncDecl>> LinkedImplMethods;
 
-  ImplDecl(Token t, const string &n, vector<string> tr,
+  ImplDecl(SourceSpan t, const string &n, vector<string> tr,
            vector<shared_ptr<FuncDecl>> m, AModifier modi)
       : Decl(NKind::IMPL_DECL, t, "", modi), target(n), traits(std::move(tr)),
         LinkedImplMethods(std::move(m)) {}
@@ -223,7 +225,7 @@ class TraitDecl : public Decl {
 public:
   vector<shared_ptr<TraitSig>> traitSigs;
 
-  TraitDecl(Token t, const string &n, vector<shared_ptr<TraitSig>> tr,
+  TraitDecl(SourceSpan t, const string &n, vector<shared_ptr<TraitSig>> tr,
             AModifier modi)
       : Decl(NKind::TRAIT_DECL, t, n, modi), traitSigs(std::move(tr)) {}
   void accept(ASTVisitor *visitor) override { visitor->visit(this); }
@@ -238,7 +240,7 @@ public:
   TypeNode::Ptr type;
   string name;
   vector<shared_ptr<Param>> params;
-  TraitSig(Token t, TypeNode::Ptr ty, const string &n,
+  TraitSig(SourceSpan t, TypeNode::Ptr ty, const string &n,
            vector<shared_ptr<Param>> p)
       : ASTNode(NKind::TRAIT_SIG, t), type(ty), name(n), params(std::move(p)) {}
   void accept(ASTVisitor *visitor) override { visitor->visit(this); }
@@ -250,7 +252,7 @@ public:
 // 일반 FuncDecl과 동일한 처리 흐름을 따르되 이름이 고정된다.
 class InitDecl : public FuncDecl {
 public:
-  InitDecl(Token t, vector<shared_ptr<Param>> p, StmtPtr b, bool o = false)
+  InitDecl(SourceSpan t, vector<shared_ptr<Param>> p, StmtPtr b, bool o = false)
       : FuncDecl(t, "init", p, nullopt, b) {
     isOverride = o;
   }

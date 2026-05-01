@@ -1,5 +1,6 @@
 #pragma once
 
+#include "SourceSpan.h"
 #include <string>
 
 using namespace std;
@@ -149,7 +150,9 @@ enum class TKind {
 };
 struct Token {
   TKind kind = TKind::EMPTY;
-  string text;
-  string path = "[MAIN]";
-  int line, col;
+  std::string text = "";
+  SourceSpan span;
 };
+inline SourceSpan makeSpan(const Token &a, const Token &b) {
+  return makeSpan(a.span, b.span);
+}

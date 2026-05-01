@@ -1,10 +1,11 @@
 #include "SemanticAnalyzer/ResolvedLit.h"
 #include "SemanticAnalyzer/Resolver.h"
 #include "SemanticAnalyzer/symbol/TypeSymbol.h"
+#include "SourceSpan.h"
 #include <vector>
 
 ResolvedLit Resolver::resolveChar(LiteralExpr *expr) {
-  auto cp = decodeCharLiteral(expr->token, expr->value);
+  auto cp = decodeCharLiteral(expr->span, expr->value);
   TypeSymbol *type;
   if (cp <= 0xFF) {
     type = table->getType("c8");
@@ -25,7 +26,7 @@ ResolvedLit Resolver::resolveString(LiteralExpr *expr) {
   std::vector<uint32_t> c;
   size_t i = 0;
   while (i < s.size()) {
-    uint32_t cp = decodeOneUtf8CodePoint(expr->token, s, i);
+    uint32_t cp = decodeOneUtf8CodePoint(expr->span, s, i);
     maxCp = std::max(maxCp, cp);
     c.push_back(cp);
   }
@@ -45,7 +46,7 @@ ResolvedLit Resolver::resolveString(LiteralExpr *expr) {
   return r;
 }
 
-uint32_t Resolver::decodeCharLiteral(const Token &token, str s) {
+uint32_t Resolver::decodeCharLiteral(const SourceSpan &token, str s) {
 
   if (s.empty()) {
     Error::diagnostic(token, "empty character literal");
@@ -202,7 +203,7 @@ uint32_t Resolver::decodeCharLiteral(const Token &token, str s) {
   return cp;
 }
 
-uint32_t Resolver::decodeOneUtf8CodePoint(const Token &token,
+uint32_t Resolver::decodeOneUtf8CodePoint(const SourceSpan &token,
                                           const std::string &s, size_t &i) {
   if (i >= s.size()) {
     Error::internal(token, "unexpected end of UTF-8 sequence");

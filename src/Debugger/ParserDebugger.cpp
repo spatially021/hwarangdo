@@ -213,7 +213,7 @@ void ParserDebugger::visit(EnumDecl *decl) {
   for (auto v : decl->variants) {
     cout << ident() << v->name;
     if (v->payload.has_value()) {
-      cout << "(" << v->payload.value()->token.text << ")";
+      cout << "(" << v->payload.value()->type << ")";
     }
     cout << "\n";
   }

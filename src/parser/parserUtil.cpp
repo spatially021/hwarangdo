@@ -3,6 +3,7 @@
 #include "Parser.h"
 #include "Token.h"
 #include "util/Error.h"
+#include <iterator>
 #include <memory>
 #include <stdexcept>
 
@@ -269,23 +270,26 @@ Expr::Ptr Parser::parseCaseValue() {
   Token t = peek();
   Expr::Ptr args = nullptr;
   if (isLit()) {
+    auto ad = advance();
     return make_shared<CaseValueExpr>(
-        t, make_shared<LiteralExpr>(t, advance().text), nullptr);
+        makeSpan(t, ad), make_shared<LiteralExpr>(ad.span, ad, ad.text),
+        nullptr);
   }
   if (check(TKind::IDENTIFIER)) {
     auto pay = advance();
-    Expr::Ptr expr = make_shared<NameExpr>(pay, pay.text);
+    Expr::Ptr expr = make_shared<NameExpr>(makeSpan(t, pay), pay.text);
     if (match({TKind::DOT})) {
       Token member = consume(TKind::IDENTIFIER, "expect ident after '.'");
-      expr = make_shared<MemberExpr>(t, expr, member.text);
+      expr = make_shared<MemberExpr>(makeSpan(t, member), expr, member.text);
     }
     if (check(TKind::LEFT_PAREN)) {
       advance(); //(처리
       auto id = consume(TKind::IDENTIFIER, "after '(' expect id");
       consume(TKind::RIGHT_PAREN, "after id expect ')'");
-      args = make_shared<NameExpr>(id, id.text);
+      args = make_shared<NameExpr>(makeSpan(t, id), id.text);
     }
-    return make_shared<CaseValueExpr>(t, expr, args);
+    auto end = previous();
+    return make_shared<CaseValueExpr>(makeSpan(t, end), expr, args);
   }
   Error::diagnostic(t, "in case value only allow literal or Enum : " + t.text);
 }

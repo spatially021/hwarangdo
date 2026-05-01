@@ -92,6 +92,7 @@ public:
   HandleSymbol *getHandle();
   OptionSymbol *getOption();
   ResultSymbol *getResult();
+  TypeSymbol *getBool();
 
   GenericSymbol *GenericInsGetOrCreate(TypeSymbol *origin,
                                        std::vector<TypeSymbol *> args);

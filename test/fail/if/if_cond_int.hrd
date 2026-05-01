@@ -1,0 +1,7 @@
+class Main{
+    public init(){
+        int a = 1;
+        if (a) {
+        }
+    }
+}

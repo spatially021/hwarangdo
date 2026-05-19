@@ -24,15 +24,26 @@ void HIRBuilder::visit(LiteralExpr *expr) {
 
   auto *ty = lowerType(expr->resolvedType);
 
-  exprResult = std::make_unique<HIRLiteralExpr>(ty, expr->resolvedLit);
+  exprResult =
+      std::make_unique<HIRLiteralExpr>(expr->span, ty, expr->resolvedLit);
 }
 
 void HIRBuilder::visit(BinaryExpr *expr) {
-  auto left = lowerExpr(expr->left.get());
-  auto right = lowerExpr(expr->right.get());
-  exprResult =
-      make_unique<HIRBinaryExpr>(lowerType(expr->resolvedType), expr->op,
-                                 std::move(left), std::move(right));
+  auto left = lowerValue(expr->left.get());
+  auto right = lowerValue(expr->right.get());
+  auto type = lowerType(expr->resolvedType);
+  if (left == nullptr) {
+    Error::internal(expr->left->span, "expr's left hir is nullptr");
+  }
+  if (right == nullptr) {
+    Error::internal(expr->right->span, "expr's right hir is nullptr");
+  }
+  if (type == nullptr) {
+    Error::internal(expr->span, "fail to get binary's type");
+  }
+
+  exprResult = make_unique<HIRBinaryExpr>(expr->span, type, expr->op,
+                                          std::move(left), std::move(right));
 }
 void HIRBuilder::visit(NameExpr *expr) {
   if (expr == nullptr) {
@@ -64,12 +75,16 @@ void HIRBuilder::visit(NameExpr *expr) {
 
 void HIRBuilder::visit(UnaryExpr *expr) {
   auto operand = lowerExpr(expr->right.get());
-  exprResult = make_unique<HIRUnaryExpr>(lowerType(expr->resolvedType),
-                                         expr->op, std::move(operand));
+  exprResult = make_unique<HIRUnaryExpr>(
+      expr->span, lowerType(expr->resolvedType), expr->op, std::move(operand));
 }
 
 void HIRBuilder::visit(CallExpr *expr) {
   if (expr->receiver == nullptr) { // 해당 객체 내에서 this생략한 call
+    if (expr->callType == CallExpr::CallType::INIT_CALL) {
+      exprResult = lowerInitCall(expr);
+      return;
+    }
     exprResult = lowerImplictCall(expr);
     return;
   }
@@ -84,6 +99,10 @@ void HIRBuilder::visit(CallExpr *expr) {
       Error::internal("static method is not developed");
     }
   } else {
+    if (expr->callType == CallExpr::CallType::INIT_CALL) {
+      exprResult = lowerInitCall(expr);
+      return;
+    }
     exprResult = lowerCall(expr);
     return;
   }
@@ -119,15 +138,15 @@ void HIRBuilder::visit(SuperExpr *expr) {
   if (currentType->base == nullptr) {
     Error::internal(expr->span, "current Type has no parant type");
   }
-  exprResult = make_unique<HIRSelfExpr>(HIRSelfKind::This, type, type,
-                                        currentType->base);
+  exprResult = make_unique<HIRSelfExpr>(expr->span, HIRSelfKind::This, type,
+                                        type, currentType->base);
 }
 void HIRBuilder::visit(SelfExpr *) {
   exprResult = lowerImplictSelf();
   return;
 }
-void HIRBuilder::visit(RootExpr *) {
-  exprResult = make_unique<HIRRootExpr>(program->rootType);
+void HIRBuilder::visit(RootExpr *expr) {
+  exprResult = make_unique<HIRRootExpr>(expr->span, program->rootType);
   return;
 }
 void HIRBuilder::visit(CastExpr *expr) {
@@ -170,8 +189,12 @@ void HIRBuilder::visit(ReturnStmt *stmt) { emit(lowerReturn(stmt)); }
 void HIRBuilder::visit(ValueTransferStmt *stmt) {
   emit(lowerValueTransfer(stmt));
 }
-void HIRBuilder::visit(BreakStmt *) { emit(make_unique<HIRBreakStmt>()); }
-void HIRBuilder::visit(ContinueStmt *) { emit(make_unique<HIRContinueStmt>()); }
+void HIRBuilder::visit(BreakStmt *stmt) {
+  emit(make_unique<HIRBreakStmt>(stmt->span));
+}
+void HIRBuilder::visit(ContinueStmt *stmt) {
+  emit(make_unique<HIRContinueStmt>(stmt->span));
+}
 void HIRBuilder::visit(DeclStmt *stmt) { stmt->decl->accept(this); }
 
 void HIRBuilder::visit(EmptyStmt *) {}
@@ -183,7 +206,6 @@ void HIRBuilder::visit(ClassDecl *decl) {
   if (it == program->typeDeclMap.end()) {
     Error::internal(decl->span, "not made typeShell");
   }
-
   TypeGuard typeGuard(currentType, it->second);
 
   if (decl->baseClass.has_value()) {
@@ -200,6 +222,7 @@ void HIRBuilder::visit(ClassDecl *decl) {
       f->accept(this);
     }
   }
+  setDefaultInit(it->second);
 
   for (auto &m : decl->methods) {
     m->accept(this);
@@ -222,6 +245,10 @@ void HIRBuilder::visit(StructDecl *decl) {
 
   for (auto &f : decl->fields) {
     f->accept(this);
+  }
+  setDefaultInit(it->second);
+  for (auto &i : decl->inits) {
+    i->accept(this);
   }
 }
 void HIRBuilder::visit(EnumDecl *decl) {
@@ -270,28 +297,32 @@ void HIRBuilder::visit(VarDecl *decl) {
     }
   } else {
     if (isField) {
-      auto field = lowerField(decl);
+      auto it = currentType->fieldMap.find(decl->symbol);
+      if (it == currentType->fieldMap.end()) {
+        Error::internal(decl->span, "cannot find field");
+      }
+      auto field = it->second;
       if (field == nullptr) {
         Error::internal("field is nullptr");
       }
-      unique_ptr<HIRExpr> init = nullptr;
       if (decl->init) {
-        init = lowerExpr(decl->init.get());
+        currentType->defaultInit.emplace(field, decl->init.get());
       }
+
     } else {
       auto local = lowerLocal(decl);
       if (local == nullptr) {
         Error::internal("local is nullptr");
       }
 
-      unique_ptr<HIRExpr> init = nullptr;
+      unique_ptr<HIRValueExpr> init = nullptr;
       if (decl->init) {
-        init = lowerExpr(decl->init.get());
+        init = lowerValue(decl->init.get());
         if (init == nullptr) {
           Error::internal("init is exist but nulltpr");
         }
       }
-      emit(make_unique<HIRLocalDeclStmt>(local, std::move(init)));
+      emit(make_unique<HIRLocalDeclStmt>(decl->span, local, std::move(init)));
     }
   }
 }

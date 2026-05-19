@@ -60,8 +60,8 @@ std::unique_ptr<HIRValueExpr> HIRBuilder::lowerVariantValue(CallExpr *expr) {
     }
   }
 
-  return std::make_unique<HIRVaraintValueExpr>(owner->type, variant,
-                                               std::move(payload), expr->span);
+  return std::make_unique<HIRVaraintValueExpr>(expr->span, owner->type, variant,
+                                               std::move(payload));
 }
 
 std::unique_ptr<HIRValueExpr> HIRBuilder::lowerVariantValue(MemberExpr *expr) {
@@ -94,8 +94,8 @@ std::unique_ptr<HIRValueExpr> HIRBuilder::lowerVariantValue(MemberExpr *expr) {
     Error::internal(expr->span, "mismatched variant owner");
   }
 
-  return make_unique<HIRVaraintValueExpr>(owner->type, variant, nullptr,
-                                          expr->span);
+  return make_unique<HIRVaraintValueExpr>(expr->span, owner->type, variant,
+                                          nullptr);
 }
 
 unique_ptr<HIRPlaceExpr> HIRBuilder::lowerPlace(NameExpr *expr) {
@@ -116,14 +116,14 @@ unique_ptr<HIRPlaceExpr> HIRBuilder::lowerPlace(NameExpr *expr) {
   }
 
   if (auto [cond, result] = lookupLocal(value); cond) {
-    return make_unique<HIRLocalPlaceExpr>(result, expr->span);
+    return make_unique<HIRLocalPlaceExpr>(expr->span, result);
   }
   if (auto [cond, result] = lookupParam(value); cond) {
-    return make_unique<HIRParamPlaceExpr>(result, expr->span);
+    return make_unique<HIRParamPlaceExpr>(expr->span, result);
   }
   if (auto [cond, result] = lookupField(value); cond) {
-    return make_unique<HIRFieldPlaceExpr>(lowerImplictSelf(), result,
-                                          expr->span);
+    return make_unique<HIRFieldPlaceExpr>(expr->span, lowerImplictSelf(),
+                                          result);
   }
   Error::internal(expr->span, "unregisitered value : " + expr->name);
 }
@@ -150,14 +150,14 @@ std::unique_ptr<HIRFieldPlaceExpr> HIRBuilder::lowerMember(MemberExpr *expr) {
   if (dynamic_cast<HIRRootExpr *>(receiver.get())) {
     auto rIt = program->rootMap.find(value);
     if (rIt != program->rootMap.end()) {
-      return make_unique<HIRFieldPlaceExpr>(std::move(receiver), rIt->second,
-                                            expr->span);
+      return make_unique<HIRFieldPlaceExpr>(expr->span, std::move(receiver),
+                                            rIt->second);
     }
   }
 
   if (auto [cond, result] = lookupField(it->second, value); cond) {
-    return make_unique<HIRFieldPlaceExpr>(std::move(receiver), result,
-                                          expr->span);
+    return make_unique<HIRFieldPlaceExpr>(expr->span, std::move(receiver),
+                                          result);
   }
 
   Error::internal(expr->span, "fail to lower field");
@@ -165,6 +165,7 @@ std::unique_ptr<HIRFieldPlaceExpr> HIRBuilder::lowerMember(MemberExpr *expr) {
 
 std::unique_ptr<HIRPlaceExpr>
 HIRBuilder::lowerArrayAccess(ArrayAccessExpr *expr) {
+
   auto type = dynamic_cast<ArrayTypeSymbol *>(expr->object->resolvedType);
   if (type == nullptr) {
     Error::internal(expr->span, "expected array type ");
@@ -177,8 +178,8 @@ HIRBuilder::lowerArrayAccess(ArrayAccessExpr *expr) {
 
   // TypeSymbol -> hirType
   // nullptr 아님을 보장
-  auto elementType = lowerType(expr->object->resolvedType);
+  auto elementType = lowerType(expr->resolvedType);
 
-  return make_unique<HIRArrayAccessPlaceExpr>(
-      std::move(object), std::move(index), elementType, expr->span);
+  return make_unique<HIRArrayAccessPlaceExpr>(expr->span, std::move(object),
+                                              std::move(index), elementType);
 }

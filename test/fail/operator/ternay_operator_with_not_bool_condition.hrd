@@ -1,0 +1,8 @@
+class Main{
+    frame void update(){
+
+    }
+    public init(){
+        int a= 1?1:2;
+    }
+}

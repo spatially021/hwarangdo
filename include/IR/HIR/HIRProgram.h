@@ -10,6 +10,7 @@
 #include "SemanticAnalyzer/SymbolTable.h"
 #include "SemanticAnalyzer/symbol/TypeSymbol.h"
 #include "SemanticAnalyzer/symbol/ValueSymbol.h"
+#include "SourceSpan.h"
 #include "util/Error.h"
 #include <memory>
 #include <string>
@@ -28,7 +29,8 @@ struct HIRSource : HIRNode {
   vector<unique_ptr<HIRHandleType>> handles;
   vector<unique_ptr<HIRObserverType>> observers;
   SourceFile *source = nullptr;
-  HIRSource(SourceFile *s) : HIRNode(HIRNodeKind::Source), source(s) {}
+  HIRSource(SourceSpan sp, SourceFile *s)
+      : HIRNode(sp, HIRNodeKind::Source), source(s) {}
 };
 
 // HIR 전체를 관리하는 프로그램 루트 컨테이너를 나타낸다.
@@ -62,7 +64,8 @@ struct HIRProgram : HIRNode {
 
   SymbolTable *table = nullptr;
 
-  HIRProgram(SymbolTable *t) : HIRNode(HIRNodeKind::Program), table(t) {
+  HIRProgram(SourceSpan s, SymbolTable *t)
+      : HIRNode(s, HIRNodeKind::Program), table(t) {
     for (const auto &entry : builtinEntries) {
       std::unique_ptr<HIRBuiltinType> symbol = std::make_unique<HIRBuiltinType>(
           entry.name, entry.category, table->getBuilt(entry.name));

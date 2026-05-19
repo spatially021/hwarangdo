@@ -9,9 +9,15 @@
 #include "IR/HIR/HIRType.h"
 #include "magic_enum/magic_enum.hpp"
 #include "util/Error.h"
+#include <cassert>
+#include <llvm/ADT/APInt.h>
+#include <unordered_map>
+#include <vector>
 
 static bool isHandle(HIRType *type);
 static bool isObserver(HIRType *type);
+static InitMap mergeIntersection(const InitMap &a, const InitMap &b);
+static pair<bool, llvm::APInt> tryGetConstIndex(HIRValueExpr *value);
 
 HIRVerifier::HIRVerifier(HIRProgram *p) : program(p) {}
 
@@ -23,10 +29,10 @@ void HIRVerifier::verify() {
   for (auto &r : program->rootMap) {
     verifyRoot(r.second);
     auto root = r.second;
-    rootStates.emplace(root,
-                       InitState(root->isInitialized,
-                                 root->isInitialized &&
-                                     root->type->kind == HIRTypeKind::Array));
+    initmap.rootStates.emplace(
+        root, InitState(root->isInitialized,
+                        root->isInitialized &&
+                            root->type->kind == HIRTypeKind::Array));
   }
 
   for (auto &t : program->typeDeclMap) {
@@ -55,10 +61,30 @@ void HIRVerifier::verifyType(HIRTypeDecl *type) {
 
   for (auto &f : type->fieldMap) {
     verifyField(f.second);
-    fieldStates.emplace(
+    initmap.fieldStates.emplace(
         f.second, InitState(f.second->isInitialized,
                             f.second->isInitialized &&
                                 f.second->type->kind == HIRTypeKind::Array));
+  }
+  verifyBlock(type->defaultInitBlock.get());
+
+  InitMap base = initmap;
+  vector<InitMap> initmaps;
+
+  for (auto &[sig, init] : type->initMap) {
+    initmap = base;
+
+    verifyMethod(init);
+
+    initmaps.push_back(initmap);
+  }
+
+  if (!initmaps.empty()) {
+    InitMap result = initmaps.front();
+    for (size_t idx = 1; idx < initmaps.size(); ++idx) {
+      result = mergeIntersection(result, initmaps[idx]);
+    }
+    initmap = result;
   }
 
   for (auto &m : type->methodMap) {
@@ -73,12 +99,13 @@ void HIRVerifier::verifyMethod(HIRMethodDecl *method) {
 
   for (auto &p : method->paramMap) {
     verifyParam(p.second);
-    paramStates.emplace(p.second, InitState(true, true));
+    initmap.paramStates.emplace(p.second, InitState(true, true));
   }
 
   if (method->body == nullptr) {
     Error::internal("method body is nullptr");
   }
+
   verifyBlock(method->body.get());
 }
 
@@ -166,19 +193,26 @@ void HIRVerifier::verifyStmt(HIRStmt *stmt) {
       Error::internal("ifStmt's thenBlock is nullptr");
     }
 
-    verifyExpr(ifStmt->condition.get());
     if (ifStmt->condition->type == nullptr) {
       Error::internal("ifStmt's condition type is nullptr");
     }
     if (ifStmt->condition->type != program->getBool()) {
-      Error::internal("ifStmt's condition is not bool type");
+      Error::internal("ifStmt's condition is not bool type : " +
+                      ifStmt->condition->type->name);
     }
+
+    verifyExpr(ifStmt->condition.get());
+
+    InitMap before = initmap;
 
     verifyBlock(ifStmt->thenBlock.get());
+    InitMap then = initmap;
+    InitMap else_ = before;
     if (ifStmt->elseBlock != nullptr) {
       verifyBlock(ifStmt->elseBlock.get());
+      else_ = initmap;
     }
-
+    initmap = mergeIntersection(then, else_);
     break;
   }
   case HIRNodeKind::WhileStmt: {
@@ -190,7 +224,7 @@ void HIRVerifier::verifyStmt(HIRStmt *stmt) {
     if (whileStmt->body == nullptr) {
       Error::internal("whileStmt's body is nullptr");
     }
-
+    InitMap before = initmap;
     verifyExpr(whileStmt->condition.get());
     if (whileStmt->condition->type == nullptr) {
       Error::internal("whileStmt's condition type is nullptr");
@@ -200,6 +234,7 @@ void HIRVerifier::verifyStmt(HIRStmt *stmt) {
     }
 
     verifyBlock(whileStmt->body.get());
+    initmap = before;
     break;
   }
   case HIRNodeKind::ForRangeStmt: {
@@ -220,6 +255,8 @@ void HIRVerifier::verifyStmt(HIRStmt *stmt) {
     if (range->body == nullptr) {
       Error::internal("forRangeStmt's body is nullptr");
     }
+
+    initmap.localStates.emplace(range->indexVar, InitState(true, true));
 
     verifyExpr(range->start.get());
     verifyExpr(range->end.get());
@@ -316,11 +353,14 @@ void HIRVerifier::verifyStmt(HIRStmt *stmt) {
   case HIRNodeKind::LocalDeclStmt: {
     auto local = expect<HIRLocalDeclStmt>(stmt, HIRNodeKind::LocalDeclStmt);
     verifyLocal(local->local);
-    localStates.emplace(
+    initmap.localStates.emplace(
         local->local,
         InitState(local->local->isInitialized,
                   local->local->type->kind == HIRTypeKind::Array &&
                       local->local->isInitialized));
+    if (local->init != nullptr) {
+      verifyExpr(local->init.get());
+    }
     break;
   }
 
@@ -331,7 +371,7 @@ void HIRVerifier::verifyStmt(HIRStmt *stmt) {
   }
 }
 
-void HIRVerifier::verifyExpr(HIRExpr *expr) {
+void HIRVerifier::verifyExpr(HIRExpr *expr, bool isRead) {
   if (expr == nullptr) {
     Error::internal("expr is nullptr");
   }
@@ -353,15 +393,8 @@ void HIRVerifier::verifyExpr(HIRExpr *expr) {
     if (load->place == nullptr) {
       Error::internal("loadExpr's place is nullptr");
     }
-    if (auto local = dynamic_cast<HIRLocalPlaceExpr *>(load->place.get())) {
-      auto it = localStates.find(local->local);
-      if (it == localStates.end()) {
-        Error::internal("local state not found");
-      }
-
-      if (!it->second.initialized) {
-        // diagnostic or internal
-      }
+    if (isRead) {
+      checkInitialize(load->place.get());
     }
     verifyExpr(load->place.get());
     break;
@@ -381,14 +414,7 @@ void HIRVerifier::verifyExpr(HIRExpr *expr) {
       Error::internal("assign's rhs is nullptr");
     }
     verifyExpr(assign->lhs.get());
-    if (auto localPlace =
-            dynamic_cast<HIRLocalPlaceExpr *>(assign->lhs.get())) {
-      auto it = localStates.find(localPlace->local);
-      if (it == localStates.end()) {
-        Error::internal(expr->span, "fail to find initState");
-      }
-      it->second.initialized = true;
-    }
+    initialize(assign->lhs.get());
     verifyExpr(assign->rhs.get());
     break;
   }
@@ -408,15 +434,7 @@ void HIRVerifier::verifyExpr(HIRExpr *expr) {
       Error::internal("compoundAssignExpr's rhs is nullptr");
     }
     verifyExpr(compound->lhs.get());
-    if (auto localPlace =
-            dynamic_cast<HIRLocalPlaceExpr *>(compound->lhs.get())) {
-      auto it = localStates.find(localPlace->local);
-      if (it == localStates.end()) {
-        Error::internal(expr->span, "fail to find initState");
-      }
-
-      it->second.initialized = true;
-    }
+    initialize(compound->lhs.get());
     verifyExpr(compound->rhs.get());
     break;
   }
@@ -623,6 +641,7 @@ void HIRVerifier::verifyExpr(HIRExpr *expr) {
     }
     verifyExpr(field->receiver.get());
     verifyField(field->field);
+
     break;
   }
   case HIRNodeKind::SelfExpr: {
@@ -671,7 +690,7 @@ void HIRVerifier::verifyExpr(HIRExpr *expr) {
     if (arr->index == nullptr) {
       Error::internal("arrayAccessPlaceExpr's index is nullptr");
     }
-    verifyExpr(arr->object.get());
+    verifyExpr(arr->object.get(), false);
     verifyExpr(arr->index.get());
     break;
   }
@@ -692,7 +711,30 @@ void HIRVerifier::verifyExpr(HIRExpr *expr) {
     }
     break;
   }
+  case HIRNodeKind::StructInitExpr: {
+    auto init = expect<HIRStructInitExpr>(expr, HIRNodeKind::StructInitExpr);
+    if (init->type == nullptr) {
+      Error::internal(init->span, "struct init's type is nullptr");
+    }
 
+    if (init->isDefault) {
+      break;
+    }
+
+    for (auto &a : init->args) {
+      if (a == nullptr) {
+        Error::internal("methodCall's arg is nullptr");
+      }
+      if (a->kind == HIRNodeKind::DefaultValueExpr) {
+        Error::internal("methodCall's defefaultValue is remained");
+      }
+      if (a->type == nullptr) {
+        Error::internal("methodCall's arg's type is nullptr");
+      }
+      verifyExpr(a.get());
+    }
+    break;
+  }
   default:
     Error::internal("illegal expr kind");
     break;
@@ -705,4 +747,192 @@ static bool isHandle(HIRType *type) {
 
 static bool isObserver(HIRType *type) {
   return dynamic_cast<HIRObserverType *>(type) != nullptr;
+}
+
+void HIRVerifier::checkInitialize(HIRPlaceExpr *place) {
+  assert(place);
+  if (auto arr = dynamic_cast<HIRArrayAccessPlaceExpr *>(place)) {
+    if (auto load = dynamic_cast<HIRLoadExpr *>(arr->object.get())) {
+      auto &init = getInitState(load->place.get());
+      if (init.initialized || init.fullyInitialized) {
+        return;
+      }
+      auto [res, index] = tryGetConstIndex(arr->index.get());
+      if (res) {
+        auto *arrayType = dynamic_cast<HIRArrayType *>(arr->object->type);
+        if (arrayType == nullptr) {
+          Error::internal(arr->span, "array access object is not array type");
+        }
+
+        if (index.uge(arrayType->size)) {
+          Error::diagnostic(arr->index->span, "array index out of bounds");
+        }
+        auto it = init.initializedIndices.find(index);
+        if (it == init.initializedIndices.end()) {
+          Error::diagnostic(place->span, "use of uninitialized array elements");
+        }
+      } else {
+        Error::diagnostic(
+            place->span,
+            "use of not fully initialized array with non-const index");
+      }
+    }
+    return;
+  }
+
+  auto &init = getInitState(place);
+  if (!init.initialized) {
+    Error::diagnostic(place->span, "use of uninitialized variable");
+  }
+}
+
+void HIRVerifier::initialize(HIRPlaceExpr *place) {
+  assert(place);
+  if (auto arr = dynamic_cast<HIRArrayAccessPlaceExpr *>(place)) {
+    auto load = dynamic_cast<HIRLoadExpr *>(arr->object.get());
+    if (load == nullptr) {
+      Error::diagnostic(
+          arr->object->span,
+          "cannot assign to an element of a temporary array value");
+    }
+    auto &init = getInitState(load->place.get());
+    auto [res, index] = tryGetConstIndex(arr->index.get());
+    if (res) {
+      auto *arrayType = dynamic_cast<HIRArrayType *>(arr->object->type);
+      if (arrayType == nullptr) {
+        Error::internal(arr->span, "array access object is not array type");
+      }
+
+      if (index.uge(arrayType->size)) {
+        Error::diagnostic(arr->index->span, "array index out of bounds");
+      }
+      auto it = init.initializedIndices.find(index);
+      if (it == init.initializedIndices.end()) {
+        init.initializedIndices.insert(index);
+      }
+    }
+
+    return;
+  }
+  auto &init = getInitState(place);
+  init.initialized = true;
+}
+
+InitState &HIRVerifier::getInitState(HIRPlaceExpr *place) {
+
+  if (auto local = dynamic_cast<HIRLocalPlaceExpr *>(place)) {
+    auto it = initmap.localStates.find(local->local);
+    if (it == initmap.localStates.end()) {
+      Error::internal("local state not found");
+    }
+    return it->second;
+  }
+
+  if (auto field = dynamic_cast<HIRFieldPlaceExpr *>(place)) {
+    if (field->receiver->type == program->rootType) {
+      auto it = initmap.rootStates.find(field->field);
+      if (it == initmap.rootStates.end()) {
+        Error::internal("field state not found");
+      }
+      return it->second;
+    } else {
+      auto it = initmap.fieldStates.find(field->field);
+      if (it == initmap.fieldStates.end()) {
+        Error::internal("field state not found");
+      }
+      return it->second;
+    }
+  }
+
+  if (auto param = dynamic_cast<HIRParamPlaceExpr *>(place)) {
+    auto it = initmap.paramStates.find(param->param);
+    if (it == initmap.paramStates.end()) {
+      Error::internal("param state not found");
+    }
+    return it->second;
+  }
+
+  Error::internal(place->span, "fail to find place");
+}
+
+static void mergeInitState(InitState &out, const InitState &other) {
+  out.initialized = out.initialized && other.initialized;
+  out.fullyInitialized = out.fullyInitialized && other.fullyInitialized;
+
+  for (auto it = out.initializedIndices.begin();
+       it != out.initializedIndices.end();) {
+    if (other.initializedIndices.find(*it) == other.initializedIndices.end()) {
+      it = out.initializedIndices.erase(it);
+    } else {
+      ++it;
+    }
+  }
+}
+
+static InitMap mergeIntersection(const InitMap &a, const InitMap &b) {
+  InitMap result = a;
+
+  for (auto &[l, s] : result.localStates) {
+    auto it = b.localStates.find(l);
+    if (it == b.localStates.end()) {
+      s.initialized = false;
+      s.fullyInitialized = false;
+      s.initializedIndices.clear();
+    } else {
+      mergeInitState(s, it->second);
+    }
+  }
+  for (auto &[l, s] : result.fieldStates) {
+    auto it = b.fieldStates.find(l);
+    if (it == b.fieldStates.end()) {
+      s.initialized = false;
+      s.fullyInitialized = false;
+      s.initializedIndices.clear();
+    } else {
+      mergeInitState(s, it->second);
+    }
+  }
+
+  for (auto &[l, s] : result.rootStates) {
+    auto it = b.rootStates.find(l);
+    if (it == b.rootStates.end()) {
+      s.initialized = false;
+      s.fullyInitialized = false;
+      s.initializedIndices.clear();
+    } else {
+      mergeInitState(s, it->second);
+    }
+  }
+  for (auto &[l, s] : result.paramStates) {
+    auto it = b.paramStates.find(l);
+    if (it == b.paramStates.end()) {
+      s.initialized = false;
+      s.fullyInitialized = false;
+      s.initializedIndices.clear();
+    } else {
+      mergeInitState(s, it->second);
+    }
+  }
+
+  return result;
+}
+
+static std::pair<bool, llvm::APInt> tryGetConstIndex(HIRValueExpr *value) {
+  assert(value);
+
+  if (auto lit = dynamic_cast<HIRLiteralExpr *>(value)) {
+    if (!lit->resolvedLit.isInt()) {
+      Error::diagnostic(value->span, "array index must be integer type");
+    }
+
+    llvm::APInt index = lit->resolvedLit.asInt().value;
+
+    if (index.isNegative()) {
+      Error::diagnostic(value->span, "array index cannot be negative");
+    }
+
+    return {true, index.zextOrTrunc(128)};
+  }
+
+  return {false, llvm::APInt(128, 0)};
 }

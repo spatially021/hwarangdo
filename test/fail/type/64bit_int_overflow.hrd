@@ -1,0 +1,8 @@
+class Main{
+    frame void update(){
+
+    }
+    public init(){
+        int:i64 a=9223372036854775808;
+    }
+}

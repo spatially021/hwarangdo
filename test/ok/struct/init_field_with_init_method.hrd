@@ -1,0 +1,16 @@
+class Main{
+    frame void update(){
+
+    }
+    public init(){
+        S s=S(1);
+        int a=s.a;
+    }
+}
+
+struct S{
+    int a;
+    public init(int i){
+        a=i;
+    }
+}

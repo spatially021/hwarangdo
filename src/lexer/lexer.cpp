@@ -279,8 +279,14 @@ Token Lexer::scan() {
     return {TKind::QUESTION, string(1, get()), {path, tempL, tempC, line, col}};
   if (c == '\0')
     return {TKind::END, string(1, get()), {path, tempL, tempC, line, col}};
-  if (c == '^')
-    return {TKind::CARET, string(1, get()), {path, tempL, tempC, line, col}};
+  if (c == '^') {
+    get(); //
+    if (peek() == '=') {
+      get();
+      return {TKind::CARET_EQUAL, "^=", {path, tempL, tempC, line, col}};
+    }
+    return {TKind::CARET, "^", {path, tempL, tempC, line, col}};
+  }
 
   if (isIdentFirst(c)) {
     string ident;

@@ -5,6 +5,7 @@
 #include "IR/HIR/HIRDecl.h"
 #include "IR/HIR/HIRProgram.h"
 #include "SemanticAnalyzer/SymbolTable.h"
+#include "SourceSpan.h"
 #include <memory>
 class HIRLinker {
 public:
@@ -15,7 +16,10 @@ public:
   SymbolTable *table;
   HIRLinker(HIRProgram *p, SourceFile *s, SymbolTable *t)
       : program(p), source(s), table(t) {
-    hirSource = make_unique<HIRSource>(s);
+    SourceSpan span;
+    span.path = s->path;
+    span.lineStart = 0;
+    hirSource = make_unique<HIRSource>(span, s);
   }
 
   TypeSymbol *getTypeSymbolFromDecl(Decl *decl, HIRTypeDeclKind &kind);

@@ -219,7 +219,7 @@ public:
 
 class CallExpr : public Expr {
 public:
-  Expr::Ptr receiver;
+  Expr::Ptr receiver = nullptr;
   string methodName;
   std::vector<Expr::Ptr> arguments;
 
@@ -227,6 +227,7 @@ public:
     FUNC_CALL,
     PAYLOAD_CALL,
     BUILTIN_CALL,
+    INIT_CALL,
     UNRESOLVED,
   } callType = CallExpr::CallType::UNRESOLVED;
 

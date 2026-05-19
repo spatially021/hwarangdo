@@ -15,7 +15,7 @@ vector<Decl::Ptr> Parser::parse() {
 
   while (!isAtEnd()) {
     Token t = peek();
-    auto decl = declaration(TOPLEVEL);
+    auto decl = declaration(DeclContext::TOPLEVEL);
     decls.push_back(decl);
   }
   return decls;
@@ -82,6 +82,7 @@ Decl::Ptr Parser::declaration(DeclContext context) {
   }
 
   if (check(TKind::INIT)) {
+
     return initDecl(prefix);
   }
 

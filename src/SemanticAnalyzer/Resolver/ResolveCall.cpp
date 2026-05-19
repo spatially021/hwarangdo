@@ -30,6 +30,82 @@ T *checkedSymbolCast(Symbol *symbol, const SourceSpan &token,
 
 } // namespace
 
+void Resolver::resolveInit(CallExpr *expr) {
+  auto type = table->getType(expr->methodName);
+  if (type->memberScope->inits.empty()) {
+    if (expr->arguments.empty()) {
+      expr->resolvedType = type;
+      expr->resolved = nullptr;
+      return;
+    }
+    Error::diagnostic(expr->span,
+                      "init is not declared but using not default init");
+  }
+
+  auto &bucket = type->memberScope->inits;
+  vector<Expr *> args;
+  for (auto &a : expr->arguments) {
+    a->accept(this);
+    args.push_back(a.get());
+  }
+  vector<pair<vector<ArgMatchKind>, MethodSymbol *>> candidates;
+  for (auto &m : bucket) {
+    if (m->paramTypes.size() != args.size()) {
+      continue;
+    }
+
+    vector<ArgMatchKind> kinds;
+    bool viable = true;
+
+    auto func = dynamic_cast<FuncDecl *>(m->decl);
+    if (func == nullptr) {
+      Error::internal(expr->span, "illegal ast kind");
+    }
+
+    for (size_t i = 0; i < m->paramTypes.size(); ++i) {
+      auto kind = matchArgument(args[i], m->paramTypes[i],
+                                func->params[i]->defaultValue.has_value());
+      if (kind == ArgMatchKind::Invalid) {
+        viable = false;
+        break;
+      }
+      kinds.push_back(kind);
+    }
+
+    if (viable) {
+      candidates.push_back({std::move(kinds), m});
+    }
+  }
+  vector<size_t> bestIdx;
+  for (size_t i = 0; i < candidates.size(); ++i) {
+    bool beaten = false;
+    for (size_t j = 0; j < candidates.size(); ++j) {
+      if (i == j)
+        continue;
+      if (isBetterThan(candidates[j].first, candidates[i].first)) {
+        beaten = true;
+        break;
+      }
+    }
+    if (!beaten) {
+      bestIdx.push_back(i);
+    }
+  }
+
+  if (bestIdx.empty()) {
+    Error::diagnostic(expr->span, "unknown call");
+  }
+
+  if (bestIdx.size() == 1) {
+    auto best = candidates[bestIdx[0]].second;
+    expr->resolved = best;
+    expr->resolvedType = type;
+    return;
+  }
+
+  Error::diagnostic(expr->span, "ambiguous overload call");
+}
+
 void Resolver::ResolveEnumVariant(CallExpr *expr) {
   auto *variant = checkedSymbolCast<EnumVariantSymbol>(
       expr->resolved, expr->span, "expected enum variant symbol");
@@ -55,8 +131,7 @@ void Resolver::ResolveEnumVariant(CallExpr *expr) {
       Error::diagnostic(expr->span, "incorrect payload type");
     }
 
-    arg->resolvedType =
-        implicitCasting(arg->resolvedType, variant->payloadType);
+    arg->resolvedType = implicitCasting(arg, variant->payloadType).first;
   } else {
     if (variant->payloadType != nullptr) {
       Error::diagnostic(expr->span, expr->methodName + " needs payload");
@@ -71,12 +146,12 @@ void Resolver::ResolveEnumVariant(CallExpr *expr) {
   expr->resolvedType = expr->receiver->resolvedType;
 }
 
-void Resolver::ResolveCall(CallExpr *expr, Scope *scope) {
+void Resolver::resolveCall(CallExpr *expr, Scope *scope) {
   auto &bucket = scope->methodMap[expr->methodName];
-  vector<TypeSymbol *> args; // nullptr -> defaultValue
+  vector<Expr *> args; // nullptr -> defaultValue
   for (auto &a : expr->arguments) {
     a->accept(this);
-    args.push_back(a->resolvedType);
+    args.push_back(a.get());
   }
   vector<pair<vector<ArgMatchKind>, MethodSymbol *>> candidates;
   for (auto &m : bucket) {
@@ -168,9 +243,10 @@ bool Resolver::isBetterThan(const vector<ArgMatchKind> &a,
   return better;
 }
 
-ArgMatchKind Resolver::matchArgument(TypeSymbol *arg, TypeSymbol *param,
+ArgMatchKind Resolver::matchArgument(Expr *arg, TypeSymbol *param,
                                      bool hasInit) {
-  if (arg == table->getDefaultV()) {
+
+  if (dynamic_cast<DefaultValueExpr *>(arg)) {
     if (hasInit) {
       return ArgMatchKind::DefaultArg;
     } else {
@@ -178,12 +254,19 @@ ArgMatchKind Resolver::matchArgument(TypeSymbol *arg, TypeSymbol *param,
     }
   }
 
-  if (arg == param) {
+  if (arg->resolvedType == param) {
     return ArgMatchKind::Exact;
   }
 
-  if (canImplicitlyConvert(arg, param)) {
-    return ArgMatchKind::ImplicitCast;
+  if (auto lit = dynamic_cast<LiteralExpr *>(arg)) {
+    if (canImplicitlyLiteralConvert(lit, param).first) {
+      return ArgMatchKind::ImplicitCast;
+    }
+
+  } else {
+    if (canImplicitlyConvert(arg->resolvedType, param).first) {
+      return ArgMatchKind::ImplicitCast;
+    }
   }
 
   return ArgMatchKind::Invalid;
@@ -196,14 +279,21 @@ void Resolver::visit(CallExpr *expr) {
 
   // 1. receiver 없는 호출
   if (expr->receiver == nullptr) {
-    expr->callType = CallExpr::CallType::FUNC_CALL;
+
     auto it = currentType->memberScope->methodMap.find(expr->methodName);
-    if (it == currentType->memberScope->methodMap.end()) {
-      Error::diagnostic(expr->span,
-                        "cannot find method name : " + expr->methodName);
+    if (it != currentType->memberScope->methodMap.end()) {
+      expr->callType = CallExpr::CallType::FUNC_CALL;
+      resolveCall(expr, currentType->memberScope);
+      return;
     }
-    ResolveCall(expr, currentType->memberScope);
-    return;
+    if (table->isType(expr->methodName)) {
+      expr->callType = CallExpr::CallType::INIT_CALL;
+      resolveInit(expr);
+      return;
+    }
+
+    Error::diagnostic(expr->span,
+                      "cannot find method name : " + expr->methodName);
   }
 
   // 2. receiver 해석
@@ -245,7 +335,7 @@ void Resolver::visit(CallExpr *expr) {
     }
 
     expr->callType = CallExpr::CallType::FUNC_CALL;
-    ResolveCall(expr, scope);
+    resolveCall(expr, scope);
     return;
   }
 

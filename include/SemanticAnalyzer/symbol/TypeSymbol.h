@@ -105,7 +105,7 @@ protected:
 
 class IntType : public PrimtiveType {
 public:
-  int bitWidth = 32;
+  unsigned int bitWidth = 32;
   bool isSigned = true;
   IntType(BuiltInType t = {}) : PrimtiveType(BuiltinCategory::Int) {
     switch (t) {
@@ -172,8 +172,8 @@ public:
 
 class FloatType : public PrimtiveType {
 public:
-  int bitWidth = 32;
-  int precious = 24;
+  unsigned int bitWidth = 32;
+  unsigned int precious = 24;
 
   FloatType(BuiltInType t = {}) : PrimtiveType(BuiltinCategory::Float) {
     switch (t) {

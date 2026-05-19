@@ -10,8 +10,10 @@
 #include <utility>
 #include <vector>
 
+struct HIRValueExpr;
+
 struct HIRStmt : HIRNode {
-  explicit HIRStmt(HIRNodeKind k, SourceSpan s = {}) : HIRNode(k, s) {}
+  explicit HIRStmt(SourceSpan s, HIRNodeKind k) : HIRNode(s, k) {}
   virtual ~HIRStmt() = default;
 };
 
@@ -19,32 +21,33 @@ struct HIRBlockStmt : HIRStmt {
   std::vector<std::unique_ptr<HIRStmt>> statements;
   std::unordered_map<ValueSymbol *, HIRLocal *> localMap;
   HIRBlockStmt *parent = nullptr;
-  HIRBlockStmt(SourceSpan s = {}) : HIRStmt(HIRNodeKind::BlockStmt, s) {}
+  HIRBlockStmt(SourceSpan s) : HIRStmt(s, HIRNodeKind::BlockStmt) {}
 };
 
 struct HIRExprStmt : HIRStmt {
   std::unique_ptr<HIRExpr> expr;
 
-  explicit HIRExprStmt(std::unique_ptr<HIRExpr> e, SourceSpan s = {})
-      : HIRStmt(HIRNodeKind::ExprStmt, s), expr(std::move(e)) {}
+  explicit HIRExprStmt(SourceSpan s, std::unique_ptr<HIRExpr> e)
+      : HIRStmt(s, HIRNodeKind::ExprStmt), expr(std::move(e)) {}
 };
 
 struct HIRLocalDeclStmt : HIRStmt {
   HIRLocal *local;
-  std::unique_ptr<HIRExpr> init; // nullable
+  std::unique_ptr<HIRValueExpr> init; // nullable
 
-  HIRLocalDeclStmt(HIRLocal *l, std::unique_ptr<HIRExpr> i, SourceSpan s = {})
-      : HIRStmt(HIRNodeKind::LocalDeclStmt, s), local(l), init(std::move(i)) {}
+  HIRLocalDeclStmt(SourceSpan s, HIRLocal *l, std::unique_ptr<HIRValueExpr> i)
+      : HIRStmt(s, HIRNodeKind::LocalDeclStmt), local(l), init(std::move(i)) {}
 };
 
 struct HIRIfStmt : HIRStmt {
-  std::unique_ptr<HIRExpr> condition;
+  std::unique_ptr<HIRValueExpr> condition;
   std::unique_ptr<HIRBlockStmt> thenBlock;
   std::unique_ptr<HIRBlockStmt> elseBlock; // nullable
 
-  HIRIfStmt(std::unique_ptr<HIRExpr> cond, std::unique_ptr<HIRBlockStmt> thenB,
-            std::unique_ptr<HIRBlockStmt> elseB = nullptr, SourceSpan s = {})
-      : HIRStmt(HIRNodeKind::IfStmt, s), condition(std::move(cond)),
+  HIRIfStmt(SourceSpan s, std::unique_ptr<HIRValueExpr> cond,
+            std::unique_ptr<HIRBlockStmt> thenB,
+            std::unique_ptr<HIRBlockStmt> elseB = nullptr)
+      : HIRStmt(s, HIRNodeKind::IfStmt), condition(std::move(cond)),
         thenBlock(std::move(thenB)), elseBlock(std::move(elseB)) {}
 };
 
@@ -52,9 +55,9 @@ struct HIRWhileStmt : HIRStmt {
   std::unique_ptr<HIRExpr> condition;
   std::unique_ptr<HIRBlockStmt> body;
 
-  HIRWhileStmt(std::unique_ptr<HIRExpr> cond, std::unique_ptr<HIRBlockStmt> b,
-               SourceSpan s = {})
-      : HIRStmt(HIRNodeKind::WhileStmt, s), condition(std::move(cond)),
+  HIRWhileStmt(SourceSpan s, std::unique_ptr<HIRExpr> cond,
+               std::unique_ptr<HIRBlockStmt> b)
+      : HIRStmt(s, HIRNodeKind::WhileStmt), condition(std::move(cond)),
         body(std::move(b)) {}
 };
 
@@ -65,10 +68,10 @@ struct HIRForRangeStmt : HIRStmt {
   std::unique_ptr<HIRExpr> step; // nullable -> default 1
   std::unique_ptr<HIRBlockStmt> body;
 
-  HIRForRangeStmt(HIRLocal *idx, std::unique_ptr<HIRExpr> st,
+  HIRForRangeStmt(SourceSpan s, HIRLocal *idx, std::unique_ptr<HIRExpr> st,
                   std::unique_ptr<HIRExpr> ed, std::unique_ptr<HIRExpr> sp,
-                  std::unique_ptr<HIRBlockStmt> b, SourceSpan s = {})
-      : HIRStmt(HIRNodeKind::ForRangeStmt, s), indexVar(std::move(idx)),
+                  std::unique_ptr<HIRBlockStmt> b)
+      : HIRStmt(s, HIRNodeKind::ForRangeStmt), indexVar(std::move(idx)),
         start(std::move(st)), end(std::move(ed)), step(std::move(sp)),
         body(std::move(b)) {}
 };
@@ -76,16 +79,16 @@ struct HIRForRangeStmt : HIRStmt {
 struct HIRReturnStmt : HIRStmt {
   std::unique_ptr<HIRExpr> value; // nullable
 
-  HIRReturnStmt(std::unique_ptr<HIRExpr> v = nullptr, SourceSpan s = {})
-      : HIRStmt(HIRNodeKind::ReturnStmt, s), value(std::move(v)) {}
+  HIRReturnStmt(SourceSpan s, std::unique_ptr<HIRExpr> v = nullptr)
+      : HIRStmt(s, HIRNodeKind::ReturnStmt), value(std::move(v)) {}
 };
 
 struct HIRBreakStmt : HIRStmt {
-  HIRBreakStmt(SourceSpan s = {}) : HIRStmt(HIRNodeKind::BreakStmt, s) {}
+  HIRBreakStmt(SourceSpan s) : HIRStmt(s, HIRNodeKind::BreakStmt) {}
 };
 
 struct HIRContinueStmt : HIRStmt {
-  HIRContinueStmt(SourceSpan s = {}) : HIRStmt(HIRNodeKind::ContinueStmt, s) {}
+  HIRContinueStmt(SourceSpan s) : HIRStmt(s, HIRNodeKind::ContinueStmt) {}
 };
 
 enum class HIRBranchKind {
@@ -101,33 +104,33 @@ struct HIRCase : HIRStmt {
       selectors; // literal or enum variant
   std::unique_ptr<HIRBlockStmt> body;
   bool isDefault = false;
-  HIRCase(vector<std::unique_ptr<HIRValueExpr>> sl, unique_ptr<HIRBlockStmt> b,
-          bool d = false, SourceSpan s = {})
-      : HIRStmt(HIRNodeKind::Case, s), selectors(std::move(sl)),
+  HIRCase(SourceSpan s, vector<std::unique_ptr<HIRValueExpr>> sl,
+          unique_ptr<HIRBlockStmt> b, bool d = false)
+      : HIRStmt(s, HIRNodeKind::Case), selectors(std::move(sl)),
         body(std::move(b)), isDefault(d) {}
 };
 
 struct HIRSwitchStmt : HIRStmt {
   std::unique_ptr<HIRValueExpr> cond;
   std::vector<std::unique_ptr<HIRCase>> cases;
-  HIRSwitchStmt(unique_ptr<HIRValueExpr> c, vector<unique_ptr<HIRCase>> ca,
-                SourceSpan s = {})
-      : HIRStmt(HIRNodeKind::SwitchStmt, s), cond(std::move(c)),
+  HIRSwitchStmt(SourceSpan s, unique_ptr<HIRValueExpr> c,
+                vector<unique_ptr<HIRCase>> ca)
+      : HIRStmt(s, HIRNodeKind::SwitchStmt), cond(std::move(c)),
         cases(std::move(ca)) {}
 };
 
 struct HIRValueTransferStmt : HIRStmt {
   unique_ptr<HIRValueExpr> value;
-  HIRValueTransferStmt(unique_ptr<HIRValueExpr> v, SourceSpan s = {})
-      : HIRStmt(HIRNodeKind::ValueTransferStmt, s), value(std::move(v)) {}
+  HIRValueTransferStmt(SourceSpan s, unique_ptr<HIRValueExpr> v)
+      : HIRStmt(s, HIRNodeKind::ValueTransferStmt), value(std::move(v)) {}
 };
 
 struct HIRDestroyStmt : HIRStmt {
   StorageKind storage;
   unique_ptr<HIRValueExpr> handle = nullptr;
   HIREntityType *entity = nullptr;
-  HIRDestroyStmt(unique_ptr<HIRValueExpr> h, HIREntityType *e, StorageKind sk,
-                 SourceSpan s = {})
-      : HIRStmt(HIRNodeKind::DestroyStmt, s), storage(sk), handle(std::move(h)),
+  HIRDestroyStmt(SourceSpan s, unique_ptr<HIRValueExpr> h, HIREntityType *e,
+                 StorageKind sk)
+      : HIRStmt(s, HIRNodeKind::DestroyStmt), storage(sk), handle(std::move(h)),
         entity(e) {}
 };

@@ -1,0 +1,21 @@
+class Main{
+    frame void update(){
+
+    }
+    public init(){
+
+    }
+}
+
+
+public class c1{
+
+}
+
+protected class c2{
+
+}
+
+private class c3{
+    
+}

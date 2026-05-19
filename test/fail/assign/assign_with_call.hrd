@@ -1,0 +1,14 @@
+class Main{
+    frame void update(){
+
+    }
+    public init(){
+        foo()=1;
+    }
+
+    int foo(){
+        return 0;
+    }
+
+}
+

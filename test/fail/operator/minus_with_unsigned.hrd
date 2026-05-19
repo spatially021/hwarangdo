@@ -1,0 +1,9 @@
+class Main{
+    frame void update(){
+
+    }
+    public init(){
+        int:u32 a=10;
+        int:u32 b=-a;
+    }
+}

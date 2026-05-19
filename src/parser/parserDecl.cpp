@@ -1,5 +1,6 @@
 #include "AST/ASTNode.h"
 #include "AST/Decl.h"
+#include "AST/DeclContext.h"
 #include "AST/Stmt.h"
 #include "Parser.h"
 #include "SourceSpan.h"
@@ -9,16 +10,21 @@
 #include <memory>
 #include <optional>
 #include <string>
-
+// TODO(parser): Refactor declaration parsing.
+// Current declaration parsing is patched around class/struct/impl-specific
+// cases. Special members such as init exposed duplicated and inconsistent
+// handling. Unify member declaration parsing around
+// field/init/method/type-member classification.
 using Ptr = Decl::Ptr;
 
 Ptr Parser::classDecl(DeclPrefix prefix) {
 
-  if (contexts.back() != CLASSBODY && contexts.back() != TOPLEVEL)
+  if (contexts.back() != DeclContext::CLASSBODY &&
+      contexts.back() != DeclContext::TOPLEVEL)
     Error::diagnostic(prefix.startToken,
                       "class delaration can only declare in top-level "
                       "or other class's block");
-  ContextGuard _{contexts, CLASSBODY};
+  ContextGuard _{contexts, DeclContext::CLASSBODY};
 
   notFunc(prefix);
   notVar(prefix);
@@ -48,7 +54,7 @@ Ptr Parser::classDecl(DeclPrefix prefix) {
   vector<shared_ptr<FuncDecl>> methods;
   vector<shared_ptr<Decl>> innterDecl;
   while (!check(TKind::RIGHT_BRACE) && !isAtEnd()) {
-    auto b = declaration(CLASSBODY);
+    auto b = declaration(DeclContext::CLASSBODY);
     if (!b) {
       Error::diagnostic(b->span, "not declare statement");
     }
@@ -71,11 +77,12 @@ Ptr Parser::classDecl(DeclPrefix prefix) {
 
 Ptr Parser::structDecl(DeclPrefix prefix) {
 
-  if (contexts.back() != CLASSBODY && contexts.back() != TOPLEVEL)
+  if (contexts.back() != DeclContext::CLASSBODY &&
+      contexts.back() != DeclContext::TOPLEVEL)
     Error::diagnostic(prefix.startToken,
                       "struct delaration can only declare in top-level "
                       "or other class's block");
-  ContextGuard _{contexts, CLASSBODY};
+  ContextGuard _{contexts, DeclContext::CLASSBODY};
 
   notFunc(prefix);
   notVar(prefix);
@@ -99,6 +106,7 @@ Ptr Parser::structDecl(DeclPrefix prefix) {
 
   consume(TKind::LEFT_BRACE, "expect '{' before struct body");
   vector<shared_ptr<VarDecl>> fields;
+  vector<shared_ptr<InitDecl>> inits;
   while (!check(TKind::RIGHT_BRACE) && !isAtEnd()) {
 
     DeclPrefix p = {};
@@ -117,18 +125,24 @@ Ptr Parser::structDecl(DeclPrefix prefix) {
         fields.push_back(var);
       } else
         Error::diagnostic(peek(), "this expression is not allowed");
+    } else if (isInit()) {
+      auto init = dynamic_pointer_cast<InitDecl>(initDecl(p));
+      if (init == nullptr) {
+        Error::diagnostic(peek(), "this expression is not allowed");
+      }
+      inits.push_back(init);
     } else
       Error::diagnostic(peek(), "only var or instance declare here");
   }
   consume(TKind::RIGHT_BRACE, "expect '}' after struct body");
   auto end = previous();
   return make_shared<StructDecl>(makeSpan(t.span, end.span), name.text, fields,
-                                 modi);
+                                 inits, modi);
 }
 
 Ptr Parser::varDecl(DeclPrefix prefix) {
 
-  if (contexts.back() == TOPLEVEL)
+  if (contexts.back() == DeclContext::TOPLEVEL)
     Error::diagnostic(prefix.startToken,
                       "variation declaration cannot place in top-level");
 
@@ -143,6 +157,7 @@ Ptr Parser::varDecl(DeclPrefix prefix) {
   Expr::Ptr init = nullptr;
 
   if (check(TKind::EQUAL)) {
+
     advance(); //=처리
     init = expression();
     if (init == nullptr) {
@@ -152,23 +167,31 @@ Ptr Parser::varDecl(DeclPrefix prefix) {
 
   consume(TKind::SEMICOLON, "expect ';' after expression.");
   auto end = previous();
-  return make_shared<VarDecl>(makeSpan(t.span, end.span), name.text, type, init,
-                              !prefix.isConst, prefix.isRoot, modi);
+  return make_shared<VarDecl>(makeSpan(t.span, end.span), name.text, type,
+                              contexts.back(), init, !prefix.isConst,
+                              prefix.isRoot, modi);
 }
 
 Ptr Parser::functionDecl(DeclPrefix prefix, bool isDynamic) {
-  if (contexts.back() == TOPLEVEL)
+  if (contexts.back() == DeclContext::TOPLEVEL)
     Error::diagnostic(prefix.startToken,
                       "function declaration cannot place in top-level");
-  if (contexts.back() == BLOCK)
+  if (contexts.back() == DeclContext::BLOCK)
     Error::diagnostic(prefix.startToken,
                       "function delcaration cannot place in block");
 
-  ContextGuard _{contexts, BLOCK};
+  ContextGuard _{contexts, DeclContext::BLOCK};
   notVar(prefix);
   AModifier modi = prefix.modi;
   Token t = prefix.startToken;
-  TypeNode::Ptr ty = parseType();
+
+  TypeNode::Ptr ty = nullptr;
+
+  if (!isDynamic) {
+    ty = parseType();
+  } else {
+    advance(); // func 소비
+  }
   Token name = consume(TKind::IDENTIFIER, "expect function's name");
   consume(TKind::LEFT_PAREN, "expect '(' after function name");
 
@@ -214,13 +237,14 @@ Ptr Parser::functionDecl(DeclPrefix prefix, bool isDynamic) {
 }
 
 Ptr Parser::implDecl(DeclPrefix prefix) {
-  if (contexts.back() != CLASSBODY && contexts.back() != TOPLEVEL)
+  if (contexts.back() != DeclContext::CLASSBODY &&
+      contexts.back() != DeclContext::TOPLEVEL)
     Error::diagnostic(prefix.startToken,
                       "class delaration can only declare in top-level "
                       "or other class's block");
   notFunc(prefix);
   notVar(prefix);
-  ContextGuard _{contexts, IMPLBODY};
+  ContextGuard _{contexts, DeclContext::IMPLBODY};
 
   AModifier modi = prefix.modi;
   Token t = prefix.startToken;
@@ -388,23 +412,15 @@ Ptr Parser::handleDecl(DeclPrefix prefix) {
   }
   consume(TKind::SEMICOLON, "expect ';' after expression.");
   auto e = previous();
-  return make_shared<VarDecl>(makeSpan(t, e), name.text, type, init,
-                              !prefix.isConst, prefix.isRoot, prefix.modi);
+  return make_shared<VarDecl>(makeSpan(t, e), name.text, type, contexts.back(),
+                              init, !prefix.isConst, prefix.isRoot,
+                              prefix.modi);
 }
 
 Ptr Parser::initDecl(DeclPrefix prefix) {
   Token t = prefix.startToken;
-  if (contexts.back() == TOPLEVEL)
-    Error::diagnostic(prefix.startToken,
-                      "function declaration cannot place in top-level");
-  if (contexts.back() == BLOCK)
-    Error::diagnostic(prefix.startToken,
-                      "function delcaration cannot place in block");
 
   notVar(prefix);
-  if (prefix.modi != AModifier::PUBLIC) {
-    Error::diagnostic(t, "init method must be public");
-  }
 
   advance(); // init 처리
   consume(TKind::LEFT_PAREN, "expect '(' after init");
@@ -434,7 +450,21 @@ Ptr Parser::initDecl(DeclPrefix prefix) {
   }
 
   consume(TKind::RIGHT_PAREN, "expect ')' after parameter");
+
+  if (check(TKind::SEMICOLON)) {
+    Error::diagnostic(t, "init cannot call directly");
+  }
+  if (contexts.back() == DeclContext::TOPLEVEL)
+    Error::diagnostic(prefix.startToken,
+                      "init declaration cannot place in top-level");
+  if (contexts.back() == DeclContext::BLOCK)
+    Error::diagnostic(prefix.startToken,
+                      "init delcaration cannot place in block");
+  if (prefix.modi != AModifier::PUBLIC) {
+    Error::diagnostic(t, "init method must be public");
+  }
   consume(TKind::LEFT_BRACE, "expect '{' before function body");
+  ContextGuard _(contexts, DeclContext::BLOCK);
   Stmt::Ptr stmt = blockStmt();
   auto end = previous();
   return make_shared<InitDecl>(makeSpan(t, end), params, stmt,

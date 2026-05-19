@@ -59,7 +59,7 @@ void BuilderDebugger::debug(Scope *scope) {
     cout << ident() << "<inits>\n";
     depth++;
     for (auto &t : scope->inits) {
-      cout << ident() << t.second->name << "\n";
+      cout << ident() << t->name << "\n";
     }
     depth--;
   }

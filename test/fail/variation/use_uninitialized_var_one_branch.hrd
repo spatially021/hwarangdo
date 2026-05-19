@@ -1,0 +1,13 @@
+class Main{
+    frame void update(){
+
+    }
+    public init(){
+        int a;
+        if(true){
+            a=1;
+        }
+        int b=a;
+    }
+}
+

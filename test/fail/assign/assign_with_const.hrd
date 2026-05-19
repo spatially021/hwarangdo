@@ -1,0 +1,10 @@
+class Main{
+    frame void update(){
+
+    }
+    public init(){
+        const int a=1;
+        a=2;
+    }
+}
+

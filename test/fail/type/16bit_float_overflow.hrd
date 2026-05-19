@@ -1,0 +1,8 @@
+class Main{
+    frame void update(){
+
+    }
+    public init(){
+        float:f16 a=65505.0;
+    }
+}

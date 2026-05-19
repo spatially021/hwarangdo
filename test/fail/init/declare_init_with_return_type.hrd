@@ -1,0 +1,17 @@
+class Main{
+    frame void update(){
+
+    }
+    public init(){
+
+    }
+}
+
+
+struct S{
+
+    public void init(int a){
+
+    }
+
+}

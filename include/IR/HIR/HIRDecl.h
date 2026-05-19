@@ -1,5 +1,6 @@
 #pragma once
 
+#include "AST/Expr.h"
 #include "IR/HIR/HIRExpr.h"
 #include "IR/HIR/HIRNode.h"
 #include "IR/HIR/HIRStmt.h"
@@ -15,7 +16,7 @@
 #include <vector>
 
 struct HIRDecl : HIRNode {
-  explicit HIRDecl(HIRNodeKind k, SourceSpan s = {}) : HIRNode(k, s) {}
+  explicit HIRDecl(SourceSpan s, HIRNodeKind k) : HIRNode(s, k) {}
   virtual ~HIRDecl() = default;
 };
 
@@ -39,18 +40,23 @@ struct HIRTypeDecl : HIRDecl {
 
   std::vector<std::unique_ptr<HIRMethodDecl>> methods;
   std::unordered_map<MethodSymbol *, HIRMethodDecl *> methodMap;
+  std::unordered_map<MethodSymbol *, HIRMethodDecl *> initMap;
 
+  std::unordered_map<HIRField *, Expr *> defaultInit;
+  std::unique_ptr<HIRBlockStmt> defaultInitBlock = nullptr;
   // enum 전용
   std::vector<std::unique_ptr<HIREnumVariant>> enumVariants;
   std::unordered_map<EnumVariantSymbol *, HIREnumVariant *> enumVariantMap;
 
-  HIRTypeDecl(HIRTypeDeclKind dk, std::string n, HIRType *ty, SourceSpan s = {})
-      : HIRDecl(HIRNodeKind::TypeDecl, s), typeDeclKind(dk), name(std::move(n)),
+  HIRTypeDecl(SourceSpan s, HIRTypeDeclKind dk, std::string n, HIRType *ty)
+      : HIRDecl(s, HIRNodeKind::TypeDecl), typeDeclKind(dk), name(std::move(n)),
         type(ty) {}
 };
+
 struct HIRMethodDecl : HIRDecl {
   HIRTypeDecl *owner = nullptr; // nullable for top-level func
-  std::unique_ptr<HIRBlockStmt> body;
+  std::unique_ptr<HIRBlockStmt> body = nullptr;
+
   std::vector<unique_ptr<HIRLocal>> locals;
   int nextLocalId = 0;
   int nextParamID = 0;
@@ -66,9 +72,9 @@ struct HIRMethodDecl : HIRDecl {
   bool isStatic = false;
   bool isAsync = false;
 
-  HIRMethodDecl(HIRTypeDecl *o, int i, const string &n, MethodSymbol *m,
-                SourceSpan s = {})
-      : HIRDecl(HIRNodeKind::MethodDecl, s), owner(o), id(i), name(n),
+  HIRMethodDecl(SourceSpan s, HIRTypeDecl *o, int i, const string &n,
+                MethodSymbol *m)
+      : HIRDecl(s, HIRNodeKind::MethodDecl), owner(o), id(i), name(n),
         symbol(m) {}
 
   void setParam(std::vector<std::unique_ptr<HIRParam>> pa) {

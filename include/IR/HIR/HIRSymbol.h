@@ -2,6 +2,7 @@
 
 #include "IR/HIR/HIRType.h"
 #include "string"
+#include <llvm/ADT/APInt.h>
 #include <memory>
 #include <unordered_set>
 
@@ -13,12 +14,24 @@ struct HIRExpr;
 struct HIRLocal;
 struct HIRField;
 
+struct APIntHash {
+  size_t operator()(const llvm::APInt &v) const { return llvm::hash_value(v); }
+};
+
+struct APIntEqual {
+  bool operator()(const llvm::APInt &a, const llvm::APInt &b) const {
+    return a == b;
+  }
+};
+
+using APIntSet = std::unordered_set<llvm::APInt, APIntHash, APIntEqual>;
+
 struct InitState {
   bool initialized = false;
 
   // 배열일 때만 사용
   bool fullyInitialized = false;
-  std::unordered_set<uint64_t> initializedIndices;
+  APIntSet initializedIndices;
   InitState(bool i, bool f = false) : initialized(i), fullyInitialized(f) {}
 };
 

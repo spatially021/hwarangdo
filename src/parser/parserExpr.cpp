@@ -105,15 +105,28 @@ Ptr Parser::equality() {
 }
 
 Ptr Parser::comparison() {
-  Ptr left = term();
+  Ptr left = shift();
   if (check({TKind::GREATER, TKind::GREATER_EQUAL, TKind::LESS,
              TKind::LESS_EQUAL})) {
     Token op = advance();
-    Ptr right = term();
+    Ptr right = shift();
     return make_shared<BinaryExpr>(makeSpan(left->span, right->span), left, op,
                                    right);
   }
   return left;
+}
+
+Ptr Parser::shift() {
+  Ptr expr = term();
+
+  while (check({TKind::DOUBLE_ANGLEBUCKET, TKind::DOUBLE_RIGHT_ANGLE_BUCKET})) {
+    Token op = advance();
+    Ptr right = term();
+    expr = make_shared<BinaryExpr>(makeSpan(expr->span, right->span), expr, op,
+                                   right);
+  }
+
+  return expr;
 }
 
 Ptr Parser::term() {
@@ -246,6 +259,7 @@ Ptr Parser::postfix() {
       Token t = advance(); // as처리
       TypeNode::Ptr type = parseType();
       auto end = previous();
+      // TODO: 추후 자료형은 약어만으로 타입 지정하도록 수정요망
       expr = make_shared<CastExpr>(makeSpan(expr->span, end.span), expr, type);
     } else
       break;

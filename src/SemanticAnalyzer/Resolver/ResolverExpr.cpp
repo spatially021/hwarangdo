@@ -140,17 +140,21 @@ void Resolver::visit(UnaryExpr *expr) {
                                         expr->right->resolvedType->name +
                                         " for unary operator '!'");
   } else if (expr->tOp.kind == TKind::PLUS || expr->tOp.kind == TKind::MINUS) {
+    if (table->isNumberic(expr->right->resolvedType)) {
+      expr->resolvedType = expr->right->resolvedType;
+    } else
+      Error::diagnostic(expr->span,
+                        "bad operand type " + expr->right->resolvedType->name +
+                            " for unary operator '" + expr->tOp.text + "'");
+
     if (expr->tOp.kind == TKind::PLUS) {
       expr->op = Operator::PLUS;
     } else {
       expr->op = Operator::MINUS;
+      if (!table->isSigned(expr->right->resolvedType)) {
+        Error::diagnostic(expr->right->span, " '-' cannot use with unsigned");
+      }
     }
-    if (table->isNumberic(expr->right->resolvedType))
-      expr->resolvedType = expr->right->resolvedType;
-    else
-      Error::diagnostic(expr->span,
-                        "bad operand type " + expr->right->resolvedType->name +
-                            " for unary operator '" + expr->tOp.text + "'");
   }
 }
 
@@ -161,8 +165,12 @@ void Resolver::visit(AssignExpr *expr) {
     Error::diagnostic(expr->span, "unmatched assign type");
   }
 
+  if (expr->target->resolvedType->kind == TypeSymbol::TypeKind::CLASS) {
+    Error::diagnostic(expr->span, "oberver reallocate is not allowed");
+  }
+
   expr->resolvedType =
-      implicitCasting(expr->target->resolvedType, expr->value->resolvedType);
+      implicitCasting(expr->target.get(), expr->value->resolvedType).first;
 }
 
 void Resolver::visit(MemberExpr *expr) {
@@ -210,10 +218,11 @@ void Resolver::visit(ArrayAccessExpr *expr) {
   expr->index->accept(this);
   if (!table->isInt(expr->index->resolvedType))
     Error::diagnostic(expr->span, "array index must be integer type");
-  auto arr = static_cast<TypeSymbol *>(expr->object->resolvedType);
-  if (arr->decl->kind != NKind::ARRAY_DECL)
-    Error::diagnostic(expr->span, "type is not indexable");
-  expr->resolvedType = static_cast<ArrayDecl *>(arr->decl)->baseType;
+  if (auto arr = dynamic_cast<ArrayTypeSymbol *>(expr->object->resolvedType)) {
+    expr->resolvedType = arr->baseType;
+  } else {
+    Error::diagnostic(expr->span, "not arrayType");
+  }
 }
 
 void Resolver::visit(TernaryExpr *expr) {
@@ -223,6 +232,8 @@ void Resolver::visit(TernaryExpr *expr) {
   if (!isCastable(expr->then->resolvedType, expr->else_->resolvedType)) {
     Error::diagnostic(expr->span, "unmatch then to else type");
   }
+  // TODO: 삼항 연산의 최종 타입의 결정용 로직 추가 요망
+  expr->resolvedType = expr->then->resolvedType;
 }
 void Resolver::visit(ThisExpr *expr) {
   expr->resolved = currentType;
@@ -443,13 +454,16 @@ void Resolver::visit(CaseValueExpr *expr) {
         Error::internal(expr->span, "case value is lit but has payload");
       }
       if (auto s = dynamic_cast<SwitchStmt *>(currentSwitch)) {
+
         if (!canImplicitlyConvert(expr->value->resolvedType,
-                                  s->value->resolvedType)) {
+                                  s->value->resolvedType)
+                 .first) {
           Error::diagnostic(expr->span, "unmatched case valueType");
         }
       } else if (auto m = dynamic_cast<MatchExpr *>(currentSwitch)) {
         if (!canImplicitlyConvert(expr->value->resolvedType,
-                                  m->value->resolvedType)) {
+                                  m->value->resolvedType)
+                 .first) {
           Error::diagnostic(expr->span, "unmatched case valueType");
         }
       } else {
@@ -478,7 +492,8 @@ void Resolver::visit(CaseValueExpr *expr) {
     if (!expr->arg->resolvedType) {
       Error::internal(expr->arg->span, "unresolved type ");
     }
-    if (!canImplicitlyConvert(expr->arg->resolvedType, variant->payloadType)) {
+    if (!canImplicitlyConvert(expr->arg->resolvedType, variant->payloadType)
+             .first) {
       Error::diagnostic(expr->span, "unmatched payload type");
     }
     auto symbol = make_unique<ValueSymbol>();

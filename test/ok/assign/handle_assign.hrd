@@ -1,0 +1,13 @@
+class Main{
+    frame void update(){
+
+    }
+    public init(){
+        Handle<Empty> e1=world.spawn Empty();
+        Handle<Empty> e2=e1;
+    }
+}
+
+class Empty{
+
+}

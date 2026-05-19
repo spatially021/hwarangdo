@@ -73,7 +73,7 @@ public:
   unordered_map<ArrayTypeKey, ArrayTypeSymbol *, ArrayTypeHash> arrayTypeMap;
 
   Result add(unique_ptr<Symbol> symbol);
-  Result addInit(unique_ptr<MethodSymbol> initMethod);
+  bool addInit(unique_ptr<MethodSymbol> initMethod);
 
   void enter();
   void enter(Scope *scope);
@@ -103,6 +103,7 @@ public:
   bool isMethod(str name);
 
   bool isNumberic(TypeSymbol *symbol);
+  bool isSigned(TypeSymbol *symbol);
   inline bool isInt(TypeSymbol *symbol) {
     return symbol->kind == TypeSymbol::TypeKind::PRIMITIVE
                ? (static_cast<PrimtiveType *>(symbol)->builtinCategory ==

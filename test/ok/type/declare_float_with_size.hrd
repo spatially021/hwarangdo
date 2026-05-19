@@ -1,0 +1,12 @@
+class Main{
+    frame void update(){
+
+    }
+    public init(){
+        float:f16 b;
+        float:f32 c;
+        float:f64 d;
+        float:f128 e;
+    }
+}
+

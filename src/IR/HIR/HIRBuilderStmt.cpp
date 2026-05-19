@@ -2,7 +2,9 @@
 #include "AST/Expr.h"
 #include "AST/Stmt.h"
 #include "IR/HIR/HIRBuilder.h"
+#include "IR/HIR/HIRExpr.h"
 #include "IR/HIR/HIRStmt.h"
+#include "util/Error.h"
 #include "util/Guard.h"
 #include <memory>
 #include <utility>
@@ -46,16 +48,28 @@ unique_ptr<HIRStmt> HIRBuilder::lowerFor(ForStmt *stmt) {
   auto step = lowerExpr(stmt->range->step.get());
   auto body = lowerStmtAsBlock(stmt->body.get());
 
-  return make_unique<HIRForRangeStmt>(local, std::move(from), std::move(to),
-                                      std::move(step), std::move(body));
+  return make_unique<HIRForRangeStmt>(stmt->span, local, std::move(from),
+                                      std::move(to), std::move(step),
+                                      std::move(body));
 }
 unique_ptr<HIRStmt> HIRBuilder::lowerIf(IfStmt *stmt) {
-  unique_ptr<HIRExpr> cond = lowerExpr(stmt->condition.get());
+  unique_ptr<HIRExpr> temp = lowerExpr(stmt->condition.get());
+  unique_ptr<HIRValueExpr> cond;
+  if (dynamic_cast<HIRValueExpr *>(temp.get())) {
+    cond =
+        unique_ptr<HIRValueExpr>(static_cast<HIRValueExpr *>(temp.release()));
+  } else if (dynamic_cast<HIRPlaceExpr *>(temp.get())) {
+    cond = load(
+        unique_ptr<HIRPlaceExpr>(static_cast<HIRPlaceExpr *>(temp.release())));
+  } else {
+    Error::internal(stmt->condition->span, "ifStmt cond is not place or value");
+  }
+
   unique_ptr<HIRBlockStmt> thenBlock = lowerStmtAsBlock(stmt->thenBranch.get());
   unique_ptr<HIRBlockStmt> elseBlock =
       stmt->elseBranch ? lowerStmtAsBlock(stmt->elseBranch.get()) : nullptr;
-  return make_unique<HIRIfStmt>(std::move(cond), std::move(thenBlock),
-                                std::move(elseBlock));
+  return make_unique<HIRIfStmt>(stmt->span, std::move(cond),
+                                std::move(thenBlock), std::move(elseBlock));
 }
 
 unique_ptr<HIRCase> HIRBuilder::lowerCase(Case *stmt) {
@@ -65,14 +79,15 @@ unique_ptr<HIRCase> HIRBuilder::lowerCase(Case *stmt) {
     selectors.push_back(lowerValue(s.get()));
   }
   unique_ptr<HIRBlockStmt> body = lowerStmtAsBlock(stmt->body.get());
-  return make_unique<HIRCase>(std::move(selectors), std::move(body),
+  return make_unique<HIRCase>(stmt->span, std::move(selectors), std::move(body),
                               stmt->isDefault);
 }
 
 unique_ptr<HIRStmt> HIRBuilder::lowerWhile(WhileStmt *stmt) {
   unique_ptr<HIRExpr> cond = lowerExpr(stmt->condition.get());
   unique_ptr<HIRBlockStmt> body = lowerStmtAsBlock(stmt->body.get());
-  return (make_unique<HIRWhileStmt>(std::move(cond), std::move(body)));
+  return (
+      make_unique<HIRWhileStmt>(stmt->span, std::move(cond), std::move(body)));
 }
 
 unique_ptr<HIRStmt> HIRBuilder::lowerReturn(ReturnStmt *stmt) {
@@ -80,7 +95,7 @@ unique_ptr<HIRStmt> HIRBuilder::lowerReturn(ReturnStmt *stmt) {
   if (stmt->value) {
     expr = lowerExpr(stmt->value.get());
   }
-  return (make_unique<HIRReturnStmt>(std::move(expr)));
+  return (make_unique<HIRReturnStmt>(stmt->span, std::move(expr)));
 }
 
 unique_ptr<HIRStmt> HIRBuilder::lowerSwitch(SwitchStmt *stmt) {
@@ -89,12 +104,13 @@ unique_ptr<HIRStmt> HIRBuilder::lowerSwitch(SwitchStmt *stmt) {
   for (auto &c : stmt->clauses) {
     cases.push_back(lowerCase(c.get()));
   }
-  return (make_unique<HIRSwitchStmt>(std::move(cond), std::move(cases)));
+  return (make_unique<HIRSwitchStmt>(stmt->span, std::move(cond),
+                                     std::move(cases)));
 }
 
 unique_ptr<HIRStmt> HIRBuilder::lowerValueTransfer(ValueTransferStmt *stmt) {
   unique_ptr<HIRValueExpr> value = lowerValue(stmt->value.get());
-  return make_unique<HIRValueTransferStmt>(std::move(value));
+  return make_unique<HIRValueTransferStmt>(stmt->span, std::move(value));
 }
 
 unique_ptr<HIRStmt> HIRBuilder::lowerExprStmt(ExprStmt *stmt) {
@@ -102,7 +118,7 @@ unique_ptr<HIRStmt> HIRBuilder::lowerExprStmt(ExprStmt *stmt) {
   if (auto destroy = dynamic_cast<DestroyExpr *>(stmt->expr.get())) {
     return lowerDestroyStmt(destroy);
   } else {
-    return make_unique<HIRExprStmt>(lowerExpr(stmt->expr.get()));
+    return make_unique<HIRExprStmt>(stmt->span, lowerExpr(stmt->expr.get()));
   }
 }
 
@@ -144,5 +160,6 @@ unique_ptr<HIRStmt> HIRBuilder::lowerDestroyStmt(DestroyExpr *expr) {
 
   unique_ptr<HIRValueExpr> handle = load(std::move(place));
 
-  return make_unique<HIRDestroyStmt>(std::move(handle), entity, storageKind);
+  return make_unique<HIRDestroyStmt>(expr->span, std::move(handle), entity,
+                                     storageKind);
 }

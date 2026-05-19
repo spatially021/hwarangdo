@@ -2,6 +2,7 @@
 #include "AST/Decl.h"
 #include "AST/Expr.h"
 #include "AST/Stmt.h"
+#include "IR/HIR/HIRType.h"
 #include "SemanticAnalyzer/Scope.h"
 #include "SemanticAnalyzer/SymbolTable.h"
 #include "SemanticAnalyzer/symbol/MethodSymbol.h"
@@ -12,7 +13,6 @@
 #include "util/TypeResolver.h"
 #include <cassert>
 #include <memory>
-#include <utility>
 #include <vector>
 
 Linker::Linker(SymbolTable *t) : table(t) {}
@@ -25,7 +25,9 @@ void Linker::visit(BinaryExpr *expr) {
 void Linker::visit(NameExpr *) {}
 void Linker::visit(UnaryExpr *expr) { expr->right->accept(this); }
 void Linker::visit(CallExpr *expr) {
-  expr->receiver->accept(this);
+  if (expr->receiver != nullptr) {
+    expr->receiver->accept(this);
+  }
   for (auto &a : expr->arguments) {
     a->accept(this);
   }
@@ -86,6 +88,7 @@ void Linker::visit(IfStmt *stmt) {
   }
 }
 void Linker::visit(ForStmt *stmt) {
+  ScopeGuard _(*table, stmt->blockScope);
   stmt->initializer->accept(this);
   stmt->range->accept(this);
   stmt->body->accept(this);
@@ -97,7 +100,11 @@ void Linker::visit(SwitchStmt *stmt) {
   }
 }
 void Linker::visit(Case *c) { c->body->accept(this); }
-void Linker::visit(ReturnStmt *stmt) { stmt->value->accept(this); }
+void Linker::visit(ReturnStmt *stmt) {
+  if (stmt->value != nullptr) {
+    stmt->value->accept(this);
+  }
+}
 void Linker::visit(ValueTransferStmt *stmt) { stmt->value->accept(this); }
 void Linker::visit(BreakStmt *) {}
 void Linker::visit(ContinueStmt *) {}
@@ -174,6 +181,10 @@ void Linker::visit(StructDecl *decl) {
   for (auto &f : decl->fields) {
     f->accept(this);
   }
+
+  for (auto &i : decl->inits) {
+    i->accept(this);
+  }
 }
 void Linker::visit(EnumDecl *decl) {
   for (auto &v : decl->variants) {
@@ -246,6 +257,7 @@ void Linker::visit(FuncDecl *decl) {
   for (auto &p : decl->params) {
     p->accept(this);
     p->symbol->typeSymbol = p->type->resolved;
+    decl->methodSymbol->paramTypes.push_back(p->type->resolved);
   }
 
   if (decl->isOverride) {
@@ -262,6 +274,12 @@ void Linker::visit(FuncDecl *decl) {
     if (decl->name != "update") {
       Error::diagnostic(decl->span, "after frame need method name - update");
     }
+  }
+
+  auto &bucket = table->current->methodMap[decl->methodSymbol->name];
+  auto raw = decl->methodSymbol;
+  if (Helper::hasSameSig(bucket, raw)) {
+    Error::diagnostic(decl->span, "duplicated method");
   }
 
   decl->body->accept(this);
@@ -293,6 +311,7 @@ void Linker::visit(InitDecl *decl) {
   for (auto &p : decl->params) {
     p->accept(this);
     p->symbol->typeSymbol = p->type->resolved;
+    decl->methodSymbol->paramTypes.push_back(p->type->resolved);
   }
   decl->body->accept(this);
 }

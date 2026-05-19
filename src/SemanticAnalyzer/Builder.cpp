@@ -25,7 +25,9 @@ void Builder::visit(BinaryExpr *expr) {
 void Builder::visit(NameExpr *) {}
 void Builder::visit(UnaryExpr *expr) { expr->right->accept(this); }
 void Builder::visit(CallExpr *expr) {
-  expr->receiver->accept(this);
+  if (expr->receiver != nullptr) {
+    expr->receiver->accept(this);
+  }
   for (auto a : expr->arguments) {
     a->accept(this);
   }
@@ -262,8 +264,12 @@ void Builder::visit(StructDecl *decl) {
   ScopeGuard __(*table);
   table->getCurrent()->scopeKind = Scope::ScopeKind::FIELD;
   raw->memberScope = table->getCurrent();
-  for (auto a : decl->fields) {
+  for (auto &a : decl->fields) {
     a->accept(this);
+  }
+
+  for (auto &i : decl->inits) {
+    i->accept(this);
   }
 }
 
@@ -565,23 +571,8 @@ void Builder::visit(InitDecl *decl) {
   symbol->returnType = table->getBuilt("void");
   auto raw = symbol.get();
 
-  auto result = table->addInit(std::move(symbol));
+  table->addInit(std::move(symbol));
 
-  if (!result.success) {
-    switch (result.errorType) {
-    case SymbolTable::Result::DUPLICATED:
-      Error::diagnostic(decl->span, "duplicated method name : " + decl->name);
-      break;
-    case SymbolTable::Result::RESERVED:
-      Error::diagnostic(decl->span, "reserved name : " + decl->name);
-      break;
-    case SymbolTable::Result::UNKNOWN_SYMBOL:
-      Error::internal(decl->span, "unknown symbol" + decl->name);
-      break;
-    case SymbolTable::Result::NONE:
-      break;
-    }
-  }
   decl->methodSymbol = raw;
 
   ScopeGuard _(*table);
@@ -601,7 +592,7 @@ void Builder::visit(InitDecl *decl) {
       switch (re.errorType) {
       case SymbolTable::Result::DUPLICATED:
         Error::diagnostic(a.get()->span,
-                          "duplicated class name : " + a.get()->name);
+                          "duplicated param name : " + a.get()->name);
         break;
       case SymbolTable::Result::RESERVED:
         Error::diagnostic(a.get()->span, "reserved name : " + a.get()->name);

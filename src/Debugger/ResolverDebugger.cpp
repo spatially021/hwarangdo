@@ -108,7 +108,7 @@ void ResolverDebugger::debug(Scope *scope) {
     depth++;
     for (auto &map : scope->methodMap) {
       for (auto &m : map.second) {
-        cout << ident() << m->name << "\n";
+        cout << ident() << m->returnType->name << " " << m->name << "\n";
       }
     }
     depth--;
@@ -127,7 +127,7 @@ void ResolverDebugger::debug(Scope *scope) {
     cout << ident() << "<inits>\n";
     depth++;
     for (auto &t : scope->inits) {
-      cout << ident() << t.second->name << "\n";
+      cout << ident() << t->name << "\n";
     }
     depth--;
   }

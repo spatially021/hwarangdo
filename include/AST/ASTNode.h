@@ -118,6 +118,7 @@ public:
 
   void accept(ASTVisitor *visitor) override { visitor->visit(this); }
   TypeSymbol *resolved = nullptr;
+  bool setSize = false;
 };
 // 내장 타입을 표현하는 AST 노드를 나타낸다.
 // 카테고리와 크기 정보를 기반으로 구체적인 BuiltInType을 결정한다.
@@ -142,6 +143,7 @@ public:
   BuiltinTypeNode(Token t, Category c, Token s = {})
       : TypeNode(NKind::BUILT_IN_TYPE, t), category(c) {
     if (s.text == "") {
+      setSize = false;
       switch (category) {
       case Category::Int:
         type = BuiltInType::I32;
@@ -150,8 +152,10 @@ public:
         type = BuiltInType::F32;
         break;
       case Category::CHAR:
-      case Category::STRING:
         type = BuiltInType::C8;
+        break;
+      case Category::STRING:
+        type = BuiltInType::S8;
         break;
       case Category::Bool:
         type = BuiltInType::B;
@@ -165,6 +169,7 @@ public:
       }
     } else {
       auto size = s.text;
+      setSize = true;
       if (size == "i8") {
         type = BuiltInType::I8;
       } else if (size == "i16") {

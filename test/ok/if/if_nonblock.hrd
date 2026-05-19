@@ -1,7 +1,0 @@
-class Main{
-    public init(){
-        bool a = true;
-        if (a)
-            a = false;
-    }
-}

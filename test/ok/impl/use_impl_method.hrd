@@ -1,0 +1,24 @@
+class Main{
+    frame void update(){
+
+    }
+    public init(){
+        S s=S();
+        s.foo();
+    }
+}
+
+struct S{
+
+    public init(){
+        
+    }
+
+}
+
+
+impl S{
+    void foo(){
+
+    }
+}

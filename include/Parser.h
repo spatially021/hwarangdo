@@ -2,6 +2,7 @@
 
 #include "AST/ASTNode.h"
 #include "AST/Decl.h"
+#include "AST/DeclContext.h"
 #include "AST/Expr.h"
 #include "AST/Stmt.h"
 #include "AST/TokenStream.h"
@@ -14,12 +15,6 @@
 using namespace std;
 
 class Error;
-enum DeclContext {
-  TOPLEVEL,
-  BLOCK,
-  CLASSBODY,
-  IMPLBODY,
-};
 
 class ContextGuard {
 public:
@@ -124,6 +119,7 @@ private:
   bool isAtEnd() const;
   const Token &consume(TKind kind, const std::string &message);
   bool isFunc() const;
+  bool isInit() const;
   bool isType() const;
   Token parseLiteralForType(const Token &type);
   bool isValidSize(const std::string &s) const;

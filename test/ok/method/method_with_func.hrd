@@ -1,0 +1,22 @@
+class Main{
+    frame void update(){
+
+    }
+    public init(){
+
+    }
+
+    func foo(){
+
+    }
+
+    func foo1(){
+        return 0;
+    }
+
+    func foo2(){
+        return;
+    }
+
+}
+

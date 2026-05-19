@@ -2,6 +2,7 @@
 #include "AST/Program.h"
 #include "SemanticAnalyzer/Builder.h"
 #include "SemanticAnalyzer/Linker.h"
+#include "SemanticAnalyzer/SymbolTable.h"
 
 #include <stdexcept>
 

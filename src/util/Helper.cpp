@@ -2,6 +2,7 @@
 #include "AST/ASTNode.h"
 #include "SemanticAnalyzer/SymbolTable.h"
 #include "SemanticAnalyzer/symbol/MethodSymbol.h"
+#include "SemanticAnalyzer/symbol/TypeSymbol.h"
 #include "util/TypeResolver.h"
 std::string Helper::apIntToString(const llvm::APInt &v) {
   llvm::SmallString<32> buf;
@@ -12,6 +13,8 @@ std::string Helper::apIntToString(const llvm::APInt &v) {
 bool Helper::hasSameSig(const vector<MethodSymbol *> &vec,
                         MethodSymbol *symbol) {
   for (auto *m : vec) {
+    if (m == symbol)
+      continue;
     if (m->paramTypes.size() != symbol->paramTypes.size()) {
       continue;
     }

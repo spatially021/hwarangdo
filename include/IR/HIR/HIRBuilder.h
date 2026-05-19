@@ -48,6 +48,7 @@ private:
   HIRType *getOrCreateType(TypeSymbol *symbol);
 
   void emit(unique_ptr<HIRStmt> stmt);
+  void setDefaultInit(HIRTypeDecl *typeDecl);
 
   // type
   HIRType *lowerType(TypeSymbol *symbol);
@@ -84,6 +85,7 @@ private:
   std::unique_ptr<HIRExpr> lowerSpawn(SpawnExpr *expr);
   std::unique_ptr<HIRExpr> lowerView(ViewExpr *expr);
   std::unique_ptr<HIRExpr> lowerCall(CallExpr *expr);
+  std::unique_ptr<HIRExpr> lowerInitCall(CallExpr *expr);
   std::unique_ptr<HIRExpr> lowerImplictCall(CallExpr *expr);
   std::unique_ptr<HIRExpr> lowerAssign(AssignExpr *expr);
   std::unique_ptr<HIRExpr> lowerTernary(TernaryExpr *expr);
@@ -92,7 +94,6 @@ private:
   // place/value split
   std::unique_ptr<HIRPlaceExpr> lowerPlace(NameExpr *expr);
   std::unique_ptr<HIRExpr> lowerLoadIfNeeded(std::unique_ptr<HIRExpr> expr);
-  std::unique_ptr<HIRValueExpr> lowerValue(ValueSymbol *symbol);
   std::unique_ptr<HIRValueExpr> lowerVariantValue(CallExpr *expr);
   std::unique_ptr<HIRValueExpr> lowerVariantValue(MemberExpr *expr);
   std::unique_ptr<HIRFieldPlaceExpr> lowerMember(MemberExpr *expr);
@@ -155,10 +156,10 @@ private:
 
   inline std::unique_ptr<HIRLoadExpr>
   load(std::unique_ptr<HIRPlaceExpr> place) {
-    return make_unique<HIRLoadExpr>(std::move(place));
+    return make_unique<HIRLoadExpr>(place->span, std::move(place));
   }
 
-  inline std::unique_ptr<HIRValueExpr> lowerReceiver(Expr *expr) {
+  std::unique_ptr<HIRValueExpr> lowerReceiver(Expr *expr) {
     return lowerValue(expr);
   }
 };

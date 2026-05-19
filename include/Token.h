@@ -90,6 +90,7 @@ enum class TKind {
   EQAUL_AGNLEBUCKET,  //=>
 
   FOR,
+  BY,
   WHILE,
 
   BREAK,

@@ -7,6 +7,13 @@
 #include <magic_enum/magic_enum.hpp>
 #include <string>
 
+struct InitMap {
+  std::unordered_map<HIRLocal *, InitState> localStates;
+  std::unordered_map<HIRField *, InitState> fieldStates;
+  std::unordered_map<HIRField *, InitState> rootStates;
+  std::unordered_map<HIRParam *, InitState> paramStates;
+};
+
 template <typename T> T *expect(HIRNode *node, HIRNodeKind expected) {
   if (node == nullptr) {
     Error::internal("expected " + std::string(magic_enum::enum_name(expected)) +
@@ -31,10 +38,7 @@ template <typename T> T *expect(HIRNode *node, HIRNodeKind expected) {
 class HIRVerifier {
 
 private:
-  std::unordered_map<HIRLocal *, InitState> localStates;
-  std::unordered_map<HIRField *, InitState> fieldStates;
-  std::unordered_map<HIRField *, InitState> rootStates;
-  std::unordered_map<HIRParam *, InitState> paramStates;
+  InitMap initmap;
 
 public:
   HIRProgram *program = nullptr;
@@ -46,8 +50,13 @@ public:
   void verifyLocal(HIRLocal *local);
   void verifyBlock(HIRBlockStmt *stmt);
   void verifyStmt(HIRStmt *stmt);
-  void verifyExpr(HIRExpr *expr);
+  void verifyExpr(HIRExpr *expr, bool isRead = true);
   void verifyIf(HIRIfStmt *stmt);
   void verifyField(HIRField *field);
   void verifyRoot(HIRField *root);
+  void verifyInit(HIRMethodDecl *method);
+
+  void checkInitialize(HIRPlaceExpr *place);
+  void initialize(HIRPlaceExpr *place);
+  InitState &getInitState(HIRPlaceExpr *place);
 };

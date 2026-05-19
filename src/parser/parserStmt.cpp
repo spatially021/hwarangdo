@@ -1,3 +1,4 @@
+#include "AST/Decl.h"
 #include "AST/Expr.h"
 #include "AST/Stmt.h"
 #include "Parser.h"
@@ -55,7 +56,7 @@ Ptr Parser::blockStmt() {
 }
 
 Ptr Parser::bodyStmt() {
-  ContextGuard _{contexts, BLOCK};
+  ContextGuard _{contexts, DeclContext::BLOCK};
   if (check(TKind::LEFT_BRACE)) {
     advance(); //{처리
     return blockStmt();
@@ -69,14 +70,27 @@ Ptr Parser::forStmt() {
   consume(TKind::LEFT_PAREN, "exepct '(' after for");
 
   Ptr init = declStmt();
-  if (dynamic_pointer_cast<VarDecl>(init)->init != nullptr)
+  auto decl = dynamic_cast<DeclStmt *>(init.get());
+  if (decl == nullptr) {
+    Error::internal(t, "for's var init is not declStmt");
+  }
+  auto var = dynamic_cast<VarDecl *>(decl->decl.get());
+  if (var == nullptr) {
+    Error::internal(t, "for's var inti is not varDecl");
+  }
+  if (var->init != nullptr)
     Error::diagnostic(t, "in for statement initiate expression not available");
-  consume(TKind::SEMICOLON, "expect ';' after declare expression");
   Expr::Ptr from = expression();
   consume(TKind::DOUBLE_DOT, "range need '..'");
   Expr::Ptr to = expression();
+  Expr::Ptr step = nullptr;
+  if (check(TKind::BY)) {
+    advance(); // advance by
+    step = expression();
+  }
+  consume(TKind::RIGHT_PAREN, "expect ')'");
   shared_ptr<Range> range =
-      make_shared<Range>(makeSpan(from->span, to->span), from, to);
+      make_shared<Range>(makeSpan(from->span, to->span), from, to, step);
   Ptr body = bodyStmt();
   return make_shared<ForStmt>(makeSpan(t.span, body->span), init, range, body);
 }

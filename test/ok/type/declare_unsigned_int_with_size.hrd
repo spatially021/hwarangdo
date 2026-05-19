@@ -1,0 +1,13 @@
+class Main{
+    frame void update(){
+
+    }
+    public init(){
+        int:u8 a;
+        int:u16 b;
+        int:u32 c;
+        int:u64 d;
+        int:u128 e;
+    }
+}
+

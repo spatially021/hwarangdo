@@ -154,7 +154,7 @@ void HIRLinker::lowerTypeShell(Decl *decl) {
     Error::internal(decl->span, "lowerType returned nullptr");
   }
 
-  auto ty = make_unique<HIRTypeDecl>(kind, typeSymbol->name, type);
+  auto ty = make_unique<HIRTypeDecl>(decl->span, kind, typeSymbol->name, type);
 
   auto *raw = ty.get();
   auto [it, inserted] = program->typeDeclMap.emplace(typeSymbol, raw);
@@ -163,6 +163,18 @@ void HIRLinker::lowerTypeShell(Decl *decl) {
   }
 
   hirSource->typeDecls.push_back(std::move(ty));
+}
+
+static void lowerField(VarDecl *decl, HIRTypeDecl *type) {
+  unique_ptr<HIRField> field = make_unique<HIRField>();
+  field->symbol = decl->symbol;
+  field->name = decl->name;
+  field->isMutable = decl->isMutable;
+  field->type = type->type;
+  field->id = type->nextFieldId++;
+  auto raw = field.get();
+  type->fieldMap.emplace(decl->symbol, raw);
+  type->fields.push_back(std::move(field));
 }
 
 unique_ptr<HIRSource> HIRLinker::link() {
@@ -178,6 +190,9 @@ unique_ptr<HIRSource> HIRLinker::link() {
       for (auto &m : c->methods) {
         lowerMethodDeclShell(m.get(), it->second);
       }
+      for (auto &f : c->fields) {
+        lowerField(f.get(), it->second);
+      }
     }
     if (auto *i = dynamic_cast<ImplDecl *>(d.get())) {
       auto symbol = table->getType(i->target);
@@ -189,6 +204,18 @@ unique_ptr<HIRSource> HIRLinker::link() {
         lowerMethodDeclShell(m.get(), it->second);
       }
     }
+    if (auto s = dynamic_cast<StructDecl *>(d.get())) {
+      auto it = program->typeDeclMap.find(s->symbol);
+      if (it == program->typeDeclMap.end()) {
+        Error::internal(d->span, "fail to get method's owner type");
+      }
+      for (auto &f : s->fields) {
+        lowerField(f.get(), it->second);
+      }
+      for (auto &i : s->inits) {
+        lowerMethodDeclShell(i.get(), it->second);
+      }
+    }
   }
   return std::move(hirSource);
 }
@@ -197,8 +224,9 @@ void HIRLinker::lowerMethodDeclShell(FuncDecl *decl, HIRTypeDecl *currentType) {
   assert(decl);
   assert(decl->methodSymbol);
 
-  auto method = make_unique<HIRMethodDecl>(
-      currentType, currentType->nextMethodID++, decl->name, decl->methodSymbol);
+  auto method = make_unique<HIRMethodDecl>(decl->span, currentType,
+                                           currentType->nextMethodID++,
+                                           decl->name, decl->methodSymbol);
 
   auto *raw = method.get();
 
@@ -215,7 +243,11 @@ void HIRLinker::lowerMethodDeclShell(FuncDecl *decl, HIRTypeDecl *currentType) {
     method->setParam(std::move(params));
   }
   currentType->methods.push_back(std::move(method));
-  currentType->methodMap.emplace(decl->methodSymbol, raw);
+  if (raw->isInit) {
+    currentType->initMap.emplace(decl->methodSymbol, raw);
+  } else {
+    currentType->methodMap.emplace(decl->methodSymbol, raw);
+  }
 }
 
 unique_ptr<HIRParam> HIRLinker::lowerParam(Param *decl) {

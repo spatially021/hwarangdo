@@ -1,12 +1,15 @@
 
 #include "AST/Decl.h"
+#include "AST/Expr.h"
 #include "IR/HIR/HIRBuilder.h"
 #include "IR/HIR/HIRDecl.h"
 #include "IR/HIR/HIRExpr.h"
+#include "IR/HIR/HIRStmt.h"
 #include "IR/HIR/HIRSymbol.h"
 #include "IR/HIR/HIRType.h"
 #include "SemanticAnalyzer/symbol/MethodSymbol.h"
 #include "SemanticAnalyzer/symbol/ValueSymbol.h"
+#include "SourceSpan.h"
 #include "util/Error.h"
 #include "util/Guard.h"
 #include <cassert>
@@ -18,8 +21,9 @@ unique_ptr<HIRSelfExpr> HIRBuilder::lowerImplictSelf() {
   assert(currentType);
 
   auto type = currentType->type;
-
+  SourceSpan span;
   return make_unique<HIRSelfExpr>(
+      span,
       type->kind == HIRTypeKind::Struct ? HIRSelfKind::Self : HIRSelfKind::This,
       type, type, type);
 }
@@ -101,18 +105,54 @@ void HIRBuilder::bindLocal(ValueSymbol *symbol, unique_ptr<HIRLocal> local) {
   currentMethod->locals.push_back(std::move(local));
 }
 
+void HIRBuilder::setDefaultInit(HIRTypeDecl *type) {
+  type->defaultInitBlock = make_unique<HIRBlockStmt>(type->span);
+  auto block = type->defaultInitBlock.get();
+  for (auto &f : type->defaultInit) {
+    auto ty = type->type;
+    auto span = f.second->span;
+    auto place = make_unique<HIRFieldPlaceExpr>(
+        span,
+        make_unique<HIRSelfExpr>(span,
+                                 ty->kind == HIRTypeKind::Struct
+                                     ? HIRSelfKind::Self
+                                     : HIRSelfKind::This,
+                                 ty, ty, ty),
+        f.first);
+    auto rhs = lowerValue(f.second);
+    auto assign =
+        make_unique<HIRAssignExpr>(span, std::move(place), std::move(rhs));
+    block->statements.push_back(
+        make_unique<HIRExprStmt>(span, std::move(assign)));
+  }
+}
+
 void HIRBuilder::bindMethod(FuncDecl *decl) {
   auto it = program->typeDeclMap.find(decl->methodSymbol->onwer);
   if (it == program->typeDeclMap.end()) {
     Error::internal(decl->span, "fail to find method's owner type");
   }
   auto type = it->second;
-  auto mIT = type->methodMap.find(decl->methodSymbol);
-  if (mIT == type->methodMap.end()) {
-    Error::internal(decl->span, "fail to find method");
+
+  HIRMethodDecl *method = nullptr;
+
+  if (decl->methodSymbol->isInit) {
+    auto iIt = type->initMap.find(decl->methodSymbol);
+    if (iIt == type->initMap.end()) {
+      Error::internal(decl->span, "fail to find init method");
+    }
+    method = iIt->second;
+
+  } else {
+    auto mIT = type->methodMap.find(decl->methodSymbol);
+    if (mIT == type->methodMap.end()) {
+      Error::internal(decl->span, "fail to find method");
+    }
+    method = mIT->second;
   }
-  auto method = mIT->second;
+
   MethodGuard _(currentMethod, method);
+
   method->body = lowerStmtAsBlock(decl->body.get());
 }
 
@@ -125,8 +165,7 @@ void HIRBuilder::bindField(ValueSymbol *symbol, unique_ptr<HIRField> field) {
 
 pair<bool, HIRLocal *> HIRBuilder::lookupLocal(ValueSymbol *symbol) {
 
-  for (auto cb = currentBlock; currentBlock != nullptr;
-       cb = currentBlock->parent) {
+  for (auto cb = currentBlock; cb != nullptr; cb = cb->parent) {
     auto it = cb->localMap.find(symbol);
     bool b = it != cb->localMap.end();
     if (b) {

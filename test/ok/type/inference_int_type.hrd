@@ -1,0 +1,12 @@
+class Main{
+    frame void update(){
+
+    }
+    public init(){
+        int a=10;//i32
+        int b=40000;//i32
+        int c= 2157483647;//i64
+        int d= 9323372036854775807;//i128
+    }   
+}
+

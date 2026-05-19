@@ -109,6 +109,13 @@ bool Parser::isType() const {
   return isTypeToken(peek().kind);
 }
 
+bool Parser::isInit() const {
+  if (isAccessModifier()) {
+    return check(TKind::INIT, 1) && check(TKind::LEFT_PAREN, 2);
+  }
+  return check(TKind::INIT) && check(TKind::LEFT_PAREN, 1);
+}
+
 bool Parser::isFunc() const {
   if (isAccessModifier()) {
     if (isTypeToken(following().kind) || following().kind == TKind::VOID ||
@@ -193,6 +200,7 @@ bool Parser::isAssginable(Expr::Ptr p) const {
 
 TypeNode::Ptr Parser::parseType() {
   Token ty = advance(); // 자료형/객체명
+
   Token size = {};
 
   if (check(TKind::COLON)) {

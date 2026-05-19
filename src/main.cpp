@@ -13,6 +13,7 @@
 #include "Parser.h"
 #include "SemanticAnalyzer.h"
 #include "SemanticAnalyzer/Verifier.h"
+#include "SourceSpan.h"
 #include "Token.h"
 
 #include <algorithm>
@@ -37,7 +38,7 @@ inline string_view tokenToString(TKind kind);
 ProjectInput projectInput;
 
 bool logLexer = false, logParser = false, logBuilder = false,
-     logResolver = false, test = false;
+     logResolver = false, test = false, logHir = false;
 
 void tester() {}
 
@@ -179,8 +180,11 @@ static bool parseOptions(int argc, char *argv[]) {
       {"--parser", [&] { logParser = true; }},
       {"--builder", [&] { logBuilder = true; }},
       {"--resolver", [&] { logResolver = true; }},
+      {"--hir", [&] { logHir = true; }},
       {"--all",
-       [&] { logLexer = logParser = logBuilder = logResolver = true; }},
+       [&] {
+         logLexer = logParser = logBuilder = logResolver = logHir = true;
+       }},
   };
 
   std::unordered_map<char, std::function<void()>> shortOptions = {
@@ -188,8 +192,12 @@ static bool parseOptions(int argc, char *argv[]) {
       {'p', [&] { logParser = true; }},
       {'b', [&] { logBuilder = true; }},
       {'r', [&] { logResolver = true; }},
-      {'a', [&] { logLexer = logParser = logBuilder = logResolver = true; }},
+      {'a',
+       [&] {
+         logLexer = logParser = logBuilder = logResolver = logHir = true;
+       }},
       {'t', [&] { test = true; }},
+      {'h', [&] { logHir = true; }},
   };
 
   for (int i = 2; i < argc; ++i) {
@@ -389,9 +397,11 @@ int main(int argc, char *argv[]) {
          << Color::RESET << e.what() << "\n";
     return -1;
   }
-
+  SourceSpan span;
+  span.path = "[program]";
+  span.lineStart = 0;
   unique_ptr<HIRProgram> hirProgram =
-      make_unique<HIRProgram>(&analyzer.symbolTable);
+      make_unique<HIRProgram>(span, &analyzer.symbolTable);
 
   try {
     vector<HIRSource *> sources;
@@ -410,6 +420,12 @@ int main(int argc, char *argv[]) {
     cout << Color::RED << "error occur while hir building\n"
          << Color::RESET << e.what() << "\n";
     return -1;
+  }
+
+  if (logHir) {
+    cout << "===== HIR result =====" << endl;
+
+    cout << "=========================" << endl;
   }
 
   try {

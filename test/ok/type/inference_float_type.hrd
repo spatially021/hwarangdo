@@ -1,0 +1,17 @@
+class Main{
+    frame void update(){
+
+    }
+    public init(){
+        float a=0.1;//f32
+        float b=1;//f32
+        float c=16777217.0;//f32
+        
+        float d=3.5e38;//f64
+        float e=16777217;//f64
+
+        float f=1.0e4000;//f128
+        float g=9107199254740992;//f128
+
+    }
+}

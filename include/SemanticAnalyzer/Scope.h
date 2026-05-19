@@ -25,11 +25,12 @@ public:
   vector<std::unique_ptr<Scope>> children;
 
   vector<std::unique_ptr<MethodSymbol>> methodOwn;
+  vector<std::unique_ptr<MethodSymbol>> initOwn;
 
   unordered_map<string, unique_ptr<TypeSymbol>> type;
   unordered_map<string, unique_ptr<ValueSymbol>> value;
   unordered_map<string, vector<MethodSymbol *>> methodMap;
-  unordered_map<string, unique_ptr<MethodSymbol>> inits;
+  vector<MethodSymbol *> inits;
   int id = 0;
   string name = "";
 };

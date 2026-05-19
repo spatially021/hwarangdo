@@ -17,6 +17,36 @@
 
 class SymbolTable;
 
+enum class CastingFailKind {
+  None,
+
+  // 값 범위 문제
+  Overflow,  // 값 범위 초과
+  Underflow, // 음수 overflow / 너무 작은 값 (선택)
+
+  // 부호 문제
+  SignToUnsign,       // signed -> unsigned 위험
+  NegativeToUnsigned, // 음수를 unsigned로 변환 시도
+
+  // 정밀도 문제
+  PrecisionLoss, // float 축소 / int->float 정확도 손실
+  FractionLoss,  // float -> int 시 소수부 손실
+
+  // 타입 계열 문제
+  Unmatched,       // 완전히 무관한 타입
+  InvalidCategory, // numeric <-> string 같은 계열 자체 불가
+
+  // 언어 정책 문제
+  ExplicitRequired, // 명시적 cast 필요
+  Narrowing,        // 안전하지 않은 축소 변환
+
+  // 특수값
+  NaN,
+  Infinity,
+
+  // 내부 처리용
+  NotImplemented,
+};
 enum class ArgMatchKind {
   Exact,        // 타입 완전 일치
   DefaultArg,   // 호출 인자가 '_' 이고 해당 파라미터에 기본값 존재
@@ -53,8 +83,9 @@ private:
   Scope *currentBase = nullptr;
 
   void ResolveEnumVariant(CallExpr *expr);
-  void ResolveCall(CallExpr *expr, Scope *scope);
-  ArgMatchKind matchArgument(TypeSymbol *arg, TypeSymbol *param,
+  void resolveCall(CallExpr *expr, Scope *scope);
+  void resolveInit(CallExpr *expr);
+  ArgMatchKind matchArgument(Expr *arg, TypeSymbol *param,
                              bool hasInit = false);
   int rankOf(const ArgMatchKind &kind);
 
@@ -72,9 +103,18 @@ private:
   void unmatchSymbol(Symbol *symbol);
   vector<TypeSymbol *> getPromotionCandidates(TypeSymbol *left,
                                               TypeSymbol *right);
-  bool canImplicitlyConvert(TypeSymbol *from, TypeSymbol *to);
-  TypeSymbol *implicitCasting(TypeSymbol *from, TypeSymbol *to);
 
+  pair<bool, CastingFailKind> canImplicitlyConvert(TypeSymbol *from,
+                                                   TypeSymbol *to);
+  pair<bool, CastingFailKind> canImplicitlyLiteralConvert(LiteralExpr *from,
+                                                          TypeSymbol *to);
+  pair<TypeSymbol *, CastingFailKind> implicitCasting(Expr *from,
+                                                      TypeSymbol *to);
+
+  void castFail(CastingFailKind kind, SourceSpan &span);
+
+  void inferencePrim(TypeNode *decl, TypeSymbol *expr);
+  void convertLit(LiteralExpr *lit, TypeNode *type);
   inline bool isValidUnicodeScalar(uint32_t cp) {
     if (cp > 0x10FFFF)
       return false;

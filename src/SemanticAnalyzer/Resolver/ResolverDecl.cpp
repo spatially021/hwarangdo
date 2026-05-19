@@ -1,5 +1,6 @@
 #include "AST/ASTNode.h"
 #include "AST/Decl.h"
+#include "AST/DeclContext.h"
 #include "AST/Expr.h"
 #include "AST/Stmt.h"
 #include "SemanticAnalyzer/ResolvedLit.h"
@@ -37,8 +38,12 @@ void Resolver::visit(StructDecl *decl) {
   }
   ScopeGuard _(*table, decl->symbol->memberScope);
   TypeContextGuard __(currentType, decl->symbol);
-  for (auto a : decl->fields) {
+  for (auto &a : decl->fields) {
     a->accept(this);
+  }
+
+  for (auto &i : decl->inits) {
+    i->accept(this);
   }
 }
 void Resolver::visit(EnumDecl *) {}
@@ -68,19 +73,20 @@ void Resolver::visit(FuncDecl *decl) {
 
   ScopeGuard _(*table, decl->methodSymbol->scope);
   auto symbol = decl->methodSymbol;
-
-  for (auto &p : decl->params) {
-    p->accept(this);
-    symbol->paramTypes.push_back(p->symbol->typeSymbol);
-  }
   auto prev = currentMethod;
   currentMethod = decl->methodSymbol;
+  for (auto &p : decl->params) {
+    p->accept(this);
+  }
   decl->body->accept(this);
 
   if (decl->returnType.has_value()) {
     auto rt = decl->returnType.value().get();
     rt->accept(this);
     auto type = rt->resolved;
+    if (symbol->returns.empty() && table->getType("void") != type) {
+      Error::diagnostic(decl->span, "non-void method must have return");
+    }
     for (auto r : symbol->returns) {
       if (!isAssignable(type, r->returnType)) {
         Error::diagnostic(r->span, "unmatched return type");
@@ -103,14 +109,63 @@ void Resolver::visit(FuncDecl *decl) {
 
   currentMethod = prev;
 }
-void Resolver::visit(VarDecl *decl) {
-  if (decl->init) {
-    decl->init->accept(this);
+
+static bool canFieldInit(Expr *init) {
+  if (dynamic_cast<LiteralExpr *>(init)) {
+    return true;
   }
+  if (dynamic_cast<SpawnExpr *>(init)) {
+    return true;
+  }
+  if (auto call = dynamic_cast<CallExpr *>(init)) {
+    if (call->callType == CallExpr::CallType::INIT_CALL) {
+      return true;
+    }
+    if (call->callType == CallExpr::CallType::PAYLOAD_CALL) {
+      return true;
+    }
+  }
+  if (auto member = dynamic_cast<MemberExpr *>(init)) {
+    if (member->resolved->typeSymbol->kind == TypeSymbol::TypeKind::ENUM) {
+      return true;
+    }
+  }
+
+  // TODO: 배열 초기화 방식 추가시 관련 내용 추가하기.
+
+  return false;
+}
+
+void Resolver::visit(VarDecl *decl) {
 
   if (!decl->type->resolved) {
     Error::internal(decl->span, "decl->type->resolved is nullptr");
   }
+  if (decl->init) {
+    decl->init->accept(this);
+    if (auto lit = dynamic_cast<LiteralExpr *>(decl->init.get())) {
+      convertLit(lit, decl->type.get());
+      decl->symbol->typeSymbol = decl->type->resolved;
+    } else {
+      if (dynamic_cast<PrimtiveType *>(decl->type->resolved) &&
+          !decl->type->setSize) {
+        inferencePrim(decl->type.get(), decl->init->resolvedType);
+        decl->symbol->typeSymbol = decl->type->resolved;
+      }
+      auto [result, kind] =
+          canImplicitlyConvert(decl->init->resolvedType, decl->type->resolved);
+      if (!result) {
+        castFail(kind, decl->init->span);
+      }
+    }
+
+    if (decl->context == DeclContext::CLASSBODY && decl->init) {
+      if (!canFieldInit(decl->init.get())) {
+        Error::diagnostic(decl->init->span, "invalid field initializer");
+      }
+    }
+  }
+
   if (!decl->symbol->typeSymbol) {
     Error::internal(decl->span, "typeSymbol is nullptr");
   }

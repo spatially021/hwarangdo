@@ -41,6 +41,10 @@ void Verifier::visit(CallExpr *expr) {
   } else if (expr->callType == CallExpr::CallType::PAYLOAD_CALL) {
     if (expr->resolved == nullptr)
       unresolved(expr, "variant is unresolved");
+  } else if (expr->callType == CallExpr::CallType::INIT_CALL) {
+    if (expr->resolvedType == nullptr) {
+      unresolved(expr, "init is unresolved");
+    }
   } else {
     unresolved(expr, "callExpr unresolved");
   }
@@ -151,11 +155,15 @@ void Verifier::visit(IfStmt *stmt) {
 void Verifier::visit(ForStmt *stmt) {
   stmt->initializer->accept(this);
   stmt->range->accept(this);
+  context.loopDepth++;
   stmt->body->accept(this);
+  context.loopDepth--;
 }
 void Verifier::visit(WhileStmt *stmt) {
   stmt->condition->accept(this);
+  context.loopDepth++;
   stmt->body->accept(this);
+  context.loopDepth--;
 }
 void Verifier::visit(SwitchStmt *stmt) {
   stmt->value->accept(this);
@@ -171,8 +179,16 @@ void Verifier::visit(ReturnStmt *stmt) {
   }
 }
 void Verifier::visit(ValueTransferStmt *stmt) { stmt->value->accept(this); }
-void Verifier::visit(BreakStmt *) {}
-void Verifier::visit(ContinueStmt *) {}
+void Verifier::visit(BreakStmt *stmt) {
+  if (context.loopDepth == 0) {
+    Error::diagnostic(stmt->span, "break only allowed in loop statement");
+  }
+}
+void Verifier::visit(ContinueStmt *stmt) {
+  if (context.loopDepth == 0) {
+    Error::diagnostic(stmt->span, "continue only allowed in loop statement");
+  }
+}
 void Verifier::visit(DeclStmt *stmt) { stmt->decl->accept(this); }
 void Verifier::visit(EmptyStmt *) {}
 

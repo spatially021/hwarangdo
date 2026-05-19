@@ -1,0 +1,13 @@
+class Main{
+    frame void update(){
+
+    }
+    public init(){
+        int i;
+        float f;
+        bool b;
+        char c;
+        string s;
+    }   
+}
+

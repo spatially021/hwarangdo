@@ -1,0 +1,13 @@
+class Main{
+    frame void update(){
+
+    }
+    public init(){
+        int a;
+        while(false){
+            a=1;
+        }
+        int b=a;
+    }
+}
+

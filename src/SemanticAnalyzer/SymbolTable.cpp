@@ -193,15 +193,9 @@ bool SymbolTable::addValue(unique_ptr<ValueSymbol> symbol) {
 }
 
 bool SymbolTable::addMethod(unique_ptr<MethodSymbol> symbol) {
-  auto &bucket = current->methodMap[symbol->name];
-  MethodSymbol *raw = symbol.get();
-
-  if (Helper::hasSameSig(bucket, raw)) {
-    return false;
-  }
-
+  auto raw = symbol.get();
   current->methodOwn.push_back(std::move(symbol));
-  bucket.push_back(raw);
+  current->methodMap[raw->name].push_back(raw);
   return true;
 }
 
@@ -341,10 +335,11 @@ SymbolTable::GenericInsGetOrCreate(TypeSymbol *origin,
   return it->second;
 }
 
-SymbolTable::Result SymbolTable::addInit(unique_ptr<MethodSymbol> initMethod) {
-  auto [it, inserted] = current->inits.emplace("init", std::move(initMethod));
-  return {inserted, inserted ? Result::NONE : Result::DUPLICATED};
-  // TODO: 메서드 overloading추가하면서 오버로딩 규칙 추가
+bool SymbolTable::addInit(unique_ptr<MethodSymbol> initMethod) {
+  auto raw = initMethod.get();
+  current->initOwn.push_back(std::move(initMethod));
+  current->inits.push_back(raw);
+  return true;
 }
 
 ArrayTypeSymbol *SymbolTable::arrayTypeGetOrCreate(TypeSymbol *base,
@@ -361,3 +356,19 @@ ArrayTypeSymbol *SymbolTable::arrayTypeGetOrCreate(TypeSymbol *base,
 }
 
 TypeSymbol *SymbolTable::getBool() { return getBuilt("bool"); }
+
+bool SymbolTable::isSigned(TypeSymbol *symbol) {
+  if (!isNumberic(symbol)) {
+    return false;
+  }
+  if (auto p = dynamic_cast<PrimtiveType *>(symbol)) {
+    if (auto i = dynamic_cast<IntType *>(p)) {
+      return i->isSigned;
+    }
+    if (dynamic_cast<FloatType *>(p)) {
+      return true;
+    }
+  }
+
+  return false;
+}

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "AST/DeclContext.h"
 #include "ASTNode.h"
 #include "SourceSpan.h"
 #include "Token.h"
@@ -7,6 +8,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <utility>
 #include <vector>
 
 class TypeSymbol;
@@ -53,10 +55,14 @@ public:
   ExprPtr init;          // 초기화 식 (없을 수 있음)
   bool isMutable = true; // let vs var 등
   bool isRoot = false;
-  VarDecl(SourceSpan t, const string &n, TypeNode::Ptr ty, ExprPtr i = nullptr,
-          bool mut = true, bool ro = false, AModifier modi = AModifier::DEFAULT)
+
+  DeclContext context;
+
+  VarDecl(SourceSpan t, const string &n, TypeNode::Ptr ty, DeclContext c,
+          ExprPtr i = nullptr, bool mut = true, bool ro = false,
+          AModifier modi = AModifier::DEFAULT)
       : Decl(NKind::VAR_DECL, t, n, modi), type(std::move(ty)), init(i),
-        isMutable(mut), isRoot(ro) {
+        isMutable(mut), isRoot(ro), context(c) {
     aModifier = modi;
   }
 
@@ -135,10 +141,12 @@ public:
 class StructDecl : public Decl {
 public:
   vector<shared_ptr<VarDecl>> fields;
-
+  vector<shared_ptr<InitDecl>> inits;
   StructDecl(SourceSpan t, const string &n, vector<shared_ptr<VarDecl>> f,
+             vector<shared_ptr<InitDecl>> i,
              AModifier modi = AModifier::DEFAULT)
-      : Decl(NKind::STRUCT_DECL, t, n, modi), fields(std::move(f)) {
+      : Decl(NKind::STRUCT_DECL, t, n, modi), fields(std::move(f)),
+        inits(std::move(i)) {
     aModifier = modi;
   }
 

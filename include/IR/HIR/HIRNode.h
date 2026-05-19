@@ -56,7 +56,7 @@ enum class HIRNodeKind {
 
   // value
   EnumVairantValue,
-
+  StructInitExpr,
   // pattern
   LiteralPattern,
   EnumPattern,
@@ -67,6 +67,6 @@ struct HIRNode {
   HIRNodeKind kind;
   SourceSpan span;
 
-  explicit HIRNode(HIRNodeKind k, SourceSpan s = {}) : kind(k), span(s) {}
+  explicit HIRNode(SourceSpan s, HIRNodeKind k) : kind(k), span(s) {}
   virtual ~HIRNode() = default;
 };

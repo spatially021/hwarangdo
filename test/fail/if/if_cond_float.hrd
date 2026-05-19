@@ -1,7 +1,0 @@
-class Main{
-    public init(){
-        float a = 1.0;
-        if (a) {
-        }
-    }
-}

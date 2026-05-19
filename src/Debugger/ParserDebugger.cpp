@@ -25,7 +25,10 @@ void ParserDebugger::visit(UnaryExpr *expr) {
 }
 void ParserDebugger::visit(CallExpr *expr) {
   cout << " ";
-  expr->receiver->accept(this);
+  if (expr->receiver != nullptr) {
+    expr->receiver->accept(this);
+  }
+
   cout << "." << expr->methodName << "(";
   joinAccept(expr->arguments, ", ");
   cout << ")";
@@ -166,7 +169,9 @@ void ParserDebugger::visit(Case *stmt) {
 }
 void ParserDebugger::visit(ReturnStmt *stmt) {
   cout << ident() << "return";
-  stmt->value->accept(this);
+  if (stmt->value != nullptr) {
+    stmt->value->accept(this);
+  }
   cout << "\n";
 }
 void ParserDebugger::visit(ValueTransferStmt *stmt) {

@@ -14,7 +14,6 @@ const Token &Parser::consume(TKind kind, const string &message) {
   if (check(kind))
     return advance();
   Error::diagnostic(peek(), message);
-  throw runtime_error("");
 }
 
 bool Parser::match(std::initializer_list<TKind> kinds) {
@@ -50,7 +49,7 @@ const Token &Parser::advance() {
 
 const Token &Parser::peek() const {
   if (current >= tokens.size()) {
-    throw runtime_error(("Peek out of range"));
+    throw runtime_error("peek out of range");
   }
 
   return tokens[current];
@@ -75,7 +74,7 @@ bool Parser::isAccessModifier() const {
 }
 
 AModifier Parser::AModifierConvertor(Token t) {
-  AModifier modi = AModifier::DEFAULT;
+  AModifier modi = AModifier::PUBLIC;
   if (t.kind == TKind::PUBLIC)
     modi = AModifier::PUBLIC;
   else if (t.kind == TKind::PRIVATE)
@@ -104,7 +103,7 @@ bool Parser::isType() const {
   if (isAccessModifier()) {
     if (isTypeToken(following().kind))
       return true;
-    Error::diagnostic(following(), "Expected type after access modifier");
+    Error::diagnostic(following(), "expected type name after access modifier");
   }
   return isTypeToken(peek().kind);
 }
@@ -123,7 +122,7 @@ bool Parser::isFunc() const {
       return following(2).kind == TKind::IDENTIFIER &&
              following(3).kind == TKind::LEFT_PAREN;
     }
-    Error::diagnostic(following(), "expect type after access modifier");
+    Error::diagnostic(following(), "expected type name after access modifier");
   }
 
   if (isTypeToken(peek().kind) || peek().kind == TKind::VOID ||
@@ -173,7 +172,7 @@ TypeNode::Ptr Parser::typeNodeConvertor(Token ty, Token size) {
       break;
 
     default:
-      Error::diagnostic(ty, "unexpected type : " + ty.text);
+      Error::diagnostic(ty, "unexpected type name '" + ty.text + "'");
     }
   }
   return node;
@@ -205,40 +204,44 @@ TypeNode::Ptr Parser::parseType() {
 
   if (check(TKind::COLON)) {
     if (ty.kind == TKind::IDENTIFIER)
-      Error::diagnostic(peek(), "':' is only allowed built-in types");
+      Error::diagnostic(peek(), "':' is only allowed on built-in types");
 
     advance(); // :
-    size = consume(TKind::SIZE, "expect size value");
+    size = consume(TKind::SIZE, "expected type width specifier");
     assert(size.text != "");
 
     switch (ty.kind) {
     case TKind::INT:
       if (!(size.text[0] == 'i' || size.text[0] == 'u'))
-        Error::diagnostic(size, "unmatch bitwidth type");
+        Error::diagnostic(size,
+                          "type width specifier does not match built-in type");
       break;
     case TKind::FLOAT:
       if (size.text[0] != 'f')
-        Error::diagnostic(size, "unmatch bitwidth type");
+        Error::diagnostic(size,
+                          "type width specifier does not match built-in type");
       break;
     case TKind::FIXED:
       break;
     case TKind::CHAR:
       if (size.text[0] != 'c')
-        Error::diagnostic(size, "unmatch bitwidth type");
+        Error::diagnostic(size,
+                          "type width specifier does not match built-in type");
       break;
     case TKind::STRING:
       if (size.text[0] != 's')
-        Error::diagnostic(size, "unmatch bitwidth type");
+        Error::diagnostic(size,
+                          "type width specifier does not match built-in type");
       break;
     default:
-      Error::diagnostic(ty, "unexpected type : " + ty.text);
+      Error::diagnostic(ty, "unexpected type name '" + ty.text + "'");
     }
   }
   std::vector<std::pair<Token, Expr::Ptr>> dims;
   while (check(TKind::LEFT_BRACKET)) {
     Token bracket = advance();
     Expr::Ptr sizeExpr = expression();
-    consume(TKind::RIGHT_BRACKET, "expect ']'");
+    consume(TKind::RIGHT_BRACKET, "expected ']' after array size");
     dims.push_back({bracket, std::move(sizeExpr)});
   }
 
@@ -252,52 +255,47 @@ TypeNode::Ptr Parser::parseType() {
 }
 
 void Parser::notFunc(DeclPrefix prefix) {
-
   if (prefix.isFrame) {
-    Error::diagnostic(previous(), "frame can place only function declaration");
+    Error::diagnostic(previous(),
+                      "'frame' is only allowed on function declarations");
   }
+
   if (prefix.isOverride) {
     Error::diagnostic(previous(),
-                      "override can place only function declaration");
+                      "'override' is only allowed on function declarations");
   }
 
   if (prefix.isAsync) {
-    Error::diagnostic(previous(), "async can place only function declaration");
+    Error::diagnostic(previous(),
+                      "'async' is only allowed on function declarations");
   }
 }
 
 void Parser::notVar(DeclPrefix prefix) {
   if (prefix.isConst)
-    Error::diagnostic(previous(), "const can place only variation declaration");
+    Error::diagnostic(previous(),
+                      "'const' is only allowed on variable declarations");
+
   if (prefix.isRoot) {
-    Error::diagnostic(previous(), "root can place only variation declaration");
+    Error::diagnostic(previous(),
+                      "'root' is only allowed on variable declarations");
   }
 }
 
 Expr::Ptr Parser::parseCaseValue() {
-  Token t = peek();
-  Expr::Ptr args = nullptr;
-  if (isLit()) {
-    auto ad = advance();
-    return make_shared<CaseValueExpr>(
-        makeSpan(t, ad), make_shared<LiteralExpr>(ad.span, ad, ad.text),
-        nullptr);
-  }
-  if (check(TKind::IDENTIFIER)) {
-    auto pay = advance();
-    Expr::Ptr expr = make_shared<NameExpr>(makeSpan(t, pay), pay.text);
-    if (match({TKind::DOT})) {
-      Token member = consume(TKind::IDENTIFIER, "expect ident after '.'");
-      expr = make_shared<MemberExpr>(makeSpan(t, member), expr, member.text);
+  auto value = postfix();
+  Expr::Ptr arg = nullptr;
+  if (auto call = dynamic_cast<CallExpr *>(value.get())) {
+    if (call->arguments.empty()) {
+      Error::diagnostic(call->span,
+                        "payload case selectors must bind one variable");
     }
-    if (check(TKind::LEFT_PAREN)) {
-      advance(); //(처리
-      auto id = consume(TKind::IDENTIFIER, "after '(' expect id");
-      consume(TKind::RIGHT_PAREN, "after id expect ')'");
-      args = make_shared<NameExpr>(makeSpan(t, id), id.text);
+
+    if (call->arguments.size() != 1) {
+      Error::diagnostic(
+          call->span, "payload case selectors must bind exactly one variable");
     }
-    auto end = previous();
-    return make_shared<CaseValueExpr>(makeSpan(t, end), expr, args);
+    arg = call->arguments[0];
   }
-  Error::diagnostic(t, "in case value only allow literal or Enum : " + t.text);
+  return make_shared<CaseValueExpr>(value->span, value, arg);
 }

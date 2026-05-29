@@ -5,6 +5,7 @@
 #include "SourceSpan.h"
 #include "Token.h"
 #include "Visitor.h"
+#include "enums/AccessModifier.h"
 #include <memory>
 #include <optional>
 #include <string>
@@ -23,12 +24,6 @@ using StmtPtr = shared_ptr<Stmt>;
 using ExprPtr = shared_ptr<Expr>;
 
 using namespace std;
-enum class AModifier {
-  PUBLIC,
-  PROTECTED,
-  DEFAULT,
-  PRIVATE,
-};
 
 // AST에서 모든 선언 노드가 공통으로 상속하는 기반 클래스를 나타낸다.
 // 이름과 접근 제어자 정보를 보유하며 선언 계층의 공통 인터페이스를 제공한다.
@@ -39,7 +34,7 @@ public:
   string name; // 대부분의 Decl은 이름을 갖음 (anonymous 경우 빈 문자열 허용)
   AModifier aModifier;
   Decl(NKind k, SourceSpan t, const string &n = "",
-       AModifier modi = AModifier::DEFAULT)
+       AModifier modi = AModifier::PUBLIC)
       : ASTNode(k, t), name(n), aModifier(modi) {}
   virtual void accept(ASTVisitor *visitor) override { visitor->visit(this); }
   bool isExtended = false;
@@ -60,7 +55,7 @@ public:
 
   VarDecl(SourceSpan t, const string &n, TypeNode::Ptr ty, DeclContext c,
           ExprPtr i = nullptr, bool mut = true, bool ro = false,
-          AModifier modi = AModifier::DEFAULT)
+          AModifier modi = AModifier::PUBLIC)
       : Decl(NKind::VAR_DECL, t, n, modi), type(std::move(ty)), init(i),
         isMutable(mut), isRoot(ro), context(c) {
     aModifier = modi;
@@ -81,7 +76,7 @@ public:
   bool isRoot = false;
   ArrayDecl(SourceSpan t, const string &n, shared_ptr<ArrayTypeNode> ty,
             ExprPtr i = nullptr, bool m = true, bool r = false,
-            AModifier modi = AModifier::DEFAULT)
+            AModifier modi = AModifier::PUBLIC)
       : Decl(NKind::ARRAY_DECL, t, n, modi), type(std::move(ty)), init(i),
         isMutalbe(m), isRoot(r) {
     aModifier = modi;
@@ -122,7 +117,7 @@ public:
 
   FuncDecl(SourceSpan t, const string &n, vector<shared_ptr<Param>> p,
            optional<TypeNode::Ptr> ret, StmtPtr b,
-           AModifier modi = AModifier::DEFAULT, bool e = false, bool f = false,
+           AModifier modi = AModifier::PUBLIC, bool e = false, bool f = false,
            bool o = false)
       : Decl(NKind::FUNC_DECL, t, n, modi), params(std::move(p)),
         returnType(std::move(ret)), body(std::move(b)), isExtern(e), isFrame(f),
@@ -143,8 +138,7 @@ public:
   vector<shared_ptr<VarDecl>> fields;
   vector<shared_ptr<InitDecl>> inits;
   StructDecl(SourceSpan t, const string &n, vector<shared_ptr<VarDecl>> f,
-             vector<shared_ptr<InitDecl>> i,
-             AModifier modi = AModifier::DEFAULT)
+             vector<shared_ptr<InitDecl>> i, AModifier modi = AModifier::PUBLIC)
       : Decl(NKind::STRUCT_DECL, t, n, modi), fields(std::move(f)),
         inits(std::move(i)) {
     aModifier = modi;
@@ -168,7 +162,7 @@ public:
   ClassDecl(SourceSpan t, const string &n, vector<shared_ptr<VarDecl>> f,
             vector<shared_ptr<FuncDecl>> m, vector<shared_ptr<Decl>> i,
             optional<string> base = nullopt, vector<string> tr = {},
-            AModifier modi = AModifier::DEFAULT)
+            AModifier modi = AModifier::PUBLIC)
       : Decl(NKind::CLASS_DECL, t, n, modi), fields(f), methods(m),
         innerDecl(i), baseClass(base), traits(std::move(tr)) {
     aModifier = modi;
@@ -199,7 +193,7 @@ public:
   optional<string> baseEnum; // for aliasing
 
   EnumDecl(SourceSpan t, const string &n, vector<shared_ptr<Variant>> v = {},
-           optional<string> base = nullopt, AModifier modi = AModifier::DEFAULT)
+           optional<string> base = nullopt, AModifier modi = AModifier::PUBLIC)
       : Decl(NKind::ENUM_DECL, t, n, modi), variants(std::move(v)),
         baseEnum(base) {
     aModifier = modi;
@@ -224,6 +218,8 @@ public:
         LinkedImplMethods(std::move(m)) {}
 
   void accept(ASTVisitor *visitor) override { visitor->visit(this); }
+
+  vector<MethodSymbol *> sigs;
 };
 
 // trait 선언을 표현하는 AST 노드를 나타낸다.

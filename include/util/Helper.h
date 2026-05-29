@@ -4,6 +4,7 @@
 #include <llvm/ADT/SmallString.h>
 #include <string>
 #include <vector>
+
 class MethodSymbol;
 class TraitSig;
 
@@ -11,4 +12,7 @@ namespace Helper {
 std::string apIntToString(const llvm::APInt &v);
 bool hasSameSig(const std::vector<MethodSymbol *> &vec, MethodSymbol *method);
 bool hasSameSig(const vector<TraitSig *> &vec, TraitSig *sig);
+bool checkImpletTraitSig(TypeSymbol *symbol);
+bool hasSameMethodSig(const std::vector<MethodSymbol *> &vec,
+                      MethodSymbol *method);
 } // namespace Helper

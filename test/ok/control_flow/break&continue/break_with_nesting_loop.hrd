@@ -1,0 +1,13 @@
+class Main{
+    frame void update(){
+
+    }
+    public init(){
+        while(true){
+            while(true){
+                break;
+            }
+            break;
+        }
+    }
+}

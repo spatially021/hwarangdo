@@ -1,9 +1,11 @@
 
 #include "IR/HIR/HIRDecl.h"
 #include "IR/HIR/HIRExpr.h"
+#include "IR/HIR/HIRPattern.h"
 #include "IR/HIR/HIRProgram.h"
 #include "IR/HIR/HIRStmt.h"
 #include "IR/HIR/HIRSymbol.h"
+#include "enums/InheritState.h"
 #include <magic_enum/magic_enum.hpp>
 #include <string>
 
@@ -39,6 +41,7 @@ class HIRVerifier {
 
 private:
   InitMap initmap;
+  unordered_map<HIRTypeDecl *, InheritState> inheritStates;
 
 public:
   HIRProgram *program = nullptr;
@@ -54,7 +57,8 @@ public:
   void verifyIf(HIRIfStmt *stmt);
   void verifyField(HIRField *field);
   void verifyRoot(HIRField *root);
-  void verifyInit(HIRMethodDecl *method);
+  void verifyVariant(HIREnumVariant *variant);
+  void verifyCasePattern(HIRCasePattern *pattern);
 
   void checkInitialize(HIRPlaceExpr *place);
   void initialize(HIRPlaceExpr *place);

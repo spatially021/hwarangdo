@@ -20,7 +20,7 @@ public:
 
   Scope *parent = nullptr;
 
-  enum class ScopeKind { FUNC, BLOCK, FIELD, BUILTIN } scopeKind;
+  enum class ScopeKind { FUNC, BLOCK, FIELD, BUILTIN, INIT } scopeKind;
 
   vector<std::unique_ptr<Scope>> children;
 

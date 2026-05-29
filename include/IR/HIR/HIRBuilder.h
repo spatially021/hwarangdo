@@ -45,18 +45,12 @@ private:
   SymbolTable *table;
 
 private:
-  HIRType *getOrCreateType(TypeSymbol *symbol);
-
   void emit(unique_ptr<HIRStmt> stmt);
   void setDefaultInit(HIRTypeDecl *typeDecl);
 
   // type
-  HIRType *lowerType(TypeSymbol *symbol);
-  HIREntityType *lowerEntityType(TypeSymbol *symbol);
   HIRStructType *lowerStructType(TypeSymbol *symbol);
   HIREnumType *lowerEnumType(TypeSymbol *symbol);
-  HIRHandleType *getOrCreateHandleType(HIREntityType *entity,
-                                       StorageKind storage);
   HIRObserverType *getOrCreateObserverType(HIREntityType *entity,
                                            StorageKind storage);
 
@@ -64,7 +58,6 @@ private:
   HIRLocal *lowerLocal(VarDecl *decl);
   HIRField *lowerField(VarDecl *decl);
   unique_ptr<HIRParam> lowerParam(Param *param);
-  std::unique_ptr<HIREnumVariant> lowerEnumVariant(EnumDecl::Variant *variant);
 
   // stmt
   std::unique_ptr<HIRBlockStmt> lowerBlock(BlockStmt *stmt);
@@ -78,6 +71,7 @@ private:
   std::unique_ptr<HIRStmt> lowerValueTransfer(ValueTransferStmt *stmt);
   std::unique_ptr<HIRStmt> lowerExprStmt(ExprStmt *stmt);
   std::unique_ptr<HIRStmt> lowerDestroyStmt(DestroyExpr *expr);
+  std::unique_ptr<HIRStmt> lowerQuitStmt(QuitExpr *expr);
 
   // expr
   std::unique_ptr<HIRExpr> lowerExpr(Expr *expr);
@@ -90,6 +84,7 @@ private:
   std::unique_ptr<HIRExpr> lowerAssign(AssignExpr *expr);
   std::unique_ptr<HIRExpr> lowerTernary(TernaryExpr *expr);
   std::unique_ptr<HIRExpr> lowerCast(CastExpr *expr);
+  std::unique_ptr<HIRExpr> lowerLiteral(LiteralExpr *expr);
 
   // place/value split
   std::unique_ptr<HIRPlaceExpr> lowerPlace(NameExpr *expr);
@@ -99,6 +94,7 @@ private:
   std::unique_ptr<HIRFieldPlaceExpr> lowerMember(MemberExpr *expr);
   std::unique_ptr<HIRPlaceExpr> lowerArrayAccess(ArrayAccessExpr *expr);
   std::unique_ptr<HIRValueExpr> lowerCallArg(Expr *arg, Param *param);
+  std::unique_ptr<HIRCasePattern> lowerCaseValue(CaseValueExpr *epxr);
 
   // helper
   std::unique_ptr<HIRExpr>

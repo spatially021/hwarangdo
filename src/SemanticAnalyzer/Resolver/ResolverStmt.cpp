@@ -43,8 +43,32 @@ void Resolver::visit(SwitchStmt *stmt) {
   stmt->value->accept(this);
   auto before = currentSwitch;
   currentSwitch = stmt;
-  for (auto c : stmt->clauses)
-    c->accept(this);
+
+  for (unsigned i = 0; i < stmt->clauses.size(); ++i) {
+    stmt->clauses[i]->accept(this);
+    if (stmt->clauses[i]->isDefault) {
+      stmt->hasDefault = true;
+      if (i != stmt->clauses.size() - 1) {
+        Error::diagnostic(stmt->clauses[i]->span,
+                          "default only place last of switch");
+      }
+    }
+    if (stmt->clauses[i]->isWildCard) {
+      Error::diagnostic(stmt->clauses[i]->span, "_in switch not allow '_'");
+    }
+  }
+
+  if (stmt->value->resolvedType->kind == TypeSymbol::TypeKind::PRIMITIVE) {
+    // TODO: 경고 추가시 경고 로직 넣기.
+  }
+
+  if (stmt->usedVariants.size() != stmt->value->resolvedType->variants.size()) {
+    if (!stmt->hasDefault) {
+      Error::diagnostic(stmt->span,
+                        "has missing variant but no defualt in switch");
+    }
+  }
+
   currentSwitch = before;
 }
 void Resolver::visit(Case *stmt) {
@@ -57,8 +81,9 @@ void Resolver::visit(Case *stmt) {
       Error::internal(stmt->span, "illegal expr kind");
     }
     t->accept(this);
-    if (t->payloadType) {
-      t->arg->accept(this);
+
+    if (t->isWildCard) {
+      stmt->isWildCard = true;
     }
   }
   table->exit();
@@ -81,6 +106,10 @@ void Resolver::visit(Case *stmt) {
     }
 
     stmt->transferType = type;
+
+    if (stmt->values.size() != 1) {
+      Error::diagnostic(stmt->span, "in match only one case key allowed");
+    }
   }
 
   currentCase = prev;

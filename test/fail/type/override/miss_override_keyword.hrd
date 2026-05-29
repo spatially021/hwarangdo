@@ -1,0 +1,28 @@
+class Main{
+    
+    frame void update(){
+
+    }
+
+    public init(){
+        
+    }
+
+}
+
+class Entity{
+    void foo(){
+
+    }
+}
+
+class Player extends Entity{
+    
+    void foo(){
+
+    }
+
+    public init(){
+            
+    }
+}

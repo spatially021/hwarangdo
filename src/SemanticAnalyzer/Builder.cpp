@@ -71,6 +71,7 @@ void Builder::visit(DestroyExpr *expr) {
   expr->storage->accept(this);
   expr->target->accept(this);
 }
+void Builder::visit(QuitExpr *) {}
 void Builder::visit(DefaultValueExpr *) {}
 void Builder::visit(Range *expr) {
   expr->from->accept(this);
@@ -148,14 +149,17 @@ void Builder::buildMain(ClassDecl *decl) {
   if (!result.success) {
     switch (result.errorType) {
     case SymbolTable::Result::DUPLICATED:
-      Error::diagnostic(decl->span, "duplicated Main");
+      Error::diagnostic(decl->span, "duplicate declaration of 'Main'");
       break;
+
     case SymbolTable::Result::RESERVED:
-      Error::diagnostic(decl->span, "reserved name : " + decl->name);
+      Error::diagnostic(decl->span, "reserved identifier '" + decl->name + "'");
       break;
+
     case SymbolTable::Result::UNKNOWN_SYMBOL:
-      Error::internal(decl->span, "unknown symbol" + decl->name);
+      Error::internal(decl->span, "unknown symbol '" + decl->name + "'");
       break;
+
     case SymbolTable::Result::NONE:
       break;
     }
@@ -197,14 +201,18 @@ void Builder::visit(ClassDecl *decl) {
   if (!result.success) {
     switch (result.errorType) {
     case SymbolTable::Result::DUPLICATED:
-      Error::diagnostic(decl->span, "duplicated class name : " + decl->name);
+      Error::diagnostic(decl->span,
+                        "duplicate class declaration '" + decl->name + "'");
       break;
+
     case SymbolTable::Result::RESERVED:
-      Error::diagnostic(decl->span, "reserved name : " + decl->name);
+      Error::diagnostic(decl->span, "reserved identifier '" + decl->name + "'");
       break;
+
     case SymbolTable::Result::UNKNOWN_SYMBOL:
-      Error::internal(decl->span, "unknown symbol" + decl->name);
+      Error::internal(decl->span, "unknown symbol '" + decl->name + "'");
       break;
+
     case SymbolTable::Result::NONE:
       break;
     }
@@ -227,7 +235,9 @@ void Builder::visit(ClassDecl *decl) {
     if (canInnerDecl(a.get())) {
       a->accept(this);
     } else {
-      Error::diagnostic(a->span, "not allowed inner decl type");
+      Error::diagnostic(
+          a->span,
+          "only class and struct declarations are allowed in this context");
     }
   }
 }
@@ -245,14 +255,18 @@ void Builder::visit(StructDecl *decl) {
   if (!result.success) {
     switch (result.errorType) {
     case SymbolTable::Result::DUPLICATED:
-      Error::diagnostic(decl->span, "duplicated class name : " + decl->name);
+      Error::diagnostic(decl->span,
+                        "duplicate struct declaration '" + decl->name + "'");
       break;
+
     case SymbolTable::Result::RESERVED:
-      Error::diagnostic(decl->span, "reserved name : " + decl->name);
+      Error::diagnostic(decl->span, "reserved identifier '" + decl->name + "'");
       break;
+
     case SymbolTable::Result::UNKNOWN_SYMBOL:
-      Error::internal(decl->span, "unknown symbol" + decl->name);
+      Error::internal(decl->span, "unknown symbol '" + decl->name + "'");
       break;
+
     case SymbolTable::Result::NONE:
       break;
     }
@@ -287,14 +301,18 @@ void Builder::visit(EnumDecl *decl) {
   if (!result.success) {
     switch (result.errorType) {
     case SymbolTable::Result::DUPLICATED:
-      Error::diagnostic(decl->span, "duplicated class name : " + decl->name);
+      Error::diagnostic(decl->span,
+                        "duplicate enum declaration '" + decl->name + "'");
       break;
+
     case SymbolTable::Result::RESERVED:
-      Error::diagnostic(decl->span, "reserved name : " + decl->name);
+      Error::diagnostic(decl->span, "reserved identifier '" + decl->name + "'");
       break;
+
     case SymbolTable::Result::UNKNOWN_SYMBOL:
-      Error::internal(decl->span, "unknown symbol" + decl->name);
+      Error::internal(decl->span, "unknown symbol '" + decl->name + "'");
       break;
+
     case SymbolTable::Result::NONE:
       break;
     }
@@ -310,9 +328,11 @@ void Builder::visit(EnumDecl *decl) {
     v->name = a->name;
     v->ordinal = ordinal++;
     if (raw->variantMap.count(v->name)) {
-      Error::diagnostic(a->token, "duplicated enum variant name");
+      Error::diagnostic(a->token,
+                        "duplicate enum variant declaration '" + a->name + "'");
     }
     EnumVariantSymbol *r = v.get();
+    v->typeSymbol = raw;
     decl->symbol->variants.push_back(std::move(v));
     decl->symbol->variantMap.emplace(r->name, r);
     a->symbol = r;
@@ -351,14 +371,18 @@ void Builder::visit(TraitDecl *decl) {
   if (!result.success) {
     switch (result.errorType) {
     case SymbolTable::Result::DUPLICATED:
-      Error::diagnostic(decl->span, "duplicated trait name : " + decl->name);
+      Error::diagnostic(decl->span,
+                        "duplicate trait declaration '" + decl->name + "'");
       break;
+
     case SymbolTable::Result::RESERVED:
-      Error::diagnostic(decl->span, "reserved name : " + decl->name);
+      Error::diagnostic(decl->span, "reserved identifier '" + decl->name + "'");
       break;
+
     case SymbolTable::Result::UNKNOWN_SYMBOL:
-      Error::internal(decl->span, "unknown symbol" + decl->name);
+      Error::internal(decl->span, "unknown symbol '" + decl->name + "'");
       break;
+
     case SymbolTable::Result::NONE:
       break;
     }
@@ -370,7 +394,6 @@ void Builder::visit(TraitDecl *decl) {
   ScopeGuard __(*table);
   table->getCurrent()->scopeKind = Scope::ScopeKind::FIELD;
   raw->memberScope = table->getCurrent();
-
   for (auto &a : decl->traitSigs) {
     if (a == nullptr)
       Error::internal("traitSig is nullptr");
@@ -392,14 +415,18 @@ void Builder::visit(TraitSig *sig) {
   if (!result.success) {
     switch (result.errorType) {
     case SymbolTable::Result::DUPLICATED:
-      Error::diagnostic(sig->span, "duplicated class name : " + sig->name);
+      Error::diagnostic(sig->span,
+                        "duplicate trait method signature '" + sig->name + "'");
       break;
+
     case SymbolTable::Result::RESERVED:
-      Error::diagnostic(sig->span, "reserved name : " + sig->name);
+      Error::diagnostic(sig->span, "reserved identifier '" + sig->name + "'");
       break;
+
     case SymbolTable::Result::UNKNOWN_SYMBOL:
-      Error::internal(sig->span, "unknown symbol" + sig->name);
+      Error::internal(sig->span, "unknown symbol '" + sig->name + "'");
       break;
+
     case SymbolTable::Result::NONE:
       break;
     }
@@ -411,6 +438,7 @@ void Builder::visit(TraitSig *sig) {
     s->name = a->name;
     s->kind = ValueSymbol::Kind::PARAM;
     s->node = a.get();
+    s->nameSpan = a->span;
     auto r = s.get();
 
     auto re = table->add(std::move(s));
@@ -418,15 +446,20 @@ void Builder::visit(TraitSig *sig) {
     if (!re.success) {
       switch (re.errorType) {
       case SymbolTable::Result::DUPLICATED:
-        Error::diagnostic(a.get()->span,
-                          "duplicated class name : " + a.get()->name);
+        Error::diagnostic(a.get()->span, "duplicate parameter declaration '" +
+                                             a.get()->name + "'");
         break;
+
       case SymbolTable::Result::RESERVED:
-        Error::diagnostic(a.get()->span, "reserved name : " + a.get()->name);
+        Error::diagnostic(a.get()->span,
+                          "reserved identifier '" + a.get()->name + "'");
         break;
+
       case SymbolTable::Result::UNKNOWN_SYMBOL:
-        Error::internal(a.get()->span, "unknown symbol" + a.get()->name);
+        Error::internal(a.get()->span,
+                        "unknown symbol '" + a.get()->name + "'");
         break;
+
       case SymbolTable::Result::NONE:
         break;
       }
@@ -445,6 +478,7 @@ void Builder::visit(FuncDecl *decl) {
   symbol->decl = decl;
   symbol->onwer = currentType;
   symbol->declType = currentType;
+  symbol->modifier = decl->aModifier;
   auto raw = symbol.get();
 
   auto result = table->add(std::move(symbol));
@@ -452,14 +486,18 @@ void Builder::visit(FuncDecl *decl) {
   if (!result.success) {
     switch (result.errorType) {
     case SymbolTable::Result::DUPLICATED:
-      Error::diagnostic(decl->span, "duplicated method name : " + decl->name);
+      Error::diagnostic(decl->span,
+                        "duplicate method declaration '" + decl->name + "'");
       break;
+
     case SymbolTable::Result::RESERVED:
-      Error::diagnostic(decl->span, "reserved name : " + decl->name);
+      Error::diagnostic(decl->span, "reserved identifier '" + decl->name + "'");
       break;
+
     case SymbolTable::Result::UNKNOWN_SYMBOL:
-      Error::internal(decl->span, "unknown symbol" + decl->name);
+      Error::internal(decl->span, "unknown symbol '" + decl->name + "'");
       break;
+
     case SymbolTable::Result::NONE:
       break;
     }
@@ -472,6 +510,7 @@ void Builder::visit(FuncDecl *decl) {
   raw->isExtern = decl->isExtern;
   raw->isFrame = decl->isFrame;
   raw->isOverride = decl->isOverride;
+  raw->scope->scopeKind = Scope::ScopeKind::FUNC;
 
   for (auto &a : decl->params) {
     a->accept(this);
@@ -486,6 +525,8 @@ void Builder::visit(VarDecl *decl) {
   symbol->kind = ValueSymbol::Kind::VAR;
   symbol->node = decl;
   symbol->isRoot = decl->isRoot;
+  symbol->modifier = decl->aModifier;
+  symbol->nameSpan = decl->span;
   auto raw = symbol.get();
 
   auto result = table->add(std::move(symbol));
@@ -494,15 +535,19 @@ void Builder::visit(VarDecl *decl) {
     if (!result.success) {
       switch (result.errorType) {
       case SymbolTable::Result::DUPLICATED:
-        Error::diagnostic(decl->span,
-                          "duplicated root variation name : " + decl->name);
+        Error::diagnostic(decl->span, "duplicate root variable declaration '" +
+                                          decl->name + "'");
         break;
+
       case SymbolTable::Result::RESERVED:
-        Error::diagnostic(decl->span, "reserved name : " + decl->name);
+        Error::diagnostic(decl->span,
+                          "reserved identifier '" + decl->name + "'");
         break;
+
       case SymbolTable::Result::UNKNOWN_SYMBOL:
-        Error::internal(decl->span, "unknown symbol" + decl->name);
+        Error::internal(decl->span, "unknown symbol '" + decl->name + "'");
         break;
+
       case SymbolTable::Result::NONE:
         break;
       }
@@ -511,15 +556,19 @@ void Builder::visit(VarDecl *decl) {
     if (!result.success) {
       switch (result.errorType) {
       case SymbolTable::Result::DUPLICATED:
-        Error::diagnostic(decl->span,
-                          "duplicated variation name : " + decl->name);
+        Error::diagnostic(decl->span, "duplicate variable declaration '" +
+                                          decl->name + "'");
         break;
+
       case SymbolTable::Result::RESERVED:
-        Error::diagnostic(decl->span, "reserved name : " + decl->name);
+        Error::diagnostic(decl->span,
+                          "reserved identifier '" + decl->name + "'");
         break;
+
       case SymbolTable::Result::UNKNOWN_SYMBOL:
-        Error::internal(decl->span, "unknown symbol" + decl->name);
+        Error::internal(decl->span, "unknown symbol '" + decl->name + "'");
         break;
+
       case SymbolTable::Result::NONE:
         break;
       }
@@ -540,20 +589,25 @@ void Builder::visit(Param *a) {
   s->name = a->name;
   s->kind = ValueSymbol::Kind::PARAM;
   s->node = a;
+  s->nameSpan = a->span;
   auto r = s.get();
   auto re = table->add(std::move(s));
 
   if (!re.success) {
     switch (re.errorType) {
     case SymbolTable::Result::DUPLICATED:
-      Error::diagnostic(a->span, "duplicated class name : " + a->name);
+      Error::diagnostic(a->span,
+                        "duplicate parameter declaration '" + a->name + "'");
       break;
+
     case SymbolTable::Result::RESERVED:
-      Error::diagnostic(a->span, "reserved name : " + a->name);
+      Error::diagnostic(a->span, "reserved identifier '" + a->name + "'");
       break;
+
     case SymbolTable::Result::UNKNOWN_SYMBOL:
-      Error::internal(a->span, "unknown symbol" + a->name);
+      Error::internal(a->span, "unknown symbol '" + a->name + "'");
       break;
+
     case SymbolTable::Result::NONE:
       break;
     }
@@ -578,6 +632,7 @@ void Builder::visit(InitDecl *decl) {
   ScopeGuard _(*table);
 
   raw->scope = table->getCurrent();
+  table->getCurrent()->scopeKind = Scope::ScopeKind::INIT;
   raw->isOverride = decl->isOverride;
 
   for (auto &a : decl->params) {
@@ -591,15 +646,20 @@ void Builder::visit(InitDecl *decl) {
     if (!re.success) {
       switch (re.errorType) {
       case SymbolTable::Result::DUPLICATED:
-        Error::diagnostic(a.get()->span,
-                          "duplicated param name : " + a.get()->name);
+        Error::diagnostic(a.get()->span, "duplicate parameter declaration '" +
+                                             a.get()->name + "'");
         break;
+
       case SymbolTable::Result::RESERVED:
-        Error::diagnostic(a.get()->span, "reserved name : " + a.get()->name);
+        Error::diagnostic(a.get()->span,
+                          "reserved identifier '" + a.get()->name + "'");
         break;
+
       case SymbolTable::Result::UNKNOWN_SYMBOL:
-        Error::internal(a.get()->span, "unknown symbol" + a.get()->name);
+        Error::internal(a.get()->span,
+                        "unknown symbol '" + a.get()->name + "'");
         break;
+
       case SymbolTable::Result::NONE:
         break;
       }

@@ -1,0 +1,25 @@
+
+class Main{
+    
+    frame void update(){
+
+    }
+
+    public init(){
+        
+    }
+
+}
+
+struct s{
+
+}
+
+impl s:T{
+
+
+}
+
+trait T{
+    void foo();
+}

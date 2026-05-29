@@ -3,6 +3,7 @@
 #include "AST/DeclContext.h"
 #include "AST/Expr.h"
 #include "AST/Stmt.h"
+#include "IR/HIR/HIRType.h"
 #include "SemanticAnalyzer/ResolvedLit.h"
 #include "SemanticAnalyzer/Resolver.h"
 #include "SemanticAnalyzer/symbol/MethodSymbol.h"
@@ -30,6 +31,10 @@ void Resolver::visit(ClassDecl *decl) {
   for (auto a : decl->innerDecl) {
     a->accept(this);
   }
+
+  if (!Helper::checkImpletTraitSig(decl->symbol)) {
+    Error::internal(decl->span, "not implement trait");
+  }
 }
 
 void Resolver::visit(StructDecl *decl) {
@@ -45,6 +50,10 @@ void Resolver::visit(StructDecl *decl) {
   for (auto &i : decl->inits) {
     i->accept(this);
   }
+
+  if (!Helper::checkImpletTraitSig(decl->symbol)) {
+    Error::internal(decl->span, "not implement trait");
+  }
 }
 void Resolver::visit(EnumDecl *) {}
 void Resolver::visit(ImplDecl *decl) {
@@ -58,7 +67,11 @@ void Resolver::visit(ImplDecl *decl) {
   currentSelf = implIt->second->target->memberScope;
   for (auto &m : decl->LinkedImplMethods) {
     m->accept(this);
+    if (!Helper::hasSameMethodSig(decl->sigs, m->methodSymbol)) {
+      Error::diagnostic(m->span, "not allowed normal method declare here");
+    }
   }
+
   currentSelf = prev;
 }
 
@@ -78,6 +91,7 @@ void Resolver::visit(FuncDecl *decl) {
   for (auto &p : decl->params) {
     p->accept(this);
   }
+
   decl->body->accept(this);
 
   if (decl->returnType.has_value()) {
@@ -108,6 +122,38 @@ void Resolver::visit(FuncDecl *decl) {
   }
 
   currentMethod = prev;
+
+  if (currentType->base != nullptr) {
+    auto it = currentType->base->memberScope->methodMap.find(decl->name);
+
+    if (it == currentType->base->memberScope->methodMap.end()) {
+      if (decl->isOverride) {
+        Error::diagnostic(decl->span,
+                          "unknown override target : " + decl->name);
+      }
+      return;
+    }
+    if (Helper::hasSameMethodSig(it->second, decl->methodSymbol)) {
+      if (!decl->isOverride) {
+        Error::diagnostic(decl->span,
+                          "missing 'override' for inherited method : " +
+                              decl->name);
+      }
+    } else if (decl->isOverride) {
+      Error::diagnostic(decl->span, "unkwown override target : " + decl->name);
+    }
+  } else if (decl->isOverride) {
+    Error::diagnostic(decl->span, "override not allowed non-inherited classi");
+  }
+
+  if (decl->isFrame) {
+    if (!dynamic_cast<MainSymbol *>(currentType)) {
+      Error::diagnostic(decl->span, "frame can only in Main class");
+    }
+    if (decl->name != "update") {
+      Error::diagnostic(decl->span, "after frame need method name - update");
+    }
+  }
 }
 
 static bool canFieldInit(Expr *init) {
@@ -141,8 +187,17 @@ void Resolver::visit(VarDecl *decl) {
   if (!decl->type->resolved) {
     Error::internal(decl->span, "decl->type->resolved is nullptr");
   }
+
   if (decl->init) {
     decl->init->accept(this);
+
+    if (decl->symbol->typeSymbol->kind == TypeSymbol::TypeKind::CLASS) {
+      if (!dynamic_cast<ViewExpr *>(decl->init.get())) {
+        // Error품질 - copy인지, 단순 view사용하지 않은 초기화인지 확인.
+        Error::diagnostic(decl->init->span, "using class directly not allowed");
+      }
+    }
+
     if (auto lit = dynamic_cast<LiteralExpr *>(decl->init.get())) {
       convertLit(lit, decl->type.get());
       decl->symbol->typeSymbol = decl->type->resolved;
@@ -163,6 +218,10 @@ void Resolver::visit(VarDecl *decl) {
       if (!canFieldInit(decl->init.get())) {
         Error::diagnostic(decl->init->span, "invalid field initializer");
       }
+    }
+  } else {
+    if (decl->symbol->typeSymbol->kind == TypeSymbol::TypeKind::CLASS) {
+      Error::diagnostic(decl->span, "observer must be initalize when declare");
     }
   }
 

@@ -1,0 +1,12 @@
+class Main{
+    frame void update(){
+
+    }
+    public init(){
+        E e=E.A;
+    }
+}
+
+enum E{
+    A, A
+}

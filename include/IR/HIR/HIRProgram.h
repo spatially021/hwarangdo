@@ -99,54 +99,6 @@ struct HIRProgram : HIRNode {
     builtIn.push_back(std::move(rt));
   }
 
-  void linkRoot() {
-    for (auto &s : rootScope->value) {
-      auto decl = dynamic_cast<VarDecl *>(s.second->node);
-      if (decl == nullptr) {
-        Error::internal("root decl but not varDecl");
-      }
-
-      unique_ptr<HIRField> field = make_unique<HIRField>();
-      field->symbol = decl->symbol;
-      field->name = decl->name;
-      field->isInitialized = (decl->init != nullptr);
-      field->isMutable = decl->isMutable;
-      auto it = typeCache.find(decl->type->resolved);
-      if (it == typeCache.end()) {
-        Error::internal("unknown type");
-      }
-      auto type = it->second;
-      if (type == nullptr) {
-        Error::internal("type is nullptr");
-      }
-      field->type = type;
-      field->id = nextRootId++;
-      auto raw = field.get();
-      roots.push_back(std::move(field));
-      rootMap.emplace(decl->symbol, raw);
-    }
-  }
-
-  void linkSecondPass() {
-    for (auto &s : sources) {
-      for (auto &d : s->source->decls) {
-        if (auto *c = dynamic_cast<ClassDecl *>(d.get())) {
-          if (c->baseClass.has_value()) {
-            auto it = typeDeclMap.find(c->symbol);
-            if (it == typeDeclMap.end()) {
-              Error::internal(d->span, "fail to get type");
-            }
-            auto bIt = typeCache.find(c->symbol->base);
-            if (bIt == typeCache.end()) {
-              Error::internal(c->span, "fail to get baseType");
-            }
-            it->second->base = bIt->second;
-          }
-        }
-      }
-    }
-  }
-
   HIRType *getBool() {
     auto it = typeCache.find(table->getBool());
     if (it == typeCache.end()) {

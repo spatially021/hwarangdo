@@ -1,0 +1,13 @@
+class Main{
+    
+    frame void update(){
+
+    }
+
+    public init(){
+        int[10] a;
+        a[0]=1;
+        a[1]=a[0];
+    }
+
+}

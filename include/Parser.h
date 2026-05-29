@@ -7,6 +7,7 @@
 #include "AST/Stmt.h"
 #include "AST/TokenStream.h"
 #include "Token.h"
+#include "enums/AccessModifier.h"
 #include <cassert>
 #include <cstddef>
 #include <memory>
@@ -36,7 +37,7 @@ private:
 };
 
 struct DeclPrefix {
-  AModifier modi = AModifier::DEFAULT;
+  AModifier modi = AModifier::PUBLIC;
   Token startToken;
   bool isExtern = false;
   bool isConst = false;

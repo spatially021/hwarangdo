@@ -23,14 +23,11 @@ public:
   }
 
   TypeSymbol *getTypeSymbolFromDecl(Decl *decl, HIRTypeDeclKind &kind);
-  HIREntityType *lowerEntityType(TypeSymbol *symbol);
-  HIRType *getOrCreateType(TypeSymbol *symbol);
-  HIRType *lowerType(TypeSymbol *symbol);
   void lowerMethodDeclShell(FuncDecl *decl, HIRTypeDecl *currentType);
 
   unique_ptr<HIRParam> lowerParam(Param *decl);
   void lowerTypeShell(Decl *decl);
-
+  void lowerField(VarDecl *decl, HIRTypeDecl *type);
   unique_ptr<HIRSource> link();
 
   void linkSecondPass();

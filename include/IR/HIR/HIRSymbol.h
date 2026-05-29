@@ -65,6 +65,7 @@ struct HIRLocal {
   HIRLocalKind kind = HIRLocalKind::Local;
   bool isMutable = true;
   bool isInitialized = false;
+  bool isCaseValue = false;
 };
 
 // struct HIRRoot {

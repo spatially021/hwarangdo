@@ -38,8 +38,7 @@ void Resolver::resolveInit(CallExpr *expr) {
       expr->resolved = nullptr;
       return;
     }
-    Error::diagnostic(expr->span,
-                      "init is not declared but using not default init");
+    Error::diagnostic(expr->span, "no matching init declaration found");
   }
 
   auto &bucket = type->memberScope->inits;
@@ -93,7 +92,7 @@ void Resolver::resolveInit(CallExpr *expr) {
   }
 
   if (bestIdx.empty()) {
-    Error::diagnostic(expr->span, "unknown call");
+    Error::diagnostic(expr->span, "no matching init declaration found");
   }
 
   if (bestIdx.size() == 1) {
@@ -103,7 +102,7 @@ void Resolver::resolveInit(CallExpr *expr) {
     return;
   }
 
-  Error::diagnostic(expr->span, "ambiguous overload call");
+  Error::diagnostic(expr->span, "ambiguous init call");
 }
 
 void Resolver::ResolveEnumVariant(CallExpr *expr) {
@@ -111,7 +110,8 @@ void Resolver::ResolveEnumVariant(CallExpr *expr) {
       expr->resolved, expr->span, "expected enum variant symbol");
 
   if (expr->arguments.size() > 1) {
-    Error::diagnostic(expr->span, "enum variant allows at most one payload");
+    Error::diagnostic(expr->span,
+                      "enum variants can have at most one payload argument");
   }
 
   if (expr->arguments.size() == 1) {
@@ -146,7 +146,7 @@ void Resolver::ResolveEnumVariant(CallExpr *expr) {
   expr->resolvedType = expr->receiver->resolvedType;
 }
 
-void Resolver::resolveCall(CallExpr *expr, Scope *scope) {
+void Resolver::resolveCall(CallExpr *expr, Scope *scope, bool isImplict) {
   auto &bucket = scope->methodMap[expr->methodName];
   vector<Expr *> args; // nullptr -> defaultValue
   for (auto &a : expr->arguments) {
@@ -203,6 +203,48 @@ void Resolver::resolveCall(CallExpr *expr, Scope *scope) {
 
   if (bestIdx.size() == 1) {
     auto best = candidates[bestIdx[0]].second;
+
+    if (!isImplict) {
+      switch (best->modifier) {
+      case AModifier::PUBLIC: {
+        break;
+      }
+      case AModifier::PROTECTED: {
+        if (expr->receiver == nullptr) {
+          break;
+        }
+        if (dynamic_cast<SelfExpr *>(expr->receiver.get())) {
+          break;
+        }
+
+        if (dynamic_cast<ThisExpr *>(expr->receiver.get())) {
+          break;
+        }
+
+        if (dynamic_cast<SuperExpr *>(expr->receiver.get())) {
+          break;
+        }
+
+        Error::diagnostic(expr->span,
+                          "cannot access protected method in this context");
+      }
+      case AModifier::PRIVATE: {
+        if (expr->receiver == nullptr) {
+          break;
+        }
+        if (dynamic_cast<SelfExpr *>(expr->receiver.get())) {
+          break;
+        }
+
+        if (dynamic_cast<ThisExpr *>(expr->receiver.get())) {
+          break;
+        }
+        Error::diagnostic(expr->span,
+                          "cannot access private method in this context");
+      }
+      }
+    }
+
     expr->resolved = best;
     if (best->returnType == nullptr) {
       Error::internal(expr->span, "methodSymbol's returnType is nullptr");
@@ -283,7 +325,7 @@ void Resolver::visit(CallExpr *expr) {
     auto it = currentType->memberScope->methodMap.find(expr->methodName);
     if (it != currentType->memberScope->methodMap.end()) {
       expr->callType = CallExpr::CallType::FUNC_CALL;
-      resolveCall(expr, currentType->memberScope);
+      resolveCall(expr, currentType->memberScope, true);
       return;
     }
     if (table->isType(expr->methodName)) {

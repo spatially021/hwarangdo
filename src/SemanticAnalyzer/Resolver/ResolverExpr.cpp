@@ -1,9 +1,11 @@
 #include "AST/ASTNode.h"
+#include "AST/CaseKey.h"
 #include "AST/Decl.h"
 #include "AST/Expr.h"
 #include "AST/Stmt.h"
 #include "SemanticAnalyzer/ResolvedLit.h"
 #include "SemanticAnalyzer/Resolver.h"
+#include "SemanticAnalyzer/Scope.h"
 #include "SemanticAnalyzer/symbol/MethodSymbol.h"
 #include "SemanticAnalyzer/symbol/StorageSymbol.h"
 #include "SemanticAnalyzer/symbol/TypeSymbol.h"
@@ -15,6 +17,7 @@
 #include "util/TypeResolver.h"
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 void Resolver::visit(LiteralExpr *expr) {
@@ -209,6 +212,36 @@ void Resolver::visit(MemberExpr *expr) {
   if (!member)
     Error::diagnostic(expr->span, "member '" + expr->member + "' is null");
 
+  switch (member->modifier) {
+
+  case AModifier::PUBLIC: {
+    break;
+  }
+  case AModifier::PROTECTED: {
+    if (dynamic_cast<SelfExpr *>(expr->object.get())) {
+      break;
+    }
+    if (dynamic_cast<ThisExpr *>(expr->object.get())) {
+      break;
+    }
+    if (dynamic_cast<SuperExpr *>(expr->object.get())) {
+      break;
+    }
+    Error::diagnostic(expr->span,
+                      "cannot access protected field in this context");
+  }
+  case AModifier::PRIVATE: {
+    if (dynamic_cast<SelfExpr *>(expr->object.get())) {
+      break;
+    }
+    if (dynamic_cast<ThisExpr *>(expr->object.get())) {
+      break;
+    }
+    Error::diagnostic(expr->span,
+                      "cannot access private field in this context");
+  } break;
+  }
+
   expr->resolved = member;
   expr->resolvedType = member->typeSymbol;
 }
@@ -395,6 +428,13 @@ void Resolver::visit(DestroyExpr *expr) {
     Error::diagnostic(expr->span, "in view only allowed handle");
   }
 }
+void Resolver::visit(QuitExpr *expr) {
+  for (Scope *s = table->getCurrent(); s != nullptr; s = s->parent) {
+    if (s->scopeKind == Scope::ScopeKind::INIT) {
+      Error::diagnostic(expr->span, "in init method cannot use quit");
+    }
+  }
+}
 
 void Resolver::visit(DefaultValueExpr *expr) {
   expr->resolvedType = table->getDefaultV();
@@ -429,87 +469,110 @@ void Resolver::visit(Range *expr) {
 
 void Resolver::visit(CaseValueExpr *expr) {
 
-  auto type = getTargetType();
-  if (type) {
-    string variantName = "";
-    if (expr->value->kind == NKind::MEMBER_EXPR) {
-      auto temp = dynamic_cast<MemberExpr *>(expr->value.get());
-      if (temp->object->resolvedType != type) {
-        Error::diagnostic(expr->span, "unmatch enum type expect " + type->name +
-                                          " but " +
-                                          temp->object->resolvedType->name);
-      }
-      variantName = temp->member;
-    } else if (auto temp = dynamic_cast<NameExpr *>(expr->value.get())) {
-      variantName = temp->name;
-    } else {
-      Error::internal(expr->span, "illegal expr kind");
-    }
-
-    expr->variant = lookupEnumVariant(type, variantName, expr->span);
-  } else {
+  if (auto lit = dynamic_cast<LiteralExpr *>(expr->value.get())) {
     expr->value->accept(this);
-    if (isLit(expr->value)) {
-      if (expr->arg) {
-        Error::internal(expr->span, "case value is lit but has payload");
+    expr->resolvedType = expr->value->resolvedType;
+    CaseKey key = CaseKey(lit->resolvedLit);
+    if (auto s = dynamic_cast<SwitchStmt *>(currentSwitch)) {
+      if (!s->caseKeys.insert(key).second) {
+        Error::internal(lit->span, "duplicated case key");
       }
-      if (auto s = dynamic_cast<SwitchStmt *>(currentSwitch)) {
+    }
+    if (auto m = dynamic_cast<MatchExpr *>(currentSwitch)) {
+      if (!m->caseKeys.insert(key).second) {
+        Error::internal(lit->span, "duplicated case key");
+      }
+    }
 
-        if (!canImplicitlyConvert(expr->value->resolvedType,
-                                  s->value->resolvedType)
-                 .first) {
-          Error::diagnostic(expr->span, "unmatched case valueType");
-        }
-      } else if (auto m = dynamic_cast<MatchExpr *>(currentSwitch)) {
-        if (!canImplicitlyConvert(expr->value->resolvedType,
-                                  m->value->resolvedType)
-                 .first) {
-          Error::diagnostic(expr->span, "unmatched case valueType");
-        }
+    return;
+  }
+
+  if (dynamic_cast<DefaultValueExpr *>(expr->value.get())) {
+    expr->isWildCard = true;
+    return;
+  }
+
+  string name = "";
+  TypeSymbol *enumTarget = getTargetType();
+  if (auto n = dynamic_cast<NameExpr *>(expr->value.get())) {
+    name = n->name;
+  } else if (auto m = dynamic_cast<MemberExpr *>(expr->value.get())) {
+    name = m->member;
+    m->object->accept(this);
+    if (m->object->resolvedType != enumTarget) {
+      Error::diagnostic(m->span, "unmatched enum type");
+    }
+  } else if (auto c = dynamic_cast<CallExpr *>(expr->value.get())) {
+    name = c->methodName;
+    if (c->receiver != nullptr) {
+      c->receiver->accept(this);
+      if (c->receiver->resolvedType != enumTarget) {
+        Error::diagnostic(c->span, "unmatched enum type");
+      }
+    }
+
+  } else {
+    Error::diagnostic(
+        expr->span, "not allowed non-literal value or not enum-variant value");
+  }
+
+  if (enumTarget->kind != TypeSymbol::TypeKind::ENUM) {
+    Error::diagnostic(
+        expr->span, "not allowed non-literal value or not enum-variant value");
+  }
+
+  auto it = enumTarget->variantMap.find(name);
+  if (it == enumTarget->variantMap.end()) {
+    Error::diagnostic(expr->value->span, "unknown variant name");
+  }
+
+  if (expr->arg) {
+    if (it->second->payloadType == nullptr) {
+      Error::diagnostic(expr->arg->span,
+                        "variant has no payload but in use has payload");
+    }
+    if (auto n = dynamic_cast<NameExpr *>(expr->arg.get())) {
+
+      unique_ptr<ValueSymbol> symbol = make_unique<ValueSymbol>();
+      symbol->typeSymbol = it->second->payloadType;
+      symbol->isPayload = true;
+      symbol->isRoot = false;
+      symbol->kind = ValueSymbol::Kind::VAR;
+      symbol->owner = table->getCurrent();
+      symbol->name = n->name;
+      expr->payloadType = it->second->payloadType;
+      auto raw = symbol.get();
+      expr->payload = raw;
+      auto iter = table->getCurrent()->value.find(n->name);
+
+      if (iter == table->getCurrent()->value.end()) {
+        table->getCurrent()->value.emplace(n->name, std::move(symbol));
       } else {
-        Error::internal(expr->span, "currentSwitch is not swtich or match");
+        Error::diagnostic(iter->second->nameSpan, "duplicated variable name");
       }
 
     } else {
-      Error::diagnostic(expr->span, "in caseValue allow literal or Enum");
+      Error::diagnostic(expr->arg->span,
+                        "in variant payload must be payload's name");
     }
-    return;
   }
 
-  auto variant = dynamic_cast<EnumVariantSymbol *>(expr->variant);
-  if (!variant) {
-    Error::diagnostic(expr->span, "in caseValue allow literal or Enum");
-  }
-  if (variant->payloadType) {
-    if (!expr->arg) {
-      Error::diagnostic(expr->span, "this variant has payload but not declare");
-    }
+  CaseKey key = CaseKey(it->second);
 
-    if (expr->arg->kind != NKind::NAME_EXPR) {
-      Error::internal(expr->span, "illegal expr kind");
+  if (auto s = dynamic_cast<SwitchStmt *>(currentSwitch)) {
+    if (!s->caseKeys.insert(key).second) {
+      Error::internal(expr->value->span, "duplicated case key");
     }
-    expr->arg->resolvedType = variant->payloadType;
-    if (!expr->arg->resolvedType) {
-      Error::internal(expr->arg->span, "unresolved type ");
-    }
-    if (!canImplicitlyConvert(expr->arg->resolvedType, variant->payloadType)
-             .first) {
-      Error::diagnostic(expr->span, "unmatched payload type");
-    }
-    auto symbol = make_unique<ValueSymbol>();
-    symbol->name = variant->name;
-    symbol->kind = ValueSymbol::Kind::VAR;
-    symbol->typeSymbol = expr->arg->resolvedType;
-    auto raw = symbol.get();
-
-    static_cast<NameExpr *>(expr->arg.get())->resolved = raw;
-
-    expr->payloadType = expr->arg->resolvedType;
-    return;
+    s->usedVariants.insert(it->second);
   }
-  if (expr->arg) {
-    Error::diagnostic(expr->span, "variant has no payload but declared");
+  if (auto m = dynamic_cast<MatchExpr *>(currentSwitch)) {
+    if (!m->caseKeys.insert(key).second) {
+      Error::internal(expr->value->span, "duplicated case key");
+    }
+    m->usedVariants.insert(it->second);
   }
+
+  expr->variant = it->second;
 }
 
 TypeSymbol *Resolver::getTargetType() {
@@ -533,14 +596,35 @@ void Resolver::visit(MatchExpr *expr) {
   currentSwitch = expr;
   expr->value->accept(this);
   TypeSymbol *matchType = nullptr;
-  for (auto c : expr->cases) {
+  for (unsigned i = 0; i < expr->cases.size(); ++i) {
+    auto &c = expr->cases[i];
     c->accept(this);
+
     if (!matchType) {
       matchType = c->transferType;
       continue;
     }
     if (!isAssignable(matchType, c->transferType)) {
       Error::diagnostic(c->span, "inconsistent value transfer type");
+    }
+
+    if (c->isWildCard) {
+      if (i != expr->cases.size() - 1) {
+        Error::diagnostic(c->span, "_ is only allowed in last of match");
+      }
+      expr->hasDefault = true;
+    }
+  }
+
+  if (expr->usedVariants.size() != expr->value->resolvedType->variants.size()) {
+    if (!expr->hasDefault) {
+      Error::diagnostic(expr->span, "has missing variant but no _ in switch");
+    }
+  }
+
+  if (expr->value->resolvedType->kind == TypeSymbol::TypeKind::PRIMITIVE) {
+    if (!expr->hasDefault) {
+      Error::diagnostic(expr->span, "literal target but no _ in switch");
     }
   }
 

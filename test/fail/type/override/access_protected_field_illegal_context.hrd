@@ -1,0 +1,22 @@
+class Main{
+    
+    frame void update(){
+
+    }
+
+    public init(){
+        Handle<Player> h=world.spawn Player();
+        Player p=world.view(h);
+        p.a=2;
+    }
+
+}
+
+class Player{
+    
+    protected int a=1;
+
+    public init(){
+            
+    }
+}

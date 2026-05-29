@@ -1,0 +1,26 @@
+class Main{
+    frame void update(){
+
+    }
+    public init(){
+        S s=S();
+        s.foo();
+    }
+}
+
+struct S{
+    int a=1;
+    public init(){
+        
+    }
+
+}
+
+
+impl S{
+    void foo(){
+        int a=2;
+        a+=1;
+        self.a+=2;
+    }
+}

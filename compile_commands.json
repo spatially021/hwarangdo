@@ -1,1 +1,1 @@
-build/debug-asan/compile_commands.json
+.build-meta/compile_commands-asan.json

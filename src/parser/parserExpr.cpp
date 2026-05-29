@@ -16,7 +16,7 @@ Ptr Parser::assignment() { // 대입 연산 처리
     Token op = advance();
     Ptr right = expression();
     if (!isAssginable(left))
-      Error::diagnostic(left->span, "Invalid assignment target");
+      Error::diagnostic(left->span, "expression is not assignable");
     return make_shared<AssignExpr>(makeSpan(left->span, right->span), left, op,
                                    right);
   }
@@ -28,7 +28,7 @@ Ptr Parser::ternary() { // 삼항 연산 처리
   if (check(TKind::QUESTION)) {
     advance(); //?처리
     Ptr then = assignment();
-    consume(TKind::COLON, "expect ':' after condition");
+    consume(TKind::COLON, "expected ':' after conditional expression");
     Ptr else_ = assignment();
     return make_shared<TernaryExpr>(makeSpan(left->span, else_->span), left,
                                     then, else_);
@@ -183,7 +183,7 @@ Ptr Parser::postfix() {
             expr->kind == NKind::BUILTIN_NAME_EXPR) {
           advance(); // spawn 처리
           TypeNode::Ptr type = parseType();
-          consume(TKind::LEFT_PAREN, "expect (");
+          consume(TKind::LEFT_PAREN, "expected '(' after type name");
           std::vector<Expr::Ptr> args;
           if (!check(TKind::RIGHT_PAREN)) {
             do {
@@ -191,37 +191,47 @@ Ptr Parser::postfix() {
             } while (match({TKind::COMMA}));
           }
 
-          consume(TKind::RIGHT_PAREN, "expect ')' after arguments");
+          consume(TKind::RIGHT_PAREN, "expected ')' after argument list");
           auto end = previous();
           return make_shared<SpawnExpr>(makeSpan(expr->span, end.span), expr,
                                         type, args);
         } else if (check(TKind::IDENTIFIER) && peek().text == "view") {
           advance(); // view 처리
-          consume(TKind::LEFT_PAREN, "expect '(' after view");
+          consume(TKind::LEFT_PAREN, "expected '(' after 'view'");
+
           Ptr target = expression();
-          consume(TKind::RIGHT_PAREN, "expect ')' after arguments");
+
+          consume(TKind::RIGHT_PAREN, "expected ')' after view argument");
 
           auto end = previous();
           return make_shared<ViewExpr>(makeSpan(expr->span, end.span), expr,
                                        target);
         } else if (check(TKind::IDENTIFIER) && peek().text == "destroy") {
           advance(); // destroy 처리
-          consume(TKind::LEFT_PAREN, "expect '(' after destroy");
+          consume(TKind::LEFT_PAREN, "expected '(' after 'destroy'");
+
           Ptr target = expression();
-          consume(TKind::RIGHT_PAREN, "expect ')' after arguments");
+
+          consume(TKind::RIGHT_PAREN, "expected ')' after destroy argument");
           auto end = previous();
           return make_shared<DestroyExpr>(makeSpan(expr->span, end.span), expr,
                                           target);
+        } else if (check(TKind::IDENTIFIER) && peek().text == "quit") {
+          advance(); // quit 처리
+          consume(TKind::LEFT_PAREN, "expected '(' after 'quit'");
+          consume(TKind::RIGHT_PAREN, "expected ')' after quit argument");
+          auto end = previous();
+          return make_shared<QuitExpr>(makeSpan(expr->span, end.span));
         }
 
         else {
           Error::diagnostic(peek(),
-                            "unknown storage's method : " + peek().text);
+                            "unknown world method '" + peek().text + "'");
         }
       }
 
       Token member =
-          consume(TKind::IDENTIFIER, "expect member's name after '.'");
+          consume(TKind::IDENTIFIER, "expected member name after '.'");
       auto end = previous();
       expr = make_shared<MemberExpr>(makeSpan(expr->span, end.span), expr,
                                      member.text);
@@ -234,7 +244,7 @@ Ptr Parser::postfix() {
         } while (match({TKind::COMMA}));
       }
 
-      consume(TKind::RIGHT_PAREN, "expect ')' after arguments");
+      consume(TKind::RIGHT_PAREN, "expected ')' after argument list");
       auto end = previous();
       if (expr->kind == NKind::MEMBER_EXPR) {
         auto member = static_pointer_cast<MemberExpr>(expr);
@@ -251,7 +261,7 @@ Ptr Parser::postfix() {
     } else if (check(TKind::LEFT_BRACKET)) {
       Token t = advance(); //[처리
       Expr::Ptr index = ternary();
-      consume(TKind::RIGHT_BRACKET, "expect ']' after index");
+      consume(TKind::RIGHT_BRACKET, "expected ']' after array index");
       auto end = previous();
       expr = make_shared<ArrayAccessExpr>(makeSpan(expr->span, end.span), expr,
                                           index);
@@ -278,7 +288,7 @@ Ptr Parser::primary() {
   if (check(TKind::LEFT_PAREN)) {
     advance();
     Expr::Ptr expr = expression();
-    consume(TKind::RIGHT_PAREN, "expect ')' after expression");
+    consume(TKind::RIGHT_PAREN, "expected ')' after expression");
     return expr;
   }
   if (check(TKind::SUPER))
@@ -304,25 +314,32 @@ Ptr Parser::primary() {
 
   if (check(TKind::MATCH)) {
     advance(); // match처리
-    consume(TKind::LEFT_PAREN, "expect '(' after match");
+    consume(TKind::LEFT_PAREN, "expected '(' after 'match'");
+
     Ptr value = expression();
-    consume(TKind::RIGHT_PAREN, "expect ')' after valye");
-    consume(TKind::LEFT_BRACE, "expect '{' after '('");
+
+    consume(TKind::RIGHT_PAREN, "expected ')' after match expression");
+
+    consume(TKind::LEFT_BRACE, "expected '{' before match body");
+
     vector<shared_ptr<Case>> cases;
+
     while (!check(TKind::RIGHT_BRACE) && !isAtEnd()) {
       auto c = caseStmt(false);
       auto end = previous();
+
       if (!c->isDefault && c->values.size() != 1) {
         Error::diagnostic(makeSpan(t.span, end.span),
-                          "in match case can have one value but " +
-                              to_string(c->values.size()));
+                          "match cases must have exactly one selector value");
       }
+
       cases.push_back(c);
     }
+
     auto end = previous();
-    consume(TKind::RIGHT_BRACE, "expect '}' after match body");
+
+    consume(TKind::RIGHT_BRACE, "expected '}' after match body");
     return make_shared<MatchExpr>(makeSpan(t.span, end.span), value, cases);
   }
-
-  Error::diagnostic(peek(), "expect expression : " + peek().text);
+  Error::diagnostic(peek(), "expected expression, got '" + peek().text + "'");
 }

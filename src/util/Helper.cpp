@@ -3,6 +3,7 @@
 #include "SemanticAnalyzer/SymbolTable.h"
 #include "SemanticAnalyzer/symbol/MethodSymbol.h"
 #include "SemanticAnalyzer/symbol/TypeSymbol.h"
+#include "util/Error.h"
 #include "util/TypeResolver.h"
 std::string Helper::apIntToString(const llvm::APInt &v) {
   llvm::SmallString<32> buf;
@@ -10,11 +11,43 @@ std::string Helper::apIntToString(const llvm::APInt &v) {
   return std::string(buf.str());
 }
 
+bool Helper::hasSameMethodSig(const vector<MethodSymbol *> &vec,
+                              MethodSymbol *symbol) {
+  for (auto *m : vec) {
+    if (m == symbol)
+      continue;
+    if (m->name != symbol->name)
+      continue;
+    if (m->returnType != symbol->returnType) {
+      continue;
+    }
+
+    if (m->paramTypes.size() != symbol->paramTypes.size()) {
+      continue;
+    }
+
+    bool same = true;
+    for (size_t i = 0; i < m->paramTypes.size(); ++i) {
+      if (m->paramTypes[i] != symbol->paramTypes[i]) {
+        same = false;
+        break;
+      }
+    }
+
+    if (same) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 bool Helper::hasSameSig(const vector<MethodSymbol *> &vec,
                         MethodSymbol *symbol) {
   for (auto *m : vec) {
     if (m == symbol)
       continue;
+
     if (m->paramTypes.size() != symbol->paramTypes.size()) {
       continue;
     }
@@ -129,7 +162,9 @@ llvm::APInt TypeResolver::resolveFixedArraySize(Expr *expr,
 
   auto lit = dynamic_cast<LiteralExpr *>(expr);
   if (!lit) {
-    Error::diagnostic(expr->span, "array size must be integer literal");
+    // TODO: 오류명 맞추기(-는 unary로 들어가서 literal인지로는 에러품질이 좋지
+    // 않음)
+    Error::diagnostic(expr->span, "array size must be integer literal : ");
   }
   ResolvedLit r;
   switch (lit->token.kind) {
@@ -213,4 +248,27 @@ ResolvedLit TypeResolver::resolveLitInt(LiteralExpr *expr, SymbolTable *table) {
 
   resolvedLit.value = IntPayload(llvm::APInt(bits, llvm::StringRef(s), 10));
   return resolvedLit;
+}
+
+bool Helper::checkImpletTraitSig(TypeSymbol *symbol) {
+
+  for (auto &traitType : symbol->traits) {
+    auto trait = dynamic_cast<TraitDecl *>(traitType->decl);
+    if (!trait) {
+      Error::internal("illegal type");
+    }
+    auto scope = symbol->memberScope;
+    for (auto t : trait->traitSigs) {
+      auto it = scope->methodMap.find(t->name);
+      if (it == scope->methodMap.end()) {
+        return false;
+      }
+      auto &bucket = it->second;
+      if (!Helper::hasSameSig(bucket, t->symbol)) {
+        return false;
+      }
+    }
+  }
+
+  return true;
 }

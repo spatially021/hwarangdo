@@ -1,0 +1,10 @@
+class Main{
+    frame void update(){
+
+    }
+    public init(){
+        if(1){
+            int a;
+        }
+    }
+}

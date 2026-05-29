@@ -3,6 +3,7 @@
 #include "IR/HIR/HIRBuilder.h"
 #include "IR/HIR/HIRDecl.h"
 #include "IR/HIR/HIRExpr.h"
+#include "IR/HIR/HIRHelper.h"
 #include "IR/HIR/HIRSymbol.h"
 #include "IR/HIR/HIRType.h"
 #include "SemanticAnalyzer/symbol/MethodSymbol.h"
@@ -138,7 +139,12 @@ unique_ptr<HIRExpr> HIRBuilder::lowerAssign(AssignExpr *expr) {
 
   if (auto local = dynamic_cast<HIRLocalPlaceExpr *>(lhs.get())) {
     if (!local->local->isMutable) {
-      Error::diagnostic(expr->target->span, "const value cannot reallocate");
+      if (local->local->isCaseValue) {
+        Error::diagnostic(expr->target->span,
+                          " cannot assign to payload binding ");
+      } else {
+        Error::diagnostic(expr->target->span, "const value cannot reallocate");
+      }
     }
   }
 
@@ -217,7 +223,7 @@ unique_ptr<HIRExpr> HIRBuilder::lowerTernary(TernaryExpr *expr) {
 
   // typeSymbol->hirType
   // nullptr not allowed
-  auto type = lowerType(expr->resolvedType);
+  auto type = HIRHelper::lowerType(program, source, expr->resolvedType);
 
   return make_unique<HIRTernaryExpr>(expr->span, std::move(cond),
                                      std::move(then), std::move(else_), type);
@@ -225,8 +231,8 @@ unique_ptr<HIRExpr> HIRBuilder::lowerTernary(TernaryExpr *expr) {
 
 unique_ptr<HIRExpr> HIRBuilder::lowerCast(CastExpr *expr) {
   auto operand = lowerValue(expr->left.get());
-  auto from = lowerType(expr->left->resolvedType);
-  auto to = lowerType(expr->resolvedType);
+  auto from = HIRHelper::lowerType(program, source, expr->left->resolvedType);
+  auto to = HIRHelper::lowerType(program, source, expr->resolvedType);
   return make_unique<HIRCastExpr>(expr->span, std::move(operand), from, to);
 }
 
@@ -236,7 +242,7 @@ unique_ptr<HIRExpr> HIRBuilder::lowerMatch(MatchExpr *expr) {
   for (auto &c : expr->cases) {
     cases.push_back(lowerCase(c.get()));
   }
-  HIRType *type = lowerType(expr->resolvedType);
+  HIRType *type = HIRHelper::lowerType(program, source, expr->resolvedType);
   return make_unique<HIRMatchExpr>(expr->span, type, std::move(cond),
                                    std::move(cases));
 }
@@ -261,11 +267,13 @@ unique_ptr<HIRExpr> HIRBuilder::lowerSpawn(SpawnExpr *expr) {
 
   // typeSymbol->hirEntityType
   // nullptr not allowed
-  HIREntityType *entity = lowerEntityType(expr->spawnType->resolved);
+  HIREntityType *entity =
+      HIRHelper::lowerEntityType(program, source, expr->spawnType->resolved);
 
   // make handle with entity and stoagekind
   // nullptr not allowed
-  HIRHandleType *handle = getOrCreateHandleType(entity, storageKind);
+  HIRHandleType *handle =
+      HIRHelper::getOrCreateHandleType(program, source, entity, storageKind);
 
   vector<unique_ptr<HIRExpr>> args;
   for (auto &a : expr->args) {
@@ -313,31 +321,9 @@ unique_ptr<HIRExpr> HIRBuilder::lowerView(ViewExpr *expr) {
     Error::internal(expr->span, "unknown storage kind");
   };
 
-  NameExpr *name = dynamic_cast<NameExpr *>(expr->target.get());
-
-  if (name == nullptr) {
-    Error::internal(expr->span, "illegal astNode type");
-  }
-
-  auto place = lowerPlace(name);
-
-  if (place == nullptr) {
-    Error::internal(expr->span, "view place is nullptr");
-  }
-
-  auto handleType = dynamic_cast<HIRHandleType *>(place->type);
-  if (handleType == nullptr) {
-    Error::internal(expr->span, "expect handle : " + place->type->name);
-  }
-
-  if (handleType->storage != storageKind) {
-    Error::internal(expr->span, "handle storage kind mismatch");
-  }
-
-  HIREntityType *entity = handleType->entityType;
-
-  unique_ptr<HIRValueExpr> handle = load(std::move(place));
-
+  HIREntityType *entity =
+      HIRHelper::lowerEntityType(program, source, expr->resolvedType);
+  auto handle = lowerValue(expr->target.get());
   HIRObserverType *observer = getOrCreateObserverType(entity, storageKind);
 
   return make_unique<HIRViewExpr>(expr->span, observer, storageKind,
@@ -394,4 +380,14 @@ unique_ptr<HIRExpr> HIRBuilder::lowerInitCall(CallExpr *expr) {
 
   return make_unique<HIRStructInitExpr>(expr->span, nullptr, std::move(args),
                                         program->voidType, true);
+}
+
+unique_ptr<HIRExpr> HIRBuilder::lowerLiteral(LiteralExpr *expr) {
+  if (!expr->resolvedType) {
+    Error::internal(expr->span, "literal has no resolved type");
+  }
+
+  auto *ty = HIRHelper::lowerType(program, source, expr->resolvedType);
+
+  return std::make_unique<HIRLiteralExpr>(expr->span, ty, expr->resolvedLit);
 }

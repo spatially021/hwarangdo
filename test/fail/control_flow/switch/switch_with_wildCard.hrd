@@ -1,0 +1,29 @@
+class Main{
+    
+    frame void update(){
+
+    }
+
+    public init(){
+
+        E e=E.a;
+        switch(e){
+            case a=>{
+
+            }
+            case b=>{
+                
+            }
+
+            case _=>{
+                
+            }
+        }
+    }
+
+}
+
+
+enum E{
+    a,b,c,
+}

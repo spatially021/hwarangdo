@@ -1,6 +1,7 @@
 #pragma once
 
 #include "BuiltInType.h"
+#include "SemanticAnalyzer/ResolvedLit.h"
 #include "SourceSpan.h"
 #include "Token.h"
 #include "Visitor.h"
@@ -36,6 +37,7 @@ enum class NKind {
   SPAWN_EXPR,
   VIEW_EXPR,
   DESTROY_EXPR,
+  QUIT_EXPR,
   DEFUALT_VALUE_EXPR,
   VALUE_EXPR,
 

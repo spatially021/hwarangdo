@@ -1,17 +1,19 @@
 class Main{
+    
     frame void update(){
 
     }
+
     public init(){
 
     }
-}
-
-struct S{
 
 }
 
+class Entity{
 
-impl S{
+}
 
+class Player extends Entity{
+    
 }

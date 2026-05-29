@@ -83,8 +83,9 @@ private:
   Scope *currentBase = nullptr;
 
   void ResolveEnumVariant(CallExpr *expr);
-  void resolveCall(CallExpr *expr, Scope *scope);
+  void resolveCall(CallExpr *expr, Scope *scope, bool isImplict = false);
   void resolveInit(CallExpr *expr);
+  void resolveCasePayload(CallExpr *expr);
   ArgMatchKind matchArgument(Expr *arg, TypeSymbol *param,
                              bool hasInit = false);
   int rankOf(const ArgMatchKind &kind);
@@ -94,7 +95,6 @@ private:
 
   bool isAssignable(TypeSymbol *from, TypeSymbol *to);
   bool isBinaryOperatalbe(Operator op, TypeSymbol *left, TypeSymbol *right);
-
   bool isCmpable(TypeSymbol *left, TypeSymbol *right);
   TypeSymbol *binaryResult(Operator op, TypeSymbol *left, TypeSymbol *right);
   bool isCastable(TypeSymbol *from, TypeSymbol *to);
@@ -198,7 +198,7 @@ private:
 
   inline bool isLit(Expr::Ptr expr) {
     auto t = expr->resolvedType;
-    return table->isInt(t) || table->isFloat(t) || table->isBool(t),
+    return table->isInt(t) || table->isFloat(t) || table->isBool(t) ||
            table->isFixed(t) || table->isString(t) || table->isChar(t);
   }
 

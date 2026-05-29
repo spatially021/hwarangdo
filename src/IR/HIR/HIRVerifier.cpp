@@ -3,10 +3,12 @@
 #include "IR/HIR/HIRDecl.h"
 #include "IR/HIR/HIRExpr.h"
 #include "IR/HIR/HIRNode.h"
+#include "IR/HIR/HIRPattern.h"
 #include "IR/HIR/HIRProgram.h"
 #include "IR/HIR/HIRStmt.h"
 #include "IR/HIR/HIRSymbol.h"
 #include "IR/HIR/HIRType.h"
+#include "enums/InheritState.h"
 #include "magic_enum/magic_enum.hpp"
 #include "util/Error.h"
 #include <cassert>
@@ -36,7 +38,9 @@ void HIRVerifier::verify() {
   }
 
   for (auto &t : program->typeDeclMap) {
-    verifyType(t.second);
+    if (inheritStates[t.second] == InheritState::Unvisited) {
+      verifyType(t.second);
+    }
   }
 }
 
@@ -49,14 +53,38 @@ void HIRVerifier::verifyRoot(HIRField *root) {
   }
 }
 
+void HIRVerifier::verifyVariant(HIREnumVariant *variant) {
+  if (variant == nullptr) {
+    Error::internal("variant is nullptr");
+  }
+}
+
 void HIRVerifier::verifyType(HIRTypeDecl *type) {
+  if (inheritStates[type] == InheritState::Done) {
+    return;
+  }
+  inheritStates[type] = InheritState::Visiting;
+  if (type->base) {
+    if (inheritStates[type->base] == InheritState::Visiting) {
+      Error::internal(type->span, "cyclic inhernit");
+    } else if (inheritStates[type->base] == InheritState::Unvisited) {
+      verifyType(type->base);
+    }
+  }
 
   if (type == nullptr) {
     Error::internal("hirTypeDecl is nullptr");
   }
 
   if (type->type == nullptr) {
-    Error::internal("hirType is nullptr");
+    Error::internal(type->span, "hirType is nullptr");
+  }
+  if (type == nullptr) {
+    Error::internal("hirTypeDecl is nullptr");
+  }
+
+  if (type->type == nullptr) {
+    Error::internal(type->span, "hirType is nullptr");
   }
 
   for (auto &f : type->fieldMap) {
@@ -66,6 +94,14 @@ void HIRVerifier::verifyType(HIRTypeDecl *type) {
                             f.second->isInitialized &&
                                 f.second->type->kind == HIRTypeKind::Array));
   }
+
+  if (type->typeDeclKind == HIRTypeDeclKind::Enum) {
+    for (auto &v : type->enumVariants) {
+      verifyVariant(v.get());
+    }
+    return;
+  }
+
   verifyBlock(type->defaultInitBlock.get());
 
   InitMap base = initmap;
@@ -86,10 +122,11 @@ void HIRVerifier::verifyType(HIRTypeDecl *type) {
     }
     initmap = result;
   }
-
   for (auto &m : type->methodMap) {
     verifyMethod(m.second);
   }
+
+  inheritStates[type] = InheritState::Done;
 }
 
 void HIRVerifier::verifyMethod(HIRMethodDecl *method) {
@@ -303,7 +340,7 @@ void HIRVerifier::verifyStmt(HIRStmt *stmt) {
   }
   case HIRNodeKind::Case: {
     auto caseStmt = expect<HIRCase>(stmt, HIRNodeKind::Case);
-    if (caseStmt->isDefault) {
+    if (caseStmt->defaultKind == HIRDefaultKind::Default) {
       if (!caseStmt->selectors.empty()) {
         Error::internal("default has selector");
       }
@@ -312,7 +349,7 @@ void HIRVerifier::verifyStmt(HIRStmt *stmt) {
       if (s == nullptr) {
         Error::internal("caseStmt's selector is nullptr");
       }
-      verifyExpr(s.get());
+      verifyCasePattern(s.get());
     }
 
     if (caseStmt->body == nullptr) {
@@ -364,6 +401,10 @@ void HIRVerifier::verifyStmt(HIRStmt *stmt) {
     break;
   }
 
+  case HIRNodeKind::QuitStmt: {
+    break;
+  }
+
   default:
     Error::internal("illegal stmt kind : " +
                     std::string(magic_enum::enum_name(stmt->kind)));
@@ -402,16 +443,16 @@ void HIRVerifier::verifyExpr(HIRExpr *expr, bool isRead) {
   case HIRNodeKind::AssignExpr: {
     auto assign = expect<HIRAssignExpr>(expr, HIRNodeKind::AssignExpr);
     if (assign->type == nullptr) {
-      Error::internal("assign's type is nullptr");
+      Error::internal(assign->span, "assign's type is nullptr");
     }
     if (assign->lhs == nullptr) {
-      Error::internal("assign's lhs is nullptr");
+      Error::internal(assign->span, "assign's lhs is nullptr");
     }
     if (isObserver(assign->lhs->type)) {
-      Error::internal("observer cannot be assigned");
+      Error::internal(assign->span, "observer cannot be assigned");
     }
     if (assign->rhs == nullptr) {
-      Error::internal("assign's rhs is nullptr");
+      Error::internal(assign->span, "assign's rhs is nullptr");
     }
     verifyExpr(assign->lhs.get());
     initialize(assign->lhs.get());
@@ -735,6 +776,9 @@ void HIRVerifier::verifyExpr(HIRExpr *expr, bool isRead) {
     }
     break;
   }
+  case HIRNodeKind::WildcardValue: {
+    break;
+  }
   default:
     Error::internal("illegal expr kind");
     break;
@@ -823,7 +867,7 @@ InitState &HIRVerifier::getInitState(HIRPlaceExpr *place) {
   if (auto local = dynamic_cast<HIRLocalPlaceExpr *>(place)) {
     auto it = initmap.localStates.find(local->local);
     if (it == initmap.localStates.end()) {
-      Error::internal("local state not found");
+      Error::internal(place->span, "local state not found");
     }
     return it->second;
   }
@@ -832,22 +876,22 @@ InitState &HIRVerifier::getInitState(HIRPlaceExpr *place) {
     if (field->receiver->type == program->rootType) {
       auto it = initmap.rootStates.find(field->field);
       if (it == initmap.rootStates.end()) {
-        Error::internal("field state not found");
-      }
-      return it->second;
-    } else {
-      auto it = initmap.fieldStates.find(field->field);
-      if (it == initmap.fieldStates.end()) {
-        Error::internal("field state not found");
+        Error::internal(place->span, "field state not found");
       }
       return it->second;
     }
+
+    auto it = initmap.fieldStates.find(field->field);
+    if (it == initmap.fieldStates.end()) {
+      Error::internal(place->span, "field state not found");
+    }
+    return it->second;
   }
 
   if (auto param = dynamic_cast<HIRParamPlaceExpr *>(place)) {
     auto it = initmap.paramStates.find(param->param);
     if (it == initmap.paramStates.end()) {
-      Error::internal("param state not found");
+      Error::internal(place->span, "param state not found");
     }
     return it->second;
   }
@@ -935,4 +979,27 @@ static std::pair<bool, llvm::APInt> tryGetConstIndex(HIRValueExpr *value) {
   }
 
   return {false, llvm::APInt(128, 0)};
+}
+
+void HIRVerifier::verifyCasePattern(HIRCasePattern *pattern) {
+  std::visit(
+      [&](auto &selector) {
+        using T = std::decay_t<decltype(selector)>;
+
+        if constexpr (std::is_same_v<T, HIRLiteralCase>) {
+          // selector.expr 사용
+          verifyExpr(selector.expr.get());
+        } else if constexpr (std::is_same_v<T, HIRUnitCase>) {
+          // selector.variant 사용
+          verifyVariant(selector.variant);
+        } else if constexpr (std::is_same_v<T, HIRPayloadCase>) {
+          // selector.variant, selector.binding 사용
+          verifyVariant(selector.variant);
+          verifyLocal(selector.binding);
+          initmap.localStates.emplace(selector.binding, InitState(true));
+        } else if constexpr (std::is_same_v<T, HIRWildcardCase>) {
+          // wildcard 처리
+        }
+      },
+      pattern->selector);
 }

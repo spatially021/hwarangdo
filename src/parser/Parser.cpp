@@ -1,5 +1,6 @@
 #include "Parser.h"
 #include "AST/Decl.h"
+#include "AST/DeclContext.h"
 #include "AST/TokenStream.h"
 #include "Token.h"
 #include "util/Error.h"
@@ -28,6 +29,9 @@ Decl::Ptr Parser::declaration(DeclContext context) {
   ContextGuard _{contexts, context};
 
   if (isAccessModifier()) {
+    if (context != DeclContext::CLASSBODY) {
+      Error::diagnostic(peek(), "access modifier only allowed field variable");
+    }
     prefix.modi = AModifierConvertor(advance());
   }
   while (check({
@@ -40,35 +44,37 @@ Decl::Ptr Parser::declaration(DeclContext context) {
     if (check(TKind::CONST)) {
       advance();
       if (prefix.isConst) {
-        Error::diagnostic(peek(), "duplicate const modifier");
+        Error::diagnostic(peek(), "duplicate 'const' modifier");
       }
 
       prefix.isConst = true;
     }
     if (check(TKind::ROOT)) {
       advance();
-      if (prefix.isRoot)
-        Error::diagnostic(peek(), "duplicate root modifier");
+      if (prefix.isRoot) {
+        Error::diagnostic(peek(), "duplicate 'root' modifier");
+      }
+
       prefix.isRoot = true;
     }
     if (check(TKind::FRAME)) {
       advance();
       if (prefix.isFrame) {
-        Error::diagnostic(peek(), "duplicate frame modifier");
+        Error::diagnostic(peek(), "duplicate 'frame' modifier");
       }
       prefix.isFrame = true;
     }
     if (check(TKind::OVERRIDE)) {
       advance();
       if (prefix.isOverride) {
-        Error::diagnostic(peek(), "duplicate override modifier");
+        Error::diagnostic(peek(), "duplicate 'override' modifier");
       }
       prefix.isOverride = true;
     }
     if (check(TKind::ASYNC)) {
       advance();
       if (prefix.isAsync) {
-        Error::diagnostic(peek(), "duplicated async modifier");
+        Error::diagnostic(peek(), "duplicated 'async' modifier");
       }
       prefix.isAsync = true;
     }
@@ -118,7 +124,7 @@ Decl::Ptr Parser::declaration(DeclContext context) {
     return enumDecl(prefix);
   }
 
-  Error::diagnostic(peek(), "only declaration in top-level");
+  Error::diagnostic(peek(), "only declarations are allowed at top level");
 }
 
 Stmt::Ptr Parser::statement() {
@@ -179,6 +185,9 @@ Stmt::Ptr Parser::statement() {
 
   case TKind::THROW:
     return throwStmt();
+  case TKind::LEFT_BRACE:
+    advance();
+    return blockStmt();
 
   case TKind::IDENTIFIER:
     if (following().kind == TKind::IDENTIFIER)

@@ -3,6 +3,7 @@
 #include "AST/Expr.h"
 #include "IR/HIR/HIRBuilder.h"
 #include "IR/HIR/HIRExpr.h"
+#include "IR/HIR/HIRHelper.h"
 #include "IR/HIR/HIRSymbol.h"
 #include "SemanticAnalyzer/symbol/TypeSymbol.h"
 #include "SemanticAnalyzer/symbol/ValueSymbol.h"
@@ -178,7 +179,7 @@ HIRBuilder::lowerArrayAccess(ArrayAccessExpr *expr) {
 
   // TypeSymbol -> hirType
   // nullptr 아님을 보장
-  auto elementType = lowerType(expr->resolvedType);
+  auto elementType = HIRHelper::lowerType(program, source, expr->resolvedType);
 
   return make_unique<HIRArrayAccessPlaceExpr>(expr->span, std::move(object),
                                               std::move(index), elementType);

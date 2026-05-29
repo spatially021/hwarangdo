@@ -1,0 +1,16 @@
+class Main{
+    
+    frame void update(){
+
+    }
+
+    public init(){
+        
+    }
+
+}
+
+
+trait T{
+    int a;
+}

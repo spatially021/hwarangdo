@@ -14,7 +14,7 @@ using namespace std;
 Ptr Parser::expressionStmt() {
   Token t = peek();
   Expr::Ptr expr = expression();
-  consume(TKind::SEMICOLON, "expect ';' after expression statement");
+  consume(TKind::SEMICOLON, "expected ';' after expression statement");
   return make_shared<ExprStmt>(makeSpan(t.span, expr->span), expr);
 }
 
@@ -27,9 +27,11 @@ Ptr Parser::declStmt() {
 Ptr Parser::ifStmt() {
   Token t = peek();
   advance(); // if처리
-  consume(TKind::LEFT_PAREN, "expect '(' after if");
+  consume(TKind::LEFT_PAREN, "expected '(' after 'if'");
+
   Expr::Ptr condition = expression();
-  consume(TKind::RIGHT_PAREN, "expect ')' after condition");
+
+  consume(TKind::RIGHT_PAREN, "expected ')' after condition");
 
   Ptr thenBranch = bodyStmt();
   Ptr elseBranch = nullptr;
@@ -50,7 +52,7 @@ Ptr Parser::blockStmt() {
     s.push_back(statement());
   }
 
-  consume(TKind::RIGHT_BRACE, "expect '}' end of block");
+  consume(TKind::RIGHT_BRACE, "expected '}' at end of block");
   auto end = previous();
   return make_shared<BlockStmt>(makeSpan(t, end), s);
 }
@@ -67,7 +69,7 @@ Ptr Parser::bodyStmt() {
 Ptr Parser::forStmt() {
   Token t = peek();
   advance(); // for 처리
-  consume(TKind::LEFT_PAREN, "exepct '(' after for");
+  consume(TKind::LEFT_PAREN, "expected '(' after 'for'");
 
   Ptr init = declStmt();
   auto decl = dynamic_cast<DeclStmt *>(init.get());
@@ -78,17 +80,17 @@ Ptr Parser::forStmt() {
   if (var == nullptr) {
     Error::internal(t, "for's var inti is not varDecl");
   }
-  if (var->init != nullptr)
-    Error::diagnostic(t, "in for statement initiate expression not available");
+  Error::diagnostic(t,
+                    "for-loop variable declarations cannot have initializers");
   Expr::Ptr from = expression();
-  consume(TKind::DOUBLE_DOT, "range need '..'");
+  consume(TKind::DOUBLE_DOT, "expected '..' in range expression");
   Expr::Ptr to = expression();
   Expr::Ptr step = nullptr;
   if (check(TKind::BY)) {
     advance(); // advance by
     step = expression();
   }
-  consume(TKind::RIGHT_PAREN, "expect ')'");
+  consume(TKind::RIGHT_PAREN, "expected ')' after for statement");
   shared_ptr<Range> range =
       make_shared<Range>(makeSpan(from->span, to->span), from, to, step);
   Ptr body = bodyStmt();
@@ -98,9 +100,11 @@ Ptr Parser::forStmt() {
 Ptr Parser::whileStmt() {
   Token t = peek();
   advance(); // while처리
-  consume(TKind::LEFT_PAREN, "expect '(' after while");
+  consume(TKind::LEFT_PAREN, "expected '(' after 'while'");
+
   Expr::Ptr conditon = expression();
-  consume(TKind::RIGHT_PAREN, "expect ')' after condition");
+
+  consume(TKind::RIGHT_PAREN, "expected ')' after condition");
   Ptr body = bodyStmt();
   return make_shared<WhileStmt>(makeSpan(t.span, body->span), conditon, body);
 }
@@ -108,15 +112,21 @@ Ptr Parser::whileStmt() {
 Ptr Parser::switchStmt() {
   Token t = peek();
   advance(); // switch처리
+  consume(TKind::LEFT_PAREN, "expected '(' after 'switch'");
 
-  consume(TKind::LEFT_PAREN, "expect '(' after swtich");
   Expr::Ptr value = expression();
-  consume(TKind::RIGHT_PAREN, "expect ')'");
-  consume(TKind::LEFT_BRACE, "expect '{' after '(' in switch statement");
+
+  consume(TKind::RIGHT_PAREN, "expected ')' after switch expression");
+  consume(TKind::LEFT_BRACE, "expected '{' before switch body");
+
   vector<shared_ptr<Case>> cases;
+
   while (!check(TKind::RIGHT_BRACE) && !isAtEnd()) {
-    cases.push_back(caseStmt());
+    auto c = caseStmt();
+    cases.push_back(c);
   }
+
+  consume(TKind::RIGHT_BRACE, "expected '}' after switch body");
   auto end = previous();
   return make_shared<SwitchStmt>(makeSpan(t, end), value, cases);
 }
@@ -127,6 +137,7 @@ shared_ptr<Case> Parser::caseStmt(bool isSwtich) {
     advance(); // case 처리
     vector<Expr::Ptr> values;
     while (!check(TKind::EQAUL_AGNLEBUCKET) && !isAtEnd()) {
+
       auto temp = dynamic_pointer_cast<CaseValueExpr>(parseCaseValue());
       if (!temp) {
         Error::internal("illegal expr kind");
@@ -134,54 +145,41 @@ shared_ptr<Case> Parser::caseStmt(bool isSwtich) {
       values.push_back(temp);
       if (check(TKind::COMMA)) {
         if (check(TKind::EQAUL_AGNLEBUCKET, 1))
-          Error::diagnostic(following(), "expect expression");
+          Error::diagnostic(following(), "expected case selector after ','");
         else
           advance(); //,처리
       }
     }
-    consume(TKind::EQAUL_AGNLEBUCKET, "expect '=>' after condition(s)");
+    consume(TKind::EQAUL_AGNLEBUCKET, "expected '=>' after case selector");
     Ptr body;
     if (check(TKind::LEFT_BRACE)) {
       body = bodyStmt();
     } else
-      Error::diagnostic(peek(), "expect '{' after '=>'");
+      Error::diagnostic(peek(), "expected '{' after '=>'");
 
     auto end = previous();
     return make_shared<Case>(makeSpan(tok, end), values, body);
   } else if (check(TKind::DEFAULT)) {
     if (!isSwtich) {
-      Error::diagnostic(tok, "in match not allowed 'default'");
+      Error::diagnostic(tok, "'default' is not allowed in match expressions");
     }
     advance(); // default 처리
-    consume(TKind::EQAUL_AGNLEBUCKET, "expect '=>' after default");
+    consume(TKind::EQAUL_AGNLEBUCKET, "expected '=>' after 'default'");
     vector<Expr::Ptr> values;
     Ptr body;
     if (check(TKind::LEFT_BRACE))
       body = bodyStmt();
     else
-      Error::diagnostic(peek(), "expect '{' after '=>'");
-    return make_shared<Case>(makeSpan(tok.span, body->span), values, body,
-                             true);
-  } else if (!check(TKind::UNDERBAR)) {
-    if (isSwtich) {
-      Error::diagnostic(tok, "in switch not allowed '_'");
-    }
-    advance(); // _ 처리
-    consume(TKind::EQAUL_AGNLEBUCKET, "expect '=>' after _");
-    vector<Expr::Ptr> values;
-    Stmt::Ptr body;
-    if (check(TKind::LEFT_BRACE))
-      body = bodyStmt();
-    else
-      Error::diagnostic(peek(), "expect '{' after '=>'");
+      Error::diagnostic(peek(), "expected '{' after '=>'");
     return make_shared<Case>(makeSpan(tok.span, body->span), values, body,
                              true);
   } else {
     if (isSwtich) {
-      Error::diagnostic(peek(),
-                        "in switch statement place only case or default");
+      Error::diagnostic(peek(), "only 'case' and 'default' declarations are "
+                                "allowed in switch bodies");
     } else {
-      Error::diagnostic(peek(), "in match expression place only case or _");
+      Error::diagnostic(peek(), "only 'case' declarations and wildcard "
+                                "selectors are allowed in match expressions");
     }
   }
 }
@@ -194,7 +192,7 @@ Ptr Parser::returnStmt() {
     expr = nullptr;
   else
     expr = expression();
-  consume(TKind::SEMICOLON, "expect ';' after return statement");
+  consume(TKind::SEMICOLON, "expected ';' after return statement");
   auto end = previous();
   return make_shared<ReturnStmt>(makeSpan(t, end), expr);
 }
@@ -203,7 +201,7 @@ Ptr Parser::valueTransferStmt() {
   Token t = peek();
   advance(); //<<처리
   Expr::Ptr expr = expression();
-  consume(TKind::SEMICOLON, "expect ';' after valueTransferOperator statement");
+  consume(TKind::SEMICOLON, "expected ';' after value transfer statement");
   auto end = previous();
   return make_shared<ValueTransferStmt>(makeSpan(t, end), expr);
 }
@@ -222,15 +220,16 @@ Ptr Parser::tryStmt() {
 Ptr Parser::catchStmt() {
   Token t = peek();
   advance(); // catch 처리
-  consume(TKind::LEFT_BRACE, "expect '(' after catch");
-  Token errorType = consume(TKind::IDENTIFIER, "expect error type after '('");
+  consume(TKind::LEFT_BRACE, "expected '(' after 'catch'");
+
+  Token errorType = consume(TKind::IDENTIFIER, "expected error type after '('");
   optional<string> name = nullopt;
   if (!check(TKind::RIGHT_BRACE))
     name =
-        consume(TKind::IDENTIFIER, "expect error identifier after error type")
+        consume(TKind::IDENTIFIER, "expected error identifier after error type")
             .text;
 
-  consume(TKind::RIGHT_BRACE, "expect ')' end of catch()");
+  consume(TKind::RIGHT_BRACE, "expected ')' after catch parameter");
   Ptr body = bodyStmt();
 
   TypeNode::Ptr type = typeNodeConvertor(errorType);
@@ -241,7 +240,7 @@ Ptr Parser::catchStmt() {
 Ptr Parser::onexitStmt() {
   Token t = peek();
   advance(); // onexit 처리
-  consume(TKind::LEFT_BRACE, "expect '{' after onexit");
+  consume(TKind::LEFT_BRACE, "expected '{' after 'onexit'");
   Ptr body = blockStmt();
   return make_shared<OnexitStmt>(makeSpan(t.span, body->span), body);
 }

@@ -1,215 +1,223 @@
 
+#include "IR/HIR/HIRHelper.h"
 #include "AST/Decl.h"
-#include "AST/Expr.h"
-#include "IR/HIR/HIRBuilder.h"
 #include "IR/HIR/HIRDecl.h"
-#include "IR/HIR/HIRExpr.h"
-#include "IR/HIR/HIRStmt.h"
-#include "IR/HIR/HIRSymbol.h"
+#include "IR/HIR/HIRProgram.h"
 #include "IR/HIR/HIRType.h"
-#include "SemanticAnalyzer/symbol/MethodSymbol.h"
-#include "SemanticAnalyzer/symbol/ValueSymbol.h"
-#include "SourceSpan.h"
+#include "SemanticAnalyzer/symbol/TypeSymbol.h"
 #include "util/Error.h"
-#include "util/Guard.h"
-#include <cassert>
-#include <memory>
 #include <utility>
-using std::unique_ptr;
 
-unique_ptr<HIRSelfExpr> HIRBuilder::lowerImplictSelf() {
-  assert(currentType);
+void HIRHelper::linkSecondPass(HIRProgram *program) {
+  for (auto &s : program->sources) {
+    for (auto &d : s->source->decls) {
+      if (auto *c = dynamic_cast<ClassDecl *>(d.get())) {
+        auto it = program->typeDeclMap.find(c->symbol);
+        if (it == program->typeDeclMap.end()) {
+          Error::internal(d->span, "fail to get type");
+        }
+        if (c->baseClass.has_value()) {
+          auto bIt = program->typeDeclMap.find(c->symbol->base);
+          if (bIt == program->typeDeclMap.end()) {
+            Error::internal(c->span, "fail to get baseType");
+          }
+          it->second->base = bIt->second;
+        }
+        for (auto &f : it->second->fieldMap) {
+          auto field = f.second;
+          field->type =
+              HIRHelper::lowerType(program, s.get(), field->symbol->typeSymbol);
+        }
+      }
 
-  auto type = currentType->type;
-  SourceSpan span;
-  return make_unique<HIRSelfExpr>(
-      span,
-      type->kind == HIRTypeKind::Struct ? HIRSelfKind::Self : HIRSelfKind::This,
-      type, type, type);
+      if (auto st = dynamic_cast<StructDecl *>(d.get())) {
+        auto it = program->typeDeclMap.find(st->symbol);
+        if (it == program->typeDeclMap.end()) {
+          Error::internal(st->span, "fail to get struct type");
+        }
+        for (auto &f : it->second->fieldMap) {
+          auto field = f.second;
+          field->type =
+              HIRHelper::lowerType(program, s.get(), field->symbol->typeSymbol);
+        }
+      }
+
+      if (auto e = dynamic_cast<EnumDecl *>(d.get())) {
+        auto it = program->typeDeclMap.find(e->symbol);
+        if (it == program->typeDeclMap.end()) {
+          Error::internal(e->span, "fail to get enum type");
+        }
+        for (auto &v : e->variants) {
+          HIRHelper::lowerEnumVariant(program, it->second, v.get());
+        }
+      }
+    }
+  }
 }
 
-HIRLocal *HIRBuilder::makeTemp(HIRType *type) {
-  auto local = make_unique<HIRLocal>();
-  local->id = allocLocalID();
-  local->type = type;
-  local->symbol = nullptr;
-  local->kind = HIRLocalKind::Temp;
-  local->isMutable = false;
-  local->isInitialized = false;
-  local->name = "";
-  auto raw = local.get();
+HIRType *HIRHelper::lowerType(HIRProgram *program, HIRSource *source,
+                              TypeSymbol *symbol) {
+  HIRType *type = HIRHelper::getOrCreateType(program, source, symbol);
 
-  currentMethod->locals.push_back(std::move(local));
+  if (type == nullptr) {
+    Error::internal("fail to get hir type");
+  }
+  return type;
+}
 
+HIRType *HIRHelper::getOrCreateType(HIRProgram *program, HIRSource *source,
+                                    TypeSymbol *symbol) {
+  if (symbol == nullptr) {
+    Error::internal("Typesymbol is nullptr");
+  }
+  auto it = program->typeCache.find(symbol);
+
+  if (it != program->typeCache.end()) {
+    return it->second;
+  } else {
+    unique_ptr<HIRType> hirType;
+    HIRType *type = nullptr;
+    const string &name = symbol->name;
+    switch (symbol->kind) {
+
+    case TypeSymbol::TypeKind::CLASS:
+      hirType = make_unique<HIREntityType>(name, symbol);
+      break;
+
+    case TypeSymbol::TypeKind::ENUM:
+      hirType = make_unique<HIREnumType>(name, symbol);
+      break;
+
+    case TypeSymbol::TypeKind::STRUCT:
+      hirType = make_unique<HIRStructType>(name, symbol);
+      break;
+    case TypeSymbol::TypeKind::VOID:
+      hirType = make_unique<HIRVoidType>();
+      break;
+
+    case TypeSymbol::TypeKind::HANDLE:
+      if (auto handle = dynamic_cast<GenericSymbol *>(symbol)) {
+        /*   hirType = make_unique<HIRHandleType>(
+              HIRHelper::lowerEntityType(program, handle->args[0]),
+              dynamic_cast<HandleSymbol *>(handle->origin)->storage);
+         */
+        auto hType = getOrCreateHandleType(
+            program, source,
+            HIRHelper::lowerEntityType(program, source, handle->args[0]),
+            dynamic_cast<HandleSymbol *>(handle->origin)->storage);
+        program->typeCache.emplace(symbol, hType);
+        return hType;
+      } else {
+        Error::internal("fail to cast handle symbol");
+      }
+      break;
+
+    case TypeSymbol::TypeKind::RESULT:
+      if (auto result = dynamic_cast<GenericSymbol *>(symbol)) {
+        auto error = HIRHelper::lowerType(program, source, result->args[1]);
+        if (error->kind != HIRTypeKind::Error) {
+          Error::internal("lowered type type is not error");
+        }
+        hirType = make_unique<HIRResultType>(
+            HIRHelper::lowerType(program, source, result->args[0]),
+            dynamic_cast<HIRErrorType *>(error));
+      } else {
+        Error::internal("fail to cast result symbol");
+      }
+      break;
+
+    case TypeSymbol::TypeKind::OPTION:
+      if (auto option = dynamic_cast<GenericSymbol *>(symbol)) {
+        hirType = make_unique<HIROptionType>(
+            HIRHelper::lowerType(program, source, option->args[0]));
+      } else {
+        Error::internal("fail to cast option symbol");
+      }
+      break;
+
+    case TypeSymbol::TypeKind::ERROR:
+      hirType = make_unique<HIRErrorType>();
+      break;
+    case TypeSymbol::TypeKind::ARRAY:
+      if (auto array = dynamic_cast<ArrayTypeSymbol *>(symbol)) {
+        hirType = make_unique<HIRArrayType>(
+            HIRHelper::lowerType(program, source, array->baseType),
+            array->sizeValue);
+      } else {
+        Error::internal("illegal symbol kind");
+      }
+      break;
+    default:
+      Error::internal("illegal type symbol kind");
+    }
+
+    if (hirType == nullptr) {
+      Error::internal("fail to make ptr");
+    }
+
+    type = hirType.get();
+    program->typeCache.emplace(symbol, type);
+    source->types.push_back(std::move(hirType));
+    return type;
+  }
+}
+HIREntityType *HIRHelper::lowerEntityType(HIRProgram *program,
+                                          HIRSource *source,
+                                          TypeSymbol *symbol) {
+  auto *type = HIRHelper::lowerType(program, source, symbol);
+
+  if (auto *entity = dynamic_cast<HIREntityType *>(type)) {
+    return entity;
+  }
+
+  Error::internal("not entity type");
+}
+
+HIRHandleType *HIRHelper::getOrCreateHandleType(HIRProgram *program,
+                                                HIRSource *source,
+                                                HIREntityType *entity,
+                                                StorageKind storage) {
+  auto it = program->handleCache.find(entity);
+  HIRHandleType *result = nullptr;
+  if (it == program->handleCache.end()) {
+    unique_ptr<HIRHandleType> handle =
+        make_unique<HIRHandleType>(entity, storage);
+    result = handle.get();
+    program->handleCache.emplace(entity, result);
+    source->handles.push_back(std::move(handle));
+
+  } else {
+    result = it->second;
+  }
+
+  if (result == nullptr) {
+    Error::internal("fail to get or create handle");
+  }
+
+  return result;
+}
+
+HIREnumVariant *HIRHelper::lowerEnumVariant(HIRProgram *program,
+                                            HIRTypeDecl *type,
+                                            EnumDecl::Variant *v) {
+  unique_ptr<HIREnumVariant> variant = make_unique<HIREnumVariant>();
+  variant->id = type->nextFieldId++;
+  variant->name = v->name;
+  variant->kind =
+      (v->payload ? HIREnumVariantKind::Payload : HIREnumVariantKind::Unit);
+  variant->symbol = v->symbol;
+  variant->owner = type;
+  if (v->payload) {
+    auto it = program->typeCache.find(v->payload.value()->resolved);
+    if (it == program->typeCache.end()) {
+      Error::internal("fail to find type in payload");
+    }
+    variant->payloadType = it->second;
+  }
+
+  auto raw = variant.get();
+
+  type->enumVariants.push_back(std::move(variant));
+  program->variantMap.emplace(raw->symbol, raw);
   return raw;
-}
-
-HIRLocal *HIRBuilder::lookUpLocal(ValueSymbol *symbol) {
-  assert(currentBlock);
-  auto it = currentBlock->localMap.find(symbol);
-  if (it == currentBlock->localMap.end()) {
-    return nullptr;
-  }
-  return it->second;
-}
-
-unique_ptr<HIRValueExpr> HIRBuilder::lowerValue(Expr *expr) {
-  exprResult = lowerExpr(expr);
-  unique_ptr<HIRValueExpr> rt = nullptr;
-  if (dynamic_cast<HIRValueExpr *>(exprResult.get())) {
-    rt = unique_ptr<HIRValueExpr>(
-        static_cast<HIRValueExpr *>(exprResult.release()));
-  } else if (dynamic_cast<HIRPlaceExpr *>(exprResult.get())) {
-    rt = load(unique_ptr<HIRPlaceExpr>(
-        static_cast<HIRPlaceExpr *>(exprResult.release())));
-  } else {
-    Error::internal("expect value or place type");
-  }
-  if (rt == nullptr) {
-    Error::internal(expr->span, "fail to get value");
-  }
-  return rt;
-}
-
-int HIRBuilder::allocLocalID() {
-  assert(currentMethod);
-  return currentMethod->nextLocalId++;
-}
-
-int HIRBuilder::allocMethodID() {
-  assert(currentType);
-  return currentType->nextMethodID++;
-}
-
-int HIRBuilder::allocParamID() {
-  if (currentMethod == nullptr) {
-    Error::internal("currentMethod is nullptr");
-  }
-  return currentMethod->nextParamID++;
-}
-
-int HIRBuilder::allocFieldID() {
-  assert(currentType);
-  return currentType->nextFieldId++;
-}
-
-int HIRBuilder::allocRootID() {
-  assert(program);
-  return program->nextRootId++;
-}
-
-void HIRBuilder::bindLocal(ValueSymbol *symbol, unique_ptr<HIRLocal> local) {
-  assert(currentBlock);
-  assert(currentMethod);
-  currentBlock->localMap.emplace(symbol, local.get());
-  currentMethod->locals.push_back(std::move(local));
-}
-
-void HIRBuilder::setDefaultInit(HIRTypeDecl *type) {
-  type->defaultInitBlock = make_unique<HIRBlockStmt>(type->span);
-  auto block = type->defaultInitBlock.get();
-  for (auto &f : type->defaultInit) {
-    auto ty = type->type;
-    auto span = f.second->span;
-    auto place = make_unique<HIRFieldPlaceExpr>(
-        span,
-        make_unique<HIRSelfExpr>(span,
-                                 ty->kind == HIRTypeKind::Struct
-                                     ? HIRSelfKind::Self
-                                     : HIRSelfKind::This,
-                                 ty, ty, ty),
-        f.first);
-    auto rhs = lowerValue(f.second);
-    auto assign =
-        make_unique<HIRAssignExpr>(span, std::move(place), std::move(rhs));
-    block->statements.push_back(
-        make_unique<HIRExprStmt>(span, std::move(assign)));
-  }
-}
-
-void HIRBuilder::bindMethod(FuncDecl *decl) {
-  auto it = program->typeDeclMap.find(decl->methodSymbol->onwer);
-  if (it == program->typeDeclMap.end()) {
-    Error::internal(decl->span, "fail to find method's owner type");
-  }
-  auto type = it->second;
-
-  HIRMethodDecl *method = nullptr;
-
-  if (decl->methodSymbol->isInit) {
-    auto iIt = type->initMap.find(decl->methodSymbol);
-    if (iIt == type->initMap.end()) {
-      Error::internal(decl->span, "fail to find init method");
-    }
-    method = iIt->second;
-
-  } else {
-    auto mIT = type->methodMap.find(decl->methodSymbol);
-    if (mIT == type->methodMap.end()) {
-      Error::internal(decl->span, "fail to find method");
-    }
-    method = mIT->second;
-  }
-
-  MethodGuard _(currentMethod, method);
-
-  method->body = lowerStmtAsBlock(decl->body.get());
-}
-
-void HIRBuilder::bindField(ValueSymbol *symbol, unique_ptr<HIRField> field) {
-
-  assert(currentType);
-  currentType->fieldMap.emplace(symbol, field.get());
-  currentType->fields.push_back(std::move(field));
-}
-
-pair<bool, HIRLocal *> HIRBuilder::lookupLocal(ValueSymbol *symbol) {
-
-  for (auto cb = currentBlock; cb != nullptr; cb = cb->parent) {
-    auto it = cb->localMap.find(symbol);
-    bool b = it != cb->localMap.end();
-    if (b) {
-      return {b, it->second};
-    }
-  }
-  return {false, nullptr};
-}
-
-pair<bool, HIRParam *> HIRBuilder::lookupParam(ValueSymbol *symbol) {
-  auto it = currentMethod->paramMap.find(symbol);
-  bool b = it != currentMethod->paramMap.end();
-  return {b, b ? it->second : nullptr};
-}
-
-pair<bool, HIRField *> HIRBuilder::lookupField(ValueSymbol *symbol) {
-  auto it = currentType->fieldMap.find(symbol);
-  bool b = it != currentType->fieldMap.end();
-  return {b, b ? it->second : nullptr};
-}
-
-pair<bool, HIRField *> HIRBuilder::lookupField(HIRTypeDecl *type,
-                                               ValueSymbol *symbol) {
-  auto it = type->fieldMap.find(symbol);
-  bool b = it != type->fieldMap.end();
-  return {b, b ? it->second : nullptr};
-}
-
-bool HIRBuilder::isTypeReceiver(Expr *expr) {
-  if (auto name = dynamic_cast<NameExpr *>(expr)) {
-    return name->resolved->type == Symbol::SymbolType::TYPE;
-  }
-  return false;
-}
-
-pair<bool, HIREnumVariant *>
-HIRBuilder::lookupVariant(EnumVariantSymbol *symbol) {
-  auto it = program->variantMap.find(symbol);
-  return {it != program->variantMap.end(), it->second};
-}
-
-pair<bool, HIRMethodDecl *> HIRBuilder::lookupMethod(HIRTypeDecl *type,
-                                                     MethodSymbol *symbol) {
-  auto it = type->methodMap.find(symbol);
-  bool b = it != type->methodMap.end();
-  return {b, b ? it->second : nullptr};
 }

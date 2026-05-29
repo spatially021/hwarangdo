@@ -5,6 +5,7 @@
 #include "Debugger/ParserDebugger.h"
 #include "Debugger/ResolverDebugger.h"
 #include "IR/HIR/HIRBuilder.h"
+#include "IR/HIR/HIRHelper.h"
 #include "IR/HIR/HIRLinker.h"
 #include "IR/HIR/HIRProgram.h"
 #include "IR/HIR/HIRVerifier.h"
@@ -384,19 +385,16 @@ int main(int argc, char *argv[]) {
     cout << "=========================" << endl;
   }
 
-  Verifier verifier;
+  Verifier verifier(program.get());
 
   try {
-    for (auto &s : program->sources) {
-      for (auto &a : s->decls) {
-        a->accept(&verifier);
-      }
-    }
+    verifier.verify();
   } catch (std::runtime_error &e) {
     cout << Color::RED << "error occur while verifying\n"
          << Color::RESET << e.what() << "\n";
     return -1;
   }
+
   SourceSpan span;
   span.path = "[program]";
   span.lineStart = 0;
@@ -409,8 +407,9 @@ int main(int argc, char *argv[]) {
       HIRLinker linker(hirProgram.get(), s.get(), &analyzer.symbolTable);
       hirProgram->sources.push_back(linker.link());
     }
-    hirProgram->linkRoot();
-    hirProgram->linkSecondPass();
+
+    HIRHelper::linkRoot(hirProgram.get());
+    HIRHelper::linkSecondPass(hirProgram.get());
     for (auto &s : hirProgram->sources) {
       HIRBuilder builder(&analyzer.symbolTable, hirProgram.get(), s.get());
       builder.build();

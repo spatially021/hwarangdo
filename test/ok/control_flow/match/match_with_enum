@@ -1,0 +1,30 @@
+class Main{
+    
+    frame void update(){
+
+    }
+
+    public init(){
+
+        E e=E.a;
+        int b=match(e){
+            case a=>{
+                <<1;
+            }
+
+            case b=>{
+                <<2;
+            }
+
+            case c=>{
+                <<3;
+            }
+        };
+    }
+
+}
+
+
+enum E{
+    a,b,c,
+}

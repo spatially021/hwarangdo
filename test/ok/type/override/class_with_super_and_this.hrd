@@ -1,0 +1,23 @@
+class Main{
+    
+    frame void update(){
+
+    }
+
+    public init(){
+
+    }
+
+}
+
+class Entity{
+    int a=1;
+}
+
+class Player extends Entity{
+    int a=2;
+    public init(){
+        super.a=1;
+        this.a=2;
+    }
+}

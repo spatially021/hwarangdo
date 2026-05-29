@@ -88,6 +88,8 @@ void ParserDebugger::visit(DestroyExpr *expr) {
   cout << ")";
 }
 
+void ParserDebugger::visit(QuitExpr *) { cout << "world.quit()"; }
+
 void ParserDebugger::visit(DefaultValueExpr *) { cout << "_"; }
 void ParserDebugger::visit(Range *expr) {
   expr->from->accept(this);

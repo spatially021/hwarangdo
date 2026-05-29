@@ -253,6 +253,7 @@ pair<bool, CastingFailKind> Resolver::canImplicitlyConvert(TypeSymbol *from,
 
   return {false, CastingFailKind::Unmatched};
 }
+
 const static llvm::fltSemantics &getFloatSemantics(FloatType *type) {
 
   switch (type->bitWidth) {

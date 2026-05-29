@@ -2,8 +2,49 @@
 #include "AST/Decl.h"
 #include "AST/Expr.h"
 #include "AST/Stmt.h"
+#include "SemanticAnalyzer/symbol//TypeSymbol.h"
+#include "enums/InheritState.h"
 #include "util/Error.h"
 #include <cerrno>
+
+void Verifier::verify() {
+  InheritState i = InheritState::Unvisited;
+  for (auto &s : program->sources) {
+    for (auto &d : s->decls) {
+      if (auto c = dynamic_cast<ClassDecl *>(d.get())) {
+        inheritStates.emplace(c, i);
+      }
+      d->accept(this);
+    }
+  }
+
+  for (auto &d : inheritStates) {
+    if (d.second == InheritState::Unvisited) {
+      verifyCycledInherit(d.first);
+    }
+  }
+}
+
+void Verifier::verifyCycledInherit(ClassDecl *decl) {
+  if (inheritStates[decl] == InheritState::Done)
+    return;
+
+  if (inheritStates[decl] == InheritState::Visiting) {
+    Error::diagnostic(decl->span, "cyclic inheritance detected");
+  }
+
+  inheritStates[decl] = InheritState::Visiting;
+
+  if (decl->baseClass.has_value()) {
+    if (auto c = dynamic_cast<ClassDecl *>(decl->symbol->base->decl)) {
+      verifyCycledInherit(c);
+    } else {
+      Error::diagnostic(decl->span, "parent is not class Type");
+    }
+  }
+
+  inheritStates[decl] = InheritState::Done;
+}
 
 void Verifier::visit(LiteralExpr *expr) {
   if (expr->resolvedType == nullptr)
@@ -113,6 +154,8 @@ void Verifier::visit(DestroyExpr *expr) {
     unresolved(expr, "destroyExpr is unresolved");
   }
 }
+
+void Verifier::visit(QuitExpr *) {}
 void Verifier::visit(DefaultValueExpr *) {}
 void Verifier::visit(Range *expr) {
   expr->from->accept(this);
@@ -217,13 +260,24 @@ void Verifier::visit(EnumDecl *decl) {
   if (decl->symbol == nullptr)
     unresolved(decl, "EnumDecl is unresolved");
 }
-void Verifier::visit(ImplDecl *) {}
-void Verifier::visit(TraitDecl *) {}
+void Verifier::visit(ImplDecl *decl) {
+  for (auto &m : decl->LinkedImplMethods) {
+    m->accept(this);
+  }
+}
+void Verifier::visit(TraitDecl *decl) {
+  for (auto &s : decl->traitSigs) {
+    s->accept(this);
+  }
+}
 void Verifier::visit(TraitSig *sig) {
   if (sig->symbol == nullptr)
     unresolved(sig, "trait signiture is unresolved");
   for (auto &p : sig->params) {
     p->accept(this);
+  }
+  if (sig->symbol->returnType == nullptr) {
+    unresolved(sig, "trait signiture's returnType is unresolved");
   }
 }
 void Verifier::visit(FuncDecl *decl) {

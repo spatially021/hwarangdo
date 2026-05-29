@@ -3,7 +3,9 @@
 #include "SemanticAnalyzer/Scope.h"
 #include "SemanticAnalyzer/symbol/StorageSymbol.h"
 #include "SemanticAnalyzer/symbol/TypeSymbol.h"
+#include "SourceSpan.h"
 #include "Symbol.h"
+#include "enums/AccessModifier.h"
 #include <variant>
 
 class ValueSymbol : public Symbol {
@@ -20,6 +22,9 @@ public:
   TypeSymbol *typeSymbol = nullptr;
   std::variant<Scope *, TypeSymbol *, StorageSymbol *> owner;
   bool isRoot = false;
+  AModifier modifier = AModifier::PUBLIC;
+  bool isPayload = false;
+  SourceSpan nameSpan;
 
 protected:
   void _anchor() override {};

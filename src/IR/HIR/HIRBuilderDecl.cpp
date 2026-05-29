@@ -1,7 +1,7 @@
 #include "AST/Decl.h"
 #include "IR/HIR/HIRBuilder.h"
-#include "IR/HIR/HIRDecl.h"
 #include "IR/HIR/HIRExpr.h"
+#include "IR/HIR/HIRHelper.h"
 #include "IR/HIR/HIRSymbol.h"
 #include "util/Error.h"
 #include <cassert>
@@ -14,7 +14,7 @@ HIRLocal *HIRBuilder::lowerLocal(VarDecl *decl) {
   local->name = decl->name;
   local->isInitialized = (decl->init != nullptr);
   local->isMutable = decl->isMutable;
-  auto type = lowerType(decl->symbol->typeSymbol);
+  auto type = HIRHelper::lowerType(program, source, decl->symbol->typeSymbol);
   if (type == nullptr) {
     Error::internal("type is nullptr");
   }
@@ -30,7 +30,7 @@ unique_ptr<HIRParam> HIRBuilder::lowerParam(Param *decl) {
   param->symbol = decl->symbol;
   param->name = decl->symbol->name;
   param->id = allocParamID();
-  param->type = lowerType(decl->symbol->typeSymbol);
+  param->type = HIRHelper::lowerType(program, source, decl->symbol->typeSymbol);
   if (decl->defaultValue.has_value()) {
     param->defaultValue = lowerExpr(decl->defaultValue.value().get());
   }
@@ -43,7 +43,7 @@ HIRField *HIRBuilder::lowerField(VarDecl *decl) {
   field->name = decl->name;
   field->isInitialized = (decl->init != nullptr);
   field->isMutable = decl->isMutable;
-  auto type = lowerType(decl->symbol->typeSymbol);
+  auto type = HIRHelper::lowerType(program, source, decl->symbol->typeSymbol);
   if (type == nullptr) {
     Error::internal("type is nullptr");
   }
@@ -52,22 +52,4 @@ HIRField *HIRBuilder::lowerField(VarDecl *decl) {
   auto raw = field.get();
   bindField(decl->symbol, std::move(field));
   return raw;
-}
-
-unique_ptr<HIREnumVariant> HIRBuilder::lowerEnumVariant(EnumDecl::Variant *v) {
-  unique_ptr<HIREnumVariant> variant = make_unique<HIREnumVariant>();
-  variant->id = allocLocalID();
-  variant->name = v->name;
-  variant->kind =
-      (v->payload ? HIREnumVariantKind::Payload : HIREnumVariantKind::Unit);
-  variant->symbol = v->symbol;
-  variant->owner = currentType;
-  if (v->payload) {
-    auto it = program->typeDeclMap.find(v->payload->get()->resolved);
-    if (it == program->typeDeclMap.end()) {
-      Error::internal("fail to find type");
-    }
-    variant->payloadType = it->second->type;
-  }
-  return variant;
 }

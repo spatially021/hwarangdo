@@ -1,8 +1,8 @@
 #include "Lexer.h"
 #include "AST/TokenStream.h"
 #include "Token.h"
+#include "util/Error.h"
 #include <cctype>
-#include <stdexcept>
 #include <string>
 #include <sys/types.h>
 #include <vector>
@@ -318,7 +318,9 @@ Token Lexer::scan() {
       str.push_back(temp);
     }
     if (peek() == '\0') {
-      throw runtime_error("Unterminated string literal");
+      get();
+      Error::diagnostic({path, tempL, tempC, line, col},
+                        "unterminated string literal");
     }
     get(); // closing "
     return {TKind::LIT_STRING, str, {path, tempL, tempC, line, col}};
@@ -332,14 +334,16 @@ Token Lexer::scan() {
     if (val == '\\') { // escape
       char esc = get();
       if (!isEscapeChar(esc)) {
-        throw runtime_error("Invalid escape sequence in char literal");
+        Error::diagnostic({path, tempL, tempC, line, col},
+                          "invalid escape sequence in character literal");
       }
       ch = string("\\") + esc;
     } else {
       ch = string(1, val);
     }
     if (peek() != '\'') {
-      throw runtime_error("Unterminated character literal");
+      Error::diagnostic({path, tempL, tempC, line, col},
+                        "unterminated character literal");
     }
     get(); // closing '
     return {TKind::LIT_CHARACTER, ch, {path, tempL, tempC, line, col}};
@@ -381,8 +385,8 @@ Token Lexer::scan() {
   }
 
   // 알 수 없는 토큰
-  throw runtime_error("Unexpected character '" + string(1, c) + "' at line " +
-                      to_string(line) + ", col " + to_string(col));
+  Error::diagnostic({path, tempL, tempC, line, col},
+                    "unexpected character '" + string(1, c) + "'");
 }
 
 bool Lexer::isEscapeChar(char c) {

@@ -1,0 +1,16 @@
+class Main{
+    frame void update(){
+
+    }
+    public init(){
+        Handle<C> h1=world.spawn C();
+        Handle<C> h2=world.spawn C();
+        C c=world.view(h1);
+        c=world.view(h2);
+
+    }
+}
+
+class C{
+
+}

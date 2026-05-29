@@ -64,6 +64,7 @@ void Linker::visit(DestroyExpr *expr) {
   expr->storage->accept(this);
   expr->target->accept(this);
 }
+void Linker::visit(QuitExpr *) {}
 void Linker::visit(DefaultValueExpr *) {}
 void Linker::visit(Range *) {}
 void Linker::visit(CaseValueExpr *expr) {
@@ -95,6 +96,7 @@ void Linker::visit(ForStmt *stmt) {
 }
 void Linker::visit(WhileStmt *stmt) { stmt->body->accept(this); }
 void Linker::visit(SwitchStmt *stmt) {
+  ScopeGuard _(*table, stmt->blockScope);
   for (auto &c : stmt->clauses) {
     c->accept(this);
   }
@@ -118,11 +120,10 @@ void Linker::visit(ClassDecl *decl) {
     auto symbol = static_cast<MainSymbol *>(decl->symbol);
     auto &bucket = symbol->memberScope->methodMap["update"];
     if (bucket.size() == 0) {
-      Error::diagnostic(decl->span, "has no update method");
+      Error::diagnostic(decl->span, "missing required 'update' method");
     } else if (bucket.size() > 1) {
-      Error::diagnostic(decl->span, "not allowed update method overloading");
+      Error::diagnostic(decl->span, "'update' methods cannot be overloaded");
     }
-
     symbol->main = bucket[0];
   }
 
@@ -132,11 +133,11 @@ void Linker::visit(ClassDecl *decl) {
       auto symbol = table->getType(s);
       symbol->decl->isExtended = true;
       if (symbol->kind != TypeSymbol::TypeKind::CLASS) {
-        Error::diagnostic(decl->span, s + " is not class");
+        Error::diagnostic(decl->span, "'" + s + "' is not a class type");
       }
       decl->symbol->base = symbol;
     } else {
-      Error::diagnostic(decl->span, "unknown parent class '" + s + "'");
+      Error::diagnostic(decl->span, "unknown base class '" + s + "'");
     }
   }
   for (auto &t : decl->traits) {
@@ -145,7 +146,7 @@ void Linker::visit(ClassDecl *decl) {
     }
     auto symbol = table->getType(t);
     if (symbol->kind != TypeSymbol::TypeKind::TRAIT) {
-      Error::diagnostic(decl->span, t + " is not trait");
+      Error::diagnostic(decl->span, "'" + t + "' is not a trait type");
     }
     decl->symbol->traits.push_back(symbol);
   }
@@ -160,19 +161,6 @@ void Linker::visit(ClassDecl *decl) {
   }
   for (auto &a : decl->innerDecl) {
     a->accept(this);
-  }
-
-  for (auto &t : decl->symbol->traits) {
-    auto trait = dynamic_cast<TraitDecl *>(t->decl);
-    if (!trait) {
-      Error::internal(decl->span, "unmatched decl subClass : " + t->decl->name);
-    }
-    for (auto &s : trait->traitSigs) {
-      auto &bucket = t->traitSigs[s->name];
-      if (!Helper::hasSameSig(bucket, s.get())) {
-        Error::diagnostic(s->span, "undeclared trait sig : " + s->name);
-      }
-    }
   }
 }
 
@@ -191,8 +179,12 @@ void Linker::visit(EnumDecl *decl) {
     if (v->payload.has_value()) {
       auto t = v->payload.value().get();
       auto s = table->getType(t);
-      if (!s)
-        Error::diagnostic(t->span, "unknown type : " + t->type);
+      if (s == nullptr)
+        Error::diagnostic(t->span, "unknown type '" + t->type + "'");
+      if (s->kind == TypeSymbol::TypeKind::CLASS) {
+        Error::diagnostic(
+            t->span, "entity types are not allowed in enum variant payloads");
+      }
       t->resolved = s;
       decl->symbol->variantMap[v->name]->payloadType = table->getType(t);
     }
@@ -207,11 +199,24 @@ void Linker::visit(ImplDecl *decl) {
   string s = decl->target;
 
   if (!table->isType(s)) {
-    Error::diagnostic(decl->span, "unknown impl target");
+    Error::diagnostic(decl->span, "unknown impl target type");
   }
   auto symbol = table->getType(s);
   if (symbol->kind != TypeSymbol::TypeKind::STRUCT) {
-    Error::diagnostic(decl->span, s + " is not struct");
+    Error::diagnostic(decl->span, "impl target must be a struct type");
+  }
+
+  for (auto &c : decl->traits) {
+    auto t = table->getType(c);
+    if (t->kind != TypeSymbol::TypeKind::TRAIT) {
+      Error::diagnostic(decl->span, "impl trait target must be a trait type");
+    }
+    symbol->traits.push_back(t);
+    for (auto &it : t->memberScope->methodMap) {
+      for (auto sig : it.second) {
+        decl->sigs.push_back(sig);
+      }
+    }
   }
 
   TypeContextGuard __(currentType, symbol);
@@ -226,15 +231,16 @@ void Linker::visit(ImplDecl *decl) {
   }
 
   for (auto &a : decl->LinkedImplMethods) {
-    a->accept(this);
-
     MethodSymbol *methodSymbol = a->methodSymbol;
     if (methodSymbol == nullptr) {
       Error::internal(a->span, "not built methodSymbol : " + a->name);
     }
     if (!symbol->addMethod(methodSymbol)) {
-      Error::diagnostic(a->span, "duplicated impl method");
+      Error::diagnostic(a->span, "duplicate impl method declaration");
     }
+
+    a->accept(this);
+
     methodSymbol->onwer = symbol;
     methodSymbol->selfScope = symbol->memberScope;
   }
@@ -260,26 +266,16 @@ void Linker::visit(FuncDecl *decl) {
     decl->methodSymbol->paramTypes.push_back(p->type->resolved);
   }
 
-  if (decl->isOverride) {
-    if (currentType->base->memberScope->methodMap.find(decl->name) ==
-        currentType->base->memberScope->methodMap.end()) {
-      Error::diagnostic(decl->span, "unkwown override target : " + decl->name);
-    }
+  auto it = currentType->memberScope->methodMap.find(decl->methodSymbol->name);
+  if (it == currentType->memberScope->methodMap.end()) {
+    Error::internal(decl->span, "fail to find method map");
   }
 
-  if (decl->isFrame) {
-    if (!dynamic_cast<MainSymbol *>(currentType)) {
-      Error::diagnostic(decl->span, "frame can only in Main class");
-    }
-    if (decl->name != "update") {
-      Error::diagnostic(decl->span, "after frame need method name - update");
-    }
-  }
-
-  auto &bucket = table->current->methodMap[decl->methodSymbol->name];
+  auto &bucket = it->second;
   auto raw = decl->methodSymbol;
-  if (Helper::hasSameSig(bucket, raw)) {
-    Error::diagnostic(decl->span, "duplicated method");
+  if (Helper::hasSameMethodSig(bucket, raw)) {
+    Error::diagnostic(decl->span,
+                      "duplicate method declaration '" + decl->name + "'");
   }
 
   decl->body->accept(this);
@@ -299,6 +295,7 @@ void Linker::visit(TraitSig *sig) {
     p->accept(this);
   }
   sig->type->accept(this);
+  sig->symbol->returnType = sig->type->resolved;
 }
 void Linker::visit(Param *param) {
   param->type->accept(this);

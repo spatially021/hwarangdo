@@ -30,7 +30,7 @@ struct HIRTypeDecl : HIRDecl {
   HIRTypeDeclKind typeDeclKind;
   std::string name;
   HIRType *type = nullptr;
-  HIRType *base = nullptr;
+  HIRTypeDecl *base = nullptr;
 
   int nextFieldId = 0;
   int nextMethodID = 0;
@@ -46,7 +46,6 @@ struct HIRTypeDecl : HIRDecl {
   std::unique_ptr<HIRBlockStmt> defaultInitBlock = nullptr;
   // enum 전용
   std::vector<std::unique_ptr<HIREnumVariant>> enumVariants;
-  std::unordered_map<EnumVariantSymbol *, HIREnumVariant *> enumVariantMap;
 
   HIRTypeDecl(SourceSpan s, HIRTypeDeclKind dk, std::string n, HIRType *ty)
       : HIRDecl(s, HIRNodeKind::TypeDecl), typeDeclKind(dk), name(std::move(n)),

@@ -27,6 +27,7 @@ enum class HIRNodeKind {
   OnExitStmt,
   ValueTransferStmt,
   DestroyStmt,
+  QuitStmt,
 
   // expr
   LiteralExpr,
@@ -60,7 +61,8 @@ enum class HIRNodeKind {
   // pattern
   LiteralPattern,
   EnumPattern,
-  WildcardPattern,
+  CasePattern,
+  WildcardValue,
 };
 
 struct HIRNode {

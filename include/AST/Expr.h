@@ -1,5 +1,6 @@
 #pragma once
 
+#include "AST/CaseKey.h"
 #include "ASTNode.h"
 #include "SemanticAnalyzer/ResolvedLit.h"
 #include "SourceSpan.h"
@@ -9,6 +10,7 @@
 #include "util/Error.h"
 #include <memory>
 #include <string>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -350,24 +352,28 @@ public:
     return make_shared<MatchExpr>(span, value ? value->deepCopy() : nullptr,
                                   std::move(copiedCases));
   }
+  unordered_set<CaseKey, CaseKeyHash> caseKeys;
+  std::unordered_set<EnumVariantSymbol *> usedVariants;
+
+  bool hasDefault = false;
 };
 
-class EnumVariantExpr : public Expr {
-public:
-  string name;
-  Expr::Ptr receiver;
-  Expr::Ptr payload;
-  EnumVariantExpr(SourceSpan t, string const &n, Expr::Ptr r, Expr::Ptr p)
-      : Expr(NKind::ENUM_VARIANT_EXPR, t), name(n), receiver(std::move(r)),
-        payload(std::move(p)) {}
-  void accept(ASTVisitor *visitor) override { visitor->visit(this); }
+// class EnumVariantExpr : public Expr {
+// public:
+//   string name;
+//   Expr::Ptr receiver;
+//   Expr::Ptr payload;
+//   EnumVariantExpr(SourceSpan t, string const &n, Expr::Ptr r, Expr::Ptr p)
+//       : Expr(NKind::ENUM_VARIANT_EXPR, t), name(n), receiver(std::move(r)),
+//         payload(std::move(p)) {}
+//   void accept(ASTVisitor *visitor) override { visitor->visit(this); }
 
-  Ptr deepCopy() const override {
-    return make_shared<EnumVariantExpr>(
-        span, name, receiver ? receiver->deepCopy() : nullptr,
-        payload ? payload->deepCopy() : nullptr);
-  }
-};
+//   Ptr deepCopy() const override {
+//     return make_shared<EnumVariantExpr>(
+//         span, name, receiver ? receiver->deepCopy() : nullptr,
+//         payload ? payload->deepCopy() : nullptr);
+//   }
+// };
 
 class Range : public Expr {
 public:
@@ -471,6 +477,13 @@ public:
   }
 };
 
+class QuitExpr : public Expr {
+public:
+  QuitExpr(SourceSpan s) : Expr(NKind::QUIT_EXPR, s) {}
+  Ptr deepCopy() const override { return make_shared<QuitExpr>(span); }
+  void accept(ASTVisitor *visitor) override { visitor->visit(this); }
+};
+
 class DefaultValueExpr : public Expr {
 public:
   DefaultValueExpr(SourceSpan t) : Expr(NKind::DEFUALT_VALUE_EXPR, t) {}
@@ -491,6 +504,9 @@ public:
   Ptr deepCopy() const override {
     return make_shared<CaseValueExpr>(span, value, arg);
   }
-  ValueSymbol *variant = nullptr;
+  EnumVariantSymbol *variant = nullptr;
   TypeSymbol *payloadType = nullptr;
+  ValueSymbol *payload = nullptr;
+
+  bool isWildCard = false;
 };

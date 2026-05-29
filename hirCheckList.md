@@ -82,107 +82,107 @@
 - [x] init 반환 타입 명시 오류
 - [x] init에서 field 초기화 검증
 - [x] impl 메서드 호출
-- [ ] impl 내부 self
-- [ ] impl 내부 암묵적 field 접근
-- [ ] local이 field 이름을 가리는 케이스
-- [ ] class에 impl 금지
-- [ ] trait 대상 impl
+- [x] impl 내부 self
+- [x] impl 내부 암묵적 field 접근
+- [x] local이 field 이름을 가리는 케이스
+- [x] class에 impl 금지
+- [x] trait 대상 impl
 
 # class / entity / handle / observer
-- [ ] class 직접 생성 금지
-- [ ] world.spawn T(...)
-- [ ] spawn 결과 Handle<T>
-- [ ] spawn 대상이 struct일 때 오류
-- [ ] world.view(handle)
-- [ ] view 결과 관찰자 T
-- [ ] 관찰자 field 접근
-- [ ] 관찰자 메서드 호출
-- [ ] handle 직접 field 접근 오류
-- [ ] 관찰자 메서드 외부 선언 오류
-- [ ] 관찰자 선언 시 view 초기화 강제
-- [ ] 관찰자 복사/대입 오류
-- [ ] world.destroy(handle)
-- [ ] destroy 결과값 없음
-- [ ] destroy를 식으로 사용한 오류
+- [x] class 직접 생성 금지
+- [x] world.spawn T(...)
+- [x] spawn 결과 Handle<T>
+- [x] spawn 대상이 struct일 때 오류
+- [x] world.view(handle)
+- [x] view 결과 관찰자 T
+- [x] 관찰자 field 접근
+- [x] 관찰자 메서드 호출
+- [x] handle 직접 field 접근 오류
+- [x] 관찰자 메서드 외부 선언 오류
+- [x] 관찰자 선언 시 view 초기화 강제
+- [x] 관찰자 복사/대입 오류
+- [x] world.destroy(handle)
+- [x] destroy 결과값 없음
+- [x] destroy를 식으로 사용한 오류
 
 # 제어문
-- [ ] if 단일문 body
-- [ ] if block body
-- [ ] if 조건 bool 검증
-- [ ] while 조건 bool 검증
-- [ ] while 내부 break
-- [ ] while 내부 continue
-- [ ] loop 밖 break 오류
-- [ ] loop 밖 continue 오류
-- [ ] 중첩 loop에서 break/continue
-- [ ] for range start..end
-- [ ] for range by
-- [ ] for 조건/범위 타입 오류
+- [x] if 단일문 body
+- [x] if block body
+- [x] if 조건 bool 검증
+- [x] while 조건 bool 검증
+- [x] while 내부 break
+- [x] while 내부 continue
+- [x] loop 밖 break 오류
+- [x] loop 밖 continue 오류
+- [x] 중첩 loop에서 break/continue
+- [x] for range start..end
+- [x] for range by
+- [ ] for 조건/범위 타입 오류 -> 타입에 따른 기본 by 값 미정으로 인한 검증 불가
 
 # switch / match / enum
-- [ ] enum unit variant
-- [ ] enum payload variant
-- [ ] enum variant 중복 오류
-- [ ] enum payload에 entity 타입 금지
-- [ ] variant 호출
-- [ ] switch case literal
-- [ ] switch case enum variant
-- [ ] switch default 마지막 강제
-- [ ] switch 중복 case 오류
-- [ ] switch fallthrough 없음
-- [ ] switch 내부 break/continue 금지
-- [ ] match expression
-- [ ] match << expr;
-- [ ] match wildcard _
-- [ ] match _ 마지막 강제
-- [ ] match default 금지
-- [ ] match 다중 selector 금지
-- [ ] match 중복 case 오류
-- [ ] match 결과 타입 통일
-- [ ] match exhaustiveness 검사
+- [x] enum unit variant
+- [x] enum payload variant
+- [x] enum variant 중복 오류
+- [x] enum payload에 entity 타입 금지
+- [x] variant 호출
+- [x] switch case literal
+- [x] switch case enum variant
+- [x] switch default 위치 마지막 강제
+- [x] switch 중복 case 오류
+- [x] switch 일부 variant 누락시 default 강제
+- [x] switch fallthrough 없음
+- [x] switch 내부 break/continue 금지
+- [x] match expression
+- [x] match << expr;
+- [x] match wildcard _
+- [x] match _ 위치 마지막 강제
+- [x] match default 금지
+- [x] match 다중 selector 금지
+- [x] match 중복 case 오류
+- [x] match 결과 타입 통일
+- [x] match exhaustiveness 검사
 
 # 배열
-- [ ] 고정 배열 선언
-- [ ] 배열 크기 int literal
-- [ ] 음수 크기 오류
-- [ ] 비정수 크기 오류
-- [ ] 배열 접근
-- [ ] index int 검증
-- [ ] array access read
-- [ ] array access write
-- [ ] array element 초기화 검증
-- [ ] array access의 결과 타입이 element type인지 확인
+- [x] 고정 배열 선언
+- [x] 배열 크기 int literal
+- [x] 음수 크기 오류
+- [x] 비정수 크기 오류
+- [x] 배열 접근
+- [x] index int 검증
+- [x] array access read
+- [x] array access write
+- [x] array element 초기화 검증
+- [x] array access의 결과 타입이 element type인지 확인
 
 # 상속 / 접근 / override
-- [ ] class extends
-- [ ] super 접근
-- [ ] this 접근
-- [ ] this를 class 메서드 외부에서 사용 오류
-- [ ] super를 상속 없는 class에서 사용 오류
-- [ ] private 접근 제한
-- [ ] protected 접근 제한
-- [ ] override 성공
-- [ ] override 누락 오류
-- [ ] 존재하지 않는 메서드 override 오류
+- [x] class extends
+- [x] super 접근
+- [x] this 접근
+- [x] this를 class 메서드 외부에서 사용 오류
+- [x] super를 상속 없는 class에서 사용 오류
+- [x] private 접근 제한
+- [x] protected 접근 제한
+- [x] override 성공
+- [x] override 누락 오류
+- [x] 존재하지 않는 메서드 override 오류
 
 # trait
-- [ ] trait 선언
-- [ ] trait 내부 field 금지
-- [ ] trait 내부 구현 body 금지
-- [ ] struct가 impl로 trait 구현
-- [ ] class가 선언부에서 trait 구현
-- [ ] trait 중복 구현 오류
-- [ ] trait impl 내부 일반 메서드 금지
-- [ ] 계약 메서드 누락 오류
+- [x] trait 선언
+- [x] trait 내부 field 금지
+- [x] trait 내부 구현 body 금지
+- [x] struct가 impl로 trait 구현
+- [x] class가 선언부에서 trait 구현
+- [x] trait 중복 구현 오류
+- [x] trait impl 내부 일반 메서드 금지
+- [x] 계약 메서드 누락 오류
 
 # 에러 회복 / 파서 안정성
-- [ ] 선언 위치에 호출문이 온 경우
-- [ ] init(1); 같은 직접 호출 오류
-- [ ] 괄호 누락
-- [ ] 중괄호 누락
-- [ ] 세미콜론 누락
-- [ ] 잘못된 modifier 조합
-- [ ] 잘못된 타입 위치 표현식
-- [ ] 잘못된 식 위치 타입명
-- [ ] parser가 죽지 않고 diagnostic 출력하는지
-
+- [x] 선언 위치에 호출문이 온 경우
+- [x] init(1); 같은 직접 호출 오류
+- [x] 괄호 누락
+- [x] 중괄호 누락
+- [x] 세미콜론 누락
+- [x] 잘못된 modifier 조합
+- [x] 잘못된 타입 위치 표현식
+- [x] 잘못된 식 위치 타입명
+- [x] parser가 죽지 않고 diagnostic 출력하는지

@@ -3,6 +3,8 @@
 #include "AST/Stmt.h"
 #include "IR/HIR/HIRBuilder.h"
 #include "IR/HIR/HIRExpr.h"
+#include "IR/HIR/HIRHelper.h"
+#include "IR/HIR/HIRProgram.h"
 #include "IR/HIR/HIRStmt.h"
 #include "IR/HIR/HIRSymbol.h"
 #include "IR/HIR/HIRType.h"
@@ -13,25 +15,15 @@
 #include "util/Guard.h"
 #include <memory>
 #include <utility>
-#include <vector>
 
 using std::unique_ptr;
 
-void HIRBuilder::visit(LiteralExpr *expr) {
-  if (!expr->resolvedType) {
-    Error::internal(expr->span, "literal has no resolved type");
-  }
-
-  auto *ty = lowerType(expr->resolvedType);
-
-  exprResult =
-      std::make_unique<HIRLiteralExpr>(expr->span, ty, expr->resolvedLit);
-}
+void HIRBuilder::visit(LiteralExpr *expr) { exprResult = lowerLiteral(expr); }
 
 void HIRBuilder::visit(BinaryExpr *expr) {
   auto left = lowerValue(expr->left.get());
   auto right = lowerValue(expr->right.get());
-  auto type = lowerType(expr->resolvedType);
+  auto type = HIRHelper::lowerType(program, source, expr->resolvedType);
   if (left == nullptr) {
     Error::internal(expr->left->span, "expr's left hir is nullptr");
   }
@@ -76,7 +68,8 @@ void HIRBuilder::visit(NameExpr *expr) {
 void HIRBuilder::visit(UnaryExpr *expr) {
   auto operand = lowerExpr(expr->right.get());
   exprResult = make_unique<HIRUnaryExpr>(
-      expr->span, lowerType(expr->resolvedType), expr->op, std::move(operand));
+      expr->span, HIRHelper::lowerType(program, source, expr->resolvedType),
+      expr->op, std::move(operand));
 }
 
 void HIRBuilder::visit(CallExpr *expr) {
@@ -139,7 +132,7 @@ void HIRBuilder::visit(SuperExpr *expr) {
     Error::internal(expr->span, "current Type has no parant type");
   }
   exprResult = make_unique<HIRSelfExpr>(expr->span, HIRSelfKind::This, type,
-                                        type, currentType->base);
+                                        type, currentType->base->type);
 }
 void HIRBuilder::visit(SelfExpr *) {
   exprResult = lowerImplictSelf();
@@ -165,11 +158,17 @@ void HIRBuilder::visit(ViewExpr *expr) {
 void HIRBuilder::visit(DestroyExpr *expr) {
   Error::internal(expr->span, "not allowed destroy in expression");
 }
+
+void HIRBuilder::visit(QuitExpr *expr) {
+  Error::internal(expr->span, "not allowed quit in expression");
+}
 void HIRBuilder::visit(DefaultValueExpr *) {}
 void HIRBuilder::visit(Range *) {
   // for내부에서 처리
 }
-void HIRBuilder::visit(CaseValueExpr *) {}
+void HIRBuilder::visit(CaseValueExpr *) {
+  // case value 내부에서 처리
+}
 void HIRBuilder::visit(MatchExpr *expr) { exprResult = lowerMatch(expr); }
 
 // Statement HIRBuilder::visitor methods
@@ -206,6 +205,7 @@ void HIRBuilder::visit(ClassDecl *decl) {
   if (it == program->typeDeclMap.end()) {
     Error::internal(decl->span, "not made typeShell");
   }
+
   TypeGuard typeGuard(currentType, it->second);
 
   if (decl->baseClass.has_value()) {
@@ -213,7 +213,7 @@ void HIRBuilder::visit(ClassDecl *decl) {
     if (it == program->typeDeclMap.end()) {
       Error::internal(decl->span, "not made typeShell");
     }
-    currentType->base = it->second->type;
+    currentType->base = it->second;
   }
 
   {
@@ -222,7 +222,7 @@ void HIRBuilder::visit(ClassDecl *decl) {
       f->accept(this);
     }
   }
-  setDefaultInit(it->second);
+  setDefaultInit(currentType);
 
   for (auto &m : decl->methods) {
     m->accept(this);
@@ -246,29 +246,13 @@ void HIRBuilder::visit(StructDecl *decl) {
   for (auto &f : decl->fields) {
     f->accept(this);
   }
-  setDefaultInit(it->second);
+  setDefaultInit(currentType);
   for (auto &i : decl->inits) {
     i->accept(this);
   }
 }
-void HIRBuilder::visit(EnumDecl *decl) {
-  auto it = program->typeDeclMap.find(decl->symbol);
-
-  if (it == program->typeDeclMap.end()) {
-    Error::internal(decl->span, "not made typeShell");
-  }
-
-  TypeGuard typeGuard(currentType, it->second);
-
-  for (auto &v : decl->variants) {
-    auto variant = lowerEnumVariant(v.get());
-    auto raw = variant.get();
-    currentType->enumVariants.push_back(std::move(variant));
-    auto [iter, result] = currentType->enumVariantMap.emplace(v->symbol, raw);
-    if (!result) {
-      Error::internal("fail to insert varaint");
-    }
-  }
+void HIRBuilder::visit(EnumDecl *) {
+  // linker 2-pass에서 처리
 }
 void HIRBuilder::visit(ImplDecl *decl) {
   auto typeSymbol = table->getType(decl->target);
@@ -308,7 +292,6 @@ void HIRBuilder::visit(VarDecl *decl) {
       if (decl->init) {
         currentType->defaultInit.emplace(field, decl->init.get());
       }
-
     } else {
       auto local = lowerLocal(decl);
       if (local == nullptr) {

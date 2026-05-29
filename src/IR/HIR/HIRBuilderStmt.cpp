@@ -2,8 +2,12 @@
 #include "AST/Expr.h"
 #include "AST/Stmt.h"
 #include "IR/HIR/HIRBuilder.h"
+#include "IR/HIR/HIRDecl.h"
 #include "IR/HIR/HIRExpr.h"
+#include "IR/HIR/HIRHelper.h"
+#include "IR/HIR/HIRPattern.h"
 #include "IR/HIR/HIRStmt.h"
+#include "IR/HIR/HIRSymbol.h"
 #include "util/Error.h"
 #include "util/Guard.h"
 #include <memory>
@@ -74,13 +78,130 @@ unique_ptr<HIRStmt> HIRBuilder::lowerIf(IfStmt *stmt) {
 
 unique_ptr<HIRCase> HIRBuilder::lowerCase(Case *stmt) {
 
-  vector<unique_ptr<HIRValueExpr>> selectors;
+  vector<unique_ptr<HIRCasePattern>> selectors;
   for (auto &s : stmt->values) {
-    selectors.push_back(lowerValue(s.get()));
+    auto caseValue = dynamic_cast<CaseValueExpr *>(s.get());
+    if (caseValue == nullptr) {
+      Error::internal(s->span, "illegal ast kind");
+    }
+
+    selectors.push_back(lowerCaseValue(caseValue));
+  }
+
+  HIRDefaultKind dKind = HIRDefaultKind::None;
+  if (stmt->isDefault) {
+    dKind = HIRDefaultKind::Default;
+
+  } else if (stmt->isWildCard) {
+    dKind = HIRDefaultKind::WildCard;
   }
   unique_ptr<HIRBlockStmt> body = lowerStmtAsBlock(stmt->body.get());
   return make_unique<HIRCase>(stmt->span, std::move(selectors), std::move(body),
-                              stmt->isDefault);
+                              dKind);
+}
+
+unique_ptr<HIRCasePattern> HIRBuilder::lowerCaseValue(CaseValueExpr *expr) {
+  if (expr->isWildCard) {
+    return make_unique<HIRCasePattern>(expr->span, HIRWildcardCase());
+  }
+
+  if (auto lit = dynamic_cast<LiteralExpr *>(expr->value.get())) {
+    auto literal = lowerLiteral(lit);
+
+    auto *raw = literal.get();
+    if (auto *literalExpr = dynamic_cast<HIRLiteralExpr *>(raw)) {
+      auto *released = literal.release();
+      (void)released;
+
+      auto literalPattern =
+          HIRLiteralCase(std::unique_ptr<HIRLiteralExpr>(literalExpr));
+
+      return make_unique<HIRCasePattern>(expr->span, std::move(literalPattern));
+    }
+
+    Error::internal(lit->span, "fail to cast literalExpr");
+  }
+
+  if (expr->variant == nullptr) {
+    Error::internal(expr->value->span,
+                    "case value is enum-variant but variant is nullptr");
+  }
+
+  if (dynamic_cast<NameExpr *>(expr->value.get())) {
+    auto it = program->typeDeclMap.find(expr->variant->typeSymbol);
+    if (it == program->typeDeclMap.end()) {
+      Error::internal(expr->value->span, "fail to get enum-variant's type");
+    }
+    auto vIt = program->variantMap.find(expr->variant);
+
+    if (vIt == program->variantMap.end()) {
+      Error::internal(expr->value->span, "fail to get enum variant");
+    }
+
+    auto unit = HIRUnitCase(vIt->second);
+    return make_unique<HIRCasePattern>(expr->span, unit);
+  }
+
+  if (auto member = dynamic_cast<MemberExpr *>(expr->value.get())) {
+    if (isTypeReceiver(member->object.get())) {
+      auto type = member->object->resolvedType;
+      auto it = program->typeDeclMap.find(type);
+      if (it == program->typeDeclMap.end()) {
+        Error::internal(expr->span, "fail to get typeDecl");
+      }
+      if (it->second->typeDeclKind != HIRTypeDeclKind::Enum) {
+        Error::internal(expr->span, "illegal type kind");
+      }
+
+      auto viT = program->variantMap.find(expr->variant);
+      if (viT == program->variantMap.end()) {
+        Error::internal(expr->span, "fail to get variant");
+      }
+
+      auto unit = HIRUnitCase(viT->second);
+      return make_unique<HIRCasePattern>(expr->span, unit);
+    }
+
+    Error::internal(expr->span, "illegal receiver type");
+  }
+
+  HIRLocal *raw = nullptr;
+
+  if (expr->payload) {
+    unique_ptr<HIRLocal> local = make_unique<HIRLocal>();
+    local->id = allocLocalID();
+    local->isInitialized = true;
+    local->isMutable = false;
+    local->name = expr->payload->name;
+    local->symbol = expr->payload;
+    auto type =
+        HIRHelper::lowerType(program, source, expr->payload->typeSymbol);
+    local->type = type;
+    local->isCaseValue = true;
+    raw = local.get();
+    bindLocal(expr->payload, std::move(local));
+  }
+
+  if (dynamic_cast<CallExpr *>(expr->value.get())) {
+    auto it = program->typeDeclMap.find(expr->variant->typeSymbol);
+    if (it == program->typeDeclMap.end()) {
+      Error::internal(expr->value->span, "fail to get enum-variant's type");
+    }
+    auto vIt = program->variantMap.find(expr->variant);
+
+    if (vIt == program->variantMap.end()) {
+      Error::internal(expr->value->span, "fail to get enum variant");
+    }
+
+    if (raw == nullptr) {
+      Error::internal(expr->arg->span, "fail to make binding local");
+    }
+
+    auto payload = HIRPayloadCase(vIt->second, raw);
+    return make_unique<HIRCasePattern>(expr->span, payload);
+  }
+
+  Error::internal(expr->span, "illegal ast kind");
 }
 
 unique_ptr<HIRStmt> HIRBuilder::lowerWhile(WhileStmt *stmt) {
@@ -117,9 +238,11 @@ unique_ptr<HIRStmt> HIRBuilder::lowerExprStmt(ExprStmt *stmt) {
 
   if (auto destroy = dynamic_cast<DestroyExpr *>(stmt->expr.get())) {
     return lowerDestroyStmt(destroy);
-  } else {
-    return make_unique<HIRExprStmt>(stmt->span, lowerExpr(stmt->expr.get()));
   }
+  if (auto quit = dynamic_cast<QuitExpr *>(stmt->expr.get())) {
+    return lowerQuitStmt(quit);
+  }
+  return make_unique<HIRExprStmt>(stmt->span, lowerExpr(stmt->expr.get()));
 }
 
 unique_ptr<HIRStmt> HIRBuilder::lowerDestroyStmt(DestroyExpr *expr) {
@@ -162,4 +285,8 @@ unique_ptr<HIRStmt> HIRBuilder::lowerDestroyStmt(DestroyExpr *expr) {
 
   return make_unique<HIRDestroyStmt>(expr->span, std::move(handle), entity,
                                      storageKind);
+}
+
+unique_ptr<HIRStmt> HIRBuilder::lowerQuitStmt(QuitExpr *expr) {
+  return make_unique<HIRQuitStmt>(expr->span);
 }

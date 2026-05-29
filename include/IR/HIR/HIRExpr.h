@@ -5,6 +5,7 @@
 #include "IR/HIR/HIRSymbol.h"
 #include "IR/HIR/HIRType.h"
 #include "SemanticAnalyzer/ResolvedLit.h"
+#include "SourceSpan.h"
 #include "enums/Operator.h"
 #include "vector"
 #include <memory>
@@ -233,28 +234,9 @@ struct HIRViewExpr : HIRValueExpr {
         handle(std::move(h)), entityType(ent) {}
 };
 
-struct HIRPattern : HIRNode {
-  explicit HIRPattern(SourceSpan s, HIRNodeKind k) : HIRNode(s, k) {}
-  virtual ~HIRPattern() = default;
-};
-
-struct HIRLiteralPattern : HIRPattern {
-  HIRLiteralExpr *value = nullptr;
-
-  explicit HIRLiteralPattern(SourceSpan s, HIRLiteralExpr *v)
-      : HIRPattern(s, HIRNodeKind::LiteralPattern), value(v) {}
-};
-
-struct HIREnumPattern : HIRPattern {
-  HIREnumVariant *variant = nullptr;
-
-  explicit HIREnumPattern(SourceSpan s, HIREnumVariant *v)
-      : HIRPattern(s, HIRNodeKind::EnumPattern), variant(v) {}
-};
-
-struct HIRWildcardPattern : HIRPattern {
-  HIRWildcardPattern(SourceSpan s)
-      : HIRPattern(s, HIRNodeKind::WildcardPattern) {}
+struct HIRWildCardValue : HIRValueExpr {
+  HIRWildCardValue(SourceSpan s, HIRType *ty)
+      : HIRValueExpr(s, HIRNodeKind::WildcardValue, ty) {}
 };
 
 struct HIRMatchExpr : HIRValueExpr {

@@ -44,3 +44,23 @@ struct ResolvedLit {
     return std::get<StringPayload>(value);
   }
 };
+
+inline bool operator==(const IntPayload &a, const IntPayload &b) {
+  return a.value == b.value;
+}
+
+inline bool operator==(const FloatPayload &a, const FloatPayload &b) {
+  return a.value.bitwiseIsEqual(b.value);
+}
+
+inline bool operator==(const CharPayload &a, const CharPayload &b) {
+  return a.codePoint == b.codePoint;
+}
+
+inline bool operator==(const StringPayload &a, const StringPayload &b) {
+  return a.codePoints == b.codePoints;
+}
+
+inline bool operator==(const ResolvedLit &a, const ResolvedLit &b) {
+  return a.type == b.type && a.value == b.value;
+}

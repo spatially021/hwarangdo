@@ -1,9 +1,11 @@
 #pragma once
 
 #include "IR/HIR/HIRNode.h"
+#include "IR/HIR/HIRPattern.h"
 #include "IR/HIR/HIRSymbol.h"
 #include "IR/HIR/HIRType.h"
 #include "SemanticAnalyzer/symbol/ValueSymbol.h"
+#include "SourceSpan.h"
 #include "enums/StorageKind.h"
 #include <memory>
 #include <unordered_map>
@@ -99,15 +101,21 @@ enum class HIRBranchKind {
 
 struct HIRValueExpr;
 
+enum class HIRDefaultKind {
+  None,
+  Default,
+  WildCard,
+};
+
 struct HIRCase : HIRStmt {
-  std::vector<std::unique_ptr<HIRValueExpr>>
+  std::vector<std::unique_ptr<HIRCasePattern>>
       selectors; // literal or enum variant
   std::unique_ptr<HIRBlockStmt> body;
-  bool isDefault = false;
-  HIRCase(SourceSpan s, vector<std::unique_ptr<HIRValueExpr>> sl,
-          unique_ptr<HIRBlockStmt> b, bool d = false)
+  HIRDefaultKind defaultKind = HIRDefaultKind::None;
+  HIRCase(SourceSpan s, vector<std::unique_ptr<HIRCasePattern>> sl,
+          unique_ptr<HIRBlockStmt> b, HIRDefaultKind d = HIRDefaultKind::None)
       : HIRStmt(s, HIRNodeKind::Case), selectors(std::move(sl)),
-        body(std::move(b)), isDefault(d) {}
+        body(std::move(b)), defaultKind(d) {}
 };
 
 struct HIRSwitchStmt : HIRStmt {
@@ -133,4 +141,8 @@ struct HIRDestroyStmt : HIRStmt {
                  StorageKind sk)
       : HIRStmt(s, HIRNodeKind::DestroyStmt), storage(sk), handle(std::move(h)),
         entity(e) {}
+};
+
+struct HIRQuitStmt : HIRStmt {
+  HIRQuitStmt(SourceSpan s) : HIRStmt(s, HIRNodeKind::QuitStmt) {}
 };

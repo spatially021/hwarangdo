@@ -1,11 +1,13 @@
 #pragma once
 
+#include "AST/CaseKey.h"
 #include "ASTNode.h"
 #include "SourceSpan.h"
 #include "Token.h"
 #include "Visitor.h"
 #include <memory>
 #include <optional>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -124,10 +126,12 @@ public:
   vector<ExprPtr> values;
   Stmt::Ptr body;
   bool isDefault = false;
+  bool isWildCard = false;
   void accept(ASTVisitor *visitor) override { visitor->visit(this); }
-  Case(SourceSpan t, vector<ExprPtr> v, Stmt::Ptr b, bool is = false)
+  Case(SourceSpan t, vector<ExprPtr> v, Stmt::Ptr b, bool isd = false,
+       bool isw = false)
       : ASTNode(NKind::SWITCH_CASE, t), values(std::move(v)), body(b),
-        isDefault(is) {}
+        isDefault(isd), isWildCard(isw) {}
   vector<ExprPtr> transfers;
   TypeSymbol *transferType = nullptr;
 };
@@ -137,11 +141,16 @@ public:
   ExprPtr value;                         // switch (value)
   std::vector<shared_ptr<Case>> clauses; // CaseStmt 또는 DefaultStmt 의 집합
 
+  bool hasDefault = false;
+
   SwitchStmt(SourceSpan t, ExprPtr val, std::vector<shared_ptr<Case>> c)
       : Stmt(NKind::SWITCH_STMT, t), value(std::move(val)),
         clauses(std::move(c)) {}
 
   void accept(ASTVisitor *visitor) override { visitor->visit(this); }
+
+  unordered_set<CaseKey, CaseKeyHash> caseKeys;
+  std::unordered_set<EnumVariantSymbol *> usedVariants;
 };
 
 class CatchClause : public Stmt {

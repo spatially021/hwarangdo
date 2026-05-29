@@ -23,6 +23,7 @@ public:
   bool isFrame = false;
   bool isOverride = false;
   std::vector<ReturnStmt *> returns;
+  AModifier modifier = AModifier::PUBLIC;
 
 protected:
   void _anchor() override {};

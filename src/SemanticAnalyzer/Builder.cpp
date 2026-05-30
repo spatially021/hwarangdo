@@ -92,7 +92,7 @@ void Builder::visit(MatchExpr *expr) {
   }
 }
 // Statement Builder::visitor methods
-void Builder::visit(ExprStmt *) {}
+void Builder::visit(ExprStmt *stmt) { stmt->expr->accept(this); }
 void Builder::visit(BlockStmt *stmt) {
   ScopeGuard _(*table);
   stmt->blockScope = table->getCurrent();

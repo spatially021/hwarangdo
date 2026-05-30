@@ -74,11 +74,12 @@ public:
 
 class ForStmt : public Stmt {
 public:
-  Stmt::Ptr initializer; // VarDeclStmt or ExprStmt or null
+  shared_ptr<DeclStmt> initializer; // VarDeclStmt or ExprStmt or null
   shared_ptr<Range> range;
   Stmt::Ptr body;
 
-  ForStmt(SourceSpan t, Stmt::Ptr init, shared_ptr<Range> r, Stmt::Ptr b)
+  ForStmt(SourceSpan t, shared_ptr<DeclStmt> init, shared_ptr<Range> r,
+          Stmt::Ptr b)
       : Stmt(NKind::FOR_STMT, t), initializer(std::move(init)),
         range(std::move(r)), body(std::move(b)) {}
 

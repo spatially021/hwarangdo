@@ -72,7 +72,7 @@ Ptr Parser::forStmt() {
   consume(TKind::LEFT_PAREN, "expected '(' after 'for'");
 
   Ptr init = declStmt();
-  auto decl = dynamic_cast<DeclStmt *>(init.get());
+  auto decl = dynamic_pointer_cast<DeclStmt>(init);
   if (decl == nullptr) {
     Error::internal(t, "for's var init is not declStmt");
   }
@@ -80,8 +80,12 @@ Ptr Parser::forStmt() {
   if (var == nullptr) {
     Error::internal(t, "for's var inti is not varDecl");
   }
-  Error::diagnostic(t,
-                    "for-loop variable declarations cannot have initializers");
+
+  if (var->init != nullptr) {
+    Error::diagnostic(
+        t, "for-loop variable declarations cannot have initializers");
+  }
+
   Expr::Ptr from = expression();
   consume(TKind::DOUBLE_DOT, "expected '..' in range expression");
   Expr::Ptr to = expression();
@@ -94,7 +98,7 @@ Ptr Parser::forStmt() {
   shared_ptr<Range> range =
       make_shared<Range>(makeSpan(from->span, to->span), from, to, step);
   Ptr body = bodyStmt();
-  return make_shared<ForStmt>(makeSpan(t.span, body->span), init, range, body);
+  return make_shared<ForStmt>(makeSpan(t.span, body->span), decl, range, body);
 }
 
 Ptr Parser::whileStmt() {

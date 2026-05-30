@@ -10,6 +10,7 @@
 #include <llvm/ADT/APInt.h>
 #include <optional>
 #include <string>
+#include <unordered_set>
 #include <vector>
 
 class Scope;
@@ -39,7 +40,7 @@ public:
   Decl *decl = nullptr;
   TypeSymbol *base = nullptr;
   optional<string> baseName = nullopt;
-  vector<TypeSymbol *> traits;
+  unordered_set<TypeSymbol *> traits;
 
   // class/struct
   Scope *memberScope = nullptr;

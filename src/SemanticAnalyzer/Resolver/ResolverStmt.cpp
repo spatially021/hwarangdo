@@ -29,6 +29,13 @@ void Resolver::visit(IfStmt *stmt) {
 void Resolver::visit(ForStmt *stmt) {
   stmt->initializer->accept(this);
   stmt->range->accept(this);
+  if (auto var = dynamic_cast<VarDecl *>(stmt->initializer->decl.get())) {
+    if (!isAssignable(var->symbol->typeSymbol, stmt->range->resolvedType)) {
+      Error::diagnostic(stmt->span, "cannot cast initalizer to rangeType");
+    }
+  } else {
+    Error::internal(stmt->initializer->span, "initializer is not varDecl");
+  }
   ScopeGuard _(*table, stmt->blockScope);
   stmt->body->accept(this);
 }
@@ -116,6 +123,13 @@ void Resolver::visit(Case *stmt) {
 }
 
 void Resolver::visit(ReturnStmt *stmt) {
+
+  for (Scope *s = table->getCurrent(); s != nullptr; s = s->parent) {
+    if (s->scopeKind == Scope::ScopeKind::INIT) {
+      Error::diagnostic(stmt->span, "in init method cannot use return");
+    }
+  }
+
   if (stmt->value != nullptr) {
     stmt->value->accept(this);
     if (stmt->value->resolvedType == nullptr) {

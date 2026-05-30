@@ -190,12 +190,10 @@ public:
   };
 
   vector<shared_ptr<Variant>> variants;
-  optional<string> baseEnum; // for aliasing
 
   EnumDecl(SourceSpan t, const string &n, vector<shared_ptr<Variant>> v = {},
-           optional<string> base = nullopt, AModifier modi = AModifier::PUBLIC)
-      : Decl(NKind::ENUM_DECL, t, n, modi), variants(std::move(v)),
-        baseEnum(base) {
+           AModifier modi = AModifier::PUBLIC)
+      : Decl(NKind::ENUM_DECL, t, n, modi), variants(std::move(v)) {
     aModifier = modi;
   }
 

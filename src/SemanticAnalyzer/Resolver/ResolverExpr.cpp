@@ -446,12 +446,12 @@ void Resolver::visit(DefaultValueExpr *expr) {
 void Resolver::visit(Range *expr) {
   expr->from->accept(this);
   if (!table->isInt(expr->from->resolvedType)) {
-    Error::diagnostic(expr->span, "in for-range start only allowed int type");
+    Error::diagnostic(expr->span, "non-int range not supported yet");
   }
 
   expr->to->accept(this);
   if (!table->isInt(expr->to->resolvedType)) {
-    Error::diagnostic(expr->span, "in for-range end only allowed int type");
+    Error::diagnostic(expr->span, "non-int range not supported yet");
   }
 
   if (!expr->step) {
@@ -465,6 +465,8 @@ void Resolver::visit(Range *expr) {
   if (!table->isInt(expr->step->resolvedType)) {
     Error::diagnostic(expr->span, "in for-range step only allowed int type");
   }
+
+  expr->resolvedType = expr->from->resolvedType;
 }
 
 void Resolver::visit(CaseValueExpr *expr) {

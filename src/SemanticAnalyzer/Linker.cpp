@@ -148,7 +148,10 @@ void Linker::visit(ClassDecl *decl) {
     if (symbol->kind != TypeSymbol::TypeKind::TRAIT) {
       Error::diagnostic(decl->span, "'" + t + "' is not a trait type");
     }
-    decl->symbol->traits.push_back(symbol);
+    if (!decl->symbol->traits.emplace(symbol).second) {
+      Error::diagnostic(decl->span,
+                        "duplicate trait implementation: " + symbol->name);
+    }
   }
 
   ScopeGuard _(*table, decl->symbol->memberScope);
@@ -211,7 +214,10 @@ void Linker::visit(ImplDecl *decl) {
     if (t->kind != TypeSymbol::TypeKind::TRAIT) {
       Error::diagnostic(decl->span, "impl trait target must be a trait type");
     }
-    symbol->traits.push_back(t);
+    if (!symbol->traits.emplace(t).second) {
+      Error::diagnostic(decl->span,
+                        "duplicate trait implementation: " + t->name);
+    }
     for (auto &it : t->memberScope->methodMap) {
       for (auto sig : it.second) {
         decl->sigs.push_back(sig);

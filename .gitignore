@@ -1,13 +1,81 @@
-.vscode
-testProject/
-*.sh
+# =========================
+# Build
+# =========================
+
 build/
-logs/
-old/
-.cache/
-.build-meta/
-*.txt
+cmake-build-*/
+CMakeFiles/
+CMakeCache.txt
 Makefile
+
+# compile database
+compile_commands.json
+.build-meta/
+run.txt
+build.sh
+testProject/
+
+# =========================
+# IDE
+# =========================
+
+.vscode/
+.idea/
+
+# =========================
+# Logs
+# =========================
+
+logs/
+*.log
+
+# =========================
+# Generated files
+# =========================
+
+tree.txt
+tree_clean.txt
+run.txt
 .VSCodeCounter/
-*.hgm
-Example/
+
+# =========================
+# OS
+# =========================
+
+.DS_Store
+Thumbs.db
+
+# =========================
+# clangd / cache
+# =========================
+
+.cache/
+.clangd/
+
+# =========================
+# Binary
+# =========================
+
+*.o
+*.obj
+*.a
+*.so
+*.dll
+*.dylib
+*.exe
+*.out
+
+# =========================
+# Coverage
+# =========================
+
+*.gcda
+*.gcno
+*.profraw
+*.profdata
+
+# =========================
+# Sanitizer
+# =========================
+
+asan.log

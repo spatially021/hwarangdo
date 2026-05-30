@@ -364,13 +364,6 @@ Ptr Parser::enumDecl(DeclPrefix prefix) {
   Token t = prefix.startToken;
   advance(); // enum 처리
   Token name = consume(TKind::IDENTIFIER, "expected enum name after 'enum'");
-  optional<string> baseEnum = nullopt;
-
-  if (check(TKind::COLON)) {
-    advance(); //: 처리
-    baseEnum =
-        consume(TKind::IDENTIFIER, "expected base enum name after ':'").text;
-  }
 
   consume(TKind::LEFT_BRACE, "expected '{' before enum body");
   vector<shared_ptr<EnumDecl::Variant>> variants;
@@ -396,8 +389,7 @@ Ptr Parser::enumDecl(DeclPrefix prefix) {
 
   consume(TKind::RIGHT_BRACE, "expected '}' after enum body");
   auto end = previous();
-  return make_shared<EnumDecl>(makeSpan(t, end), name.text, variants, baseEnum,
-                               modi);
+  return make_shared<EnumDecl>(makeSpan(t, end), name.text, variants, modi);
 }
 
 Ptr Parser::handleDecl(DeclPrefix prefix) {

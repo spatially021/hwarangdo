@@ -118,7 +118,7 @@ void SymbolTable::enter() {
 
 void SymbolTable::enter(Scope *scope) {
 
-  if (!scope)
+  if (scope == nullptr)
     Error::internal("SymbolTable::enter called with nullptr");
   if (!current)
     Error::internal("SymbolTable::current is null");

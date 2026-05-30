@@ -67,7 +67,8 @@ void Resolver::visit(ImplDecl *decl) {
   currentSelf = implIt->second->target->memberScope;
   for (auto &m : decl->LinkedImplMethods) {
     m->accept(this);
-    if (!Helper::hasSameMethodSig(decl->sigs, m->methodSymbol)) {
+    if (!decl->traits.empty() &&
+        !Helper::hasSameMethodSig(decl->sigs, m->methodSymbol)) {
       Error::diagnostic(m->span, "not allowed normal method declare here");
     }
   }

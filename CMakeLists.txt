@@ -108,9 +108,24 @@ endif()
 # ============================================================
 # Output naming
 # ============================================================
-set_target_properties(hgm PROPERTIES
-  OUTPUT_NAME "hgm_${CMAKE_BUILD_TYPE}"
-)
+
+if(CMAKE_BUILD_TYPE STREQUAL "Release")
+  set_target_properties(hgm PROPERTIES
+    OUTPUT_NAME "hwarangdo"
+  )
+elseif(HGM_BUILD_MODE STREQUAL "ASAN")
+  set_target_properties(hgm PROPERTIES
+    OUTPUT_NAME "hrd_asan"
+  )
+elseif(HGM_BUILD_MODE STREQUAL "IDE")
+  set_target_properties(hgm PROPERTIES
+    OUTPUT_NAME "hrd_ide"
+  )
+else()
+  set_target_properties(hgm PROPERTIES
+    OUTPUT_NAME "hrd_debug"
+  )
+endif()
 
 # ============================================================
 # LLVM

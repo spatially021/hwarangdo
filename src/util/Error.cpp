@@ -29,23 +29,8 @@ void Error::diagnostic(const Token &token, const std::string &message) {
 void Error::diagnostic(const SourceSpan &span, const std::string &message) {
   std::ostringstream oss;
 
-  oss << "[error] " << span.path << " ";
-
-  if (span.lineStart == span.lineEnd) {
-    if (span.colStart == span.colEnd) {
-      // point
-      oss << span.lineStart << ":" << span.colStart;
-    } else {
-      // same line range
-      oss << span.lineStart << ":" << span.colStart << "-" << span.colEnd;
-    }
-  } else {
-    // multi-line range
-    oss << span.lineStart << ":" << span.colStart << " - " << span.lineEnd
-        << ":" << span.colEnd;
-  }
-
-  oss << ": " << message;
+  oss << span.path << ":" << span.lineStart << ":" << span.colStart
+      << ": error: " << message;
 
   throwError(oss.str());
 }

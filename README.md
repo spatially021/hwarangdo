@@ -1,132 +1,65 @@
-# Hwarangdo (working name)
+# 화랑도
 
-A game-oriented programming language with a handle-view memory model.  
-Entities are managed by the world, not by references.
+화랑도(HwarangDo)는 게임 개발을 목적으로 설계 중인 프로그래밍 언어이다.
 
-한국어 README: README.ko.md
+이 언어는 객체를 Value와 Entity로 구분하며, Entity를 World를 통해 명시적으로 관리하는 객체 모델을 제공한다.
 
----
+현재 프로젝트는 컴파일러 프론트엔드 구현 단계에 있으며, LLVM 기반 백엔드를 목표로 개발 중이다.
 
-## 1. Overview
+## 개발 철학
 
-Hwarangdo is an experimental programming language designed specifically for game development.
+* 게임 런타임에 적합한 객체 수명 관리
+* Value와 Entity의 명확한 분리
+* World 기반의 명시적 객체 관리
+* 암묵적 동작보다 명시적 표현 우선
 
-Instead of treating objects as general-purpose references, the language introduces a handle-view model where:
+## 주요 특징
 
-- Entities are created and managed by the runtime (world)
-- Access is performed through temporary views
-- Lifetime is explicit and controlled
+* Entity와 Value를 서로 다른 객체 모델로 관리
+* Handle/View 기반 Entity 접근 모델
+* Entity의 직접 접근 제한
+* 명시적 초기화 규칙
+* Trait 기반 인터페이스 시스템
+* Match 표현식 및 Enum 지원
 
-This approach aims to provide predictable behavior, clear ownership semantics, and runtime safety.
+## 개발 현황
 
----
+### 구현 완료
 
-## 2. Core Concepts
+* Lexer
+* Parser
+* Builder
+* Linker
+* Resolver
+* HIR Builder
+* HIR Verifier
 
-### Entity vs Value
+### 개발 예정
 
-- class → Entity (managed by the world)
-- struct → Value (copied and passed normally)
+* MIR Builder
+* LIR Builder
+* LLVM Backend
 
----
+## 빌드 방법
 
-### Handle / View
+### 요구 사항
 
+* CMake
+* C++17 이상 지원 컴파일러
+
+### 소스에서 빌드
+
+```bash
+cmake --preset release
+cmake --build --preset release
 ```
-Handle<Player> h = world.spawn Player();
 
-Player p = world.view(h);
-p.move();
+## 실행
 
-world.destroy(h);
+```bash
+./build/release/hwarangdo testProject
 ```
 
-- Handle<T> is a stable identifier
-- view produces a temporary observer
-- Direct access through handles is not allowed
+## 문서
 
----
-
-### Explicit Lifetime
-
-- Entities are created via world.spawn
-- Must be explicitly destroyed via world.destroy
-- Invalid access is treated as an error
-
----
-
-## 3. Example
-```
-struct Vector {
-    int x;
-    int y;
-}
-
-impl Vector {
-    void add(int dx = 0, int dy = 0) {
-        x += dx;
-        y += dy;
-    }
-}
-
-class Player {
-    Vector pos;
-
-    void move() {
-        pos.add(1, _);
-    }
-}
-
-class Main {
-    frame void update() {
-        Handle<Player> h = world.spawn Player();
-
-        Player p = world.view(h);
-        p.move();
-
-        world.destroy(h);
-    }
-}
-```
----
-
-## 4. Current Status
-
-- Lexer / Parser / Semantic analysis: implemented
-- HIR: in progress
-- Verifier: in progress
-- Runtime: not implemented
-
-The design is not yet stable.
-
----
-
-## 5. Why this exists
-
-Modern languages are not always aligned with how games actually run.
-
-Games typically require:
-
-- Frame-based execution
-- Explicit lifetime control
-- Predictable runtime behavior
-- Strong separation between data and world state
-
-Hwarangdo explores a model where these are part of the language itself.
-
----
-
-## 6. Roadmap
-
-- Complete HIR
-- Implement verifier
-- Design MIR
-- Build runtime
-
----
-
-## 7. Notes
-
-This is an experimental personal project.
-
-The goal is not to replace existing languages, but to explore a new design direction.
+* 문법 명세: `docs/grammar.md`

@@ -31,6 +31,12 @@
 #include <utility>
 #include <vector>
 
+#ifndef NDEBUG
+#define HGM_DEBUG 1
+#else
+#define HGM_DEBUG 0
+#endif
+
 using namespace std;
 namespace fs = std::filesystem;
 
@@ -230,7 +236,6 @@ static bool parseOptions(int argc, char *argv[]) {
     std::cerr << "Invalid argument format: " << arg << std::endl;
     return false;
   }
-
   return true;
 }
 
@@ -298,6 +303,7 @@ int main(int argc, char *argv[]) {
     try {
       tokenStreams.push_back(lexer.lexing());
     } catch (std::runtime_error &e) {
+
       cout << Color::RED << "error occur while lexing\n"
            << Color::RESET << e.what() << "\n";
       return -1;
@@ -325,8 +331,10 @@ int main(int argc, char *argv[]) {
           make_shared<SourceFile>(s.path, parser.parse()));
 
     } catch (std::runtime_error &e) {
-      cout << Color::RED << "error occur while parsing\n"
-           << Color::RESET << e.what() << "\n";
+#if HGM_DEBUG
+      cout << Color::RED << "error occur while parsing\n";
+#endif
+      cout << Color::RESET << e.what() << "\n";
       return -1;
     }
   }
@@ -347,8 +355,10 @@ int main(int argc, char *argv[]) {
   try {
     analyzer.build();
   } catch (std::runtime_error &e) {
-    cout << Color::RED << "error occur while building\n"
-         << Color::RESET << e.what() << "\n";
+#if HGM_DEBUG
+    cout << Color::RED << "error occur while building\n";
+#endif
+    cout << Color::RESET << e.what() << "\n";
     return -1;
   }
 
@@ -363,16 +373,20 @@ int main(int argc, char *argv[]) {
   try {
     analyzer.link();
   } catch (std::runtime_error &e) {
-    cout << Color::RED << "error occur while linking\n"
-         << Color::RESET << e.what() << "\n";
+#if HGM_DEBUG
+    cout << Color::RED << "error occur while linking\n";
+#endif
+    cout << Color::RESET << e.what() << "\n";
     return -1;
   }
 
   try {
     analyzer.resolve();
   } catch (std::runtime_error &e) {
-    cout << Color::RED << "error occur while resolving\n"
-         << Color::RESET << e.what() << "\n";
+#if HGM_DEBUG
+    cout << Color::RED << "error occur while resolving\n";
+#endif
+    cout << Color::RESET << e.what() << "\n";
     return -1;
   }
 
@@ -390,8 +404,10 @@ int main(int argc, char *argv[]) {
   try {
     verifier.verify();
   } catch (std::runtime_error &e) {
-    cout << Color::RED << "error occur while verifying\n"
-         << Color::RESET << e.what() << "\n";
+#if HGM_DEBUG
+    cout << Color::RED << "error occur while verifying\n";
+#endif
+    cout << Color::RESET << e.what() << "\n";
     return -1;
   }
 
@@ -416,8 +432,10 @@ int main(int argc, char *argv[]) {
     }
 
   } catch (std::runtime_error &e) {
-    cout << Color::RED << "error occur while hir building\n"
-         << Color::RESET << e.what() << "\n";
+#if HGM_DEBUG
+    cout << Color::RED << "error occur while hir building\n";
+#endif
+    cout << Color::RESET << e.what() << "\n";
     return -1;
   }
 
@@ -431,8 +449,10 @@ int main(int argc, char *argv[]) {
     HIRVerifier hirVerifer(hirProgram.get());
     hirVerifer.verify();
   } catch (std::runtime_error &e) {
-    cout << Color::RED << "error occur while hir verifying\n"
-         << Color::RESET << e.what() << "\n";
+#if HGM_DEBUG
+    cout << Color::RED << "error occur while hir verifying\n";
+#endif
+    cout << Color::RESET << e.what() << "\n";
     return -1;
   }
 

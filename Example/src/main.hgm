@@ -1,63 +1,10 @@
 class Main{
-    void main(){
-        int a[10];
-        int b;
-        int x = 1;
-        int y = 2;
-        
-        // 기본 if 문
-        if (x < y) {
-            
-        } else if (x == y) {
 
-        } else {
-            
-        }
+    frame void update(){
         
-        // 삼항 연산. 괄호 써야됨
-        (x < y) ? "X" : "Y";
-        
-        // switch 문
-        switch (x) {
-            case 1:
-                break;
-            case 2:
-                break;
-            default:
-        }
-        // while 문
-        int i = 0;
-        while (i < 5) {
-            if (i == 4) continue;
-            i++;
-        }
-        // for 문
-        for (int k = 0; k < 5; k++) {
-            if (k == 4) break;
-        }
-
-        int arr[3];
-        arr[1];
     }
 
-    int sum(int a,int b){
-        return a+b;
+    public init(){
+
     }
-
-    boolean isSame(int a,int b){
-        return a==b;
-    }
-
-}
-
-class subClass{
-
-}
-
-struct stru{
-
-}
-
-enum en{
-    
 }

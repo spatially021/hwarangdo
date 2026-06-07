@@ -404,7 +404,39 @@ void HIRVerifier::verifyStmt(HIRStmt *stmt) {
   case HIRNodeKind::QuitStmt: {
     break;
   }
-
+  case HIRNodeKind::AssignStmt: {
+    auto assign = expect<HIRAssignStmt>(stmt, HIRNodeKind::AssignStmt);
+    if (assign->lhs == nullptr) {
+      Error::internal(assign->span, "assign's lhs is nullptr");
+    }
+    if (isObserver(assign->lhs->type)) {
+      Error::internal(assign->span, "observer cannot be assigned");
+    }
+    if (assign->rhs == nullptr) {
+      Error::internal(assign->span, "assign's rhs is nullptr");
+    }
+    verifyExpr(assign->lhs.get());
+    initialize(assign->lhs.get());
+    verifyExpr(assign->rhs.get());
+    break;
+  }
+  case HIRNodeKind::CompoundAssignStmt: {
+    auto compound =
+        expect<HIRCompoundAssignStmt>(stmt, HIRNodeKind::CompoundAssignStmt);
+    if (compound->lhs == nullptr) {
+      Error::internal("compoundAssignExpr's lhs is nullptr");
+    }
+    if (isObserver(compound->lhs->type)) {
+      Error::internal("observer cannot be assigned");
+    }
+    if (compound->rhs == nullptr) {
+      Error::internal("compoundAssignExpr's rhs is nullptr");
+    }
+    verifyExpr(compound->lhs.get());
+    initialize(compound->lhs.get());
+    verifyExpr(compound->rhs.get());
+    break;
+  }
   default:
     Error::internal("illegal stmt kind : " +
                     std::string(magic_enum::enum_name(stmt->kind)));
@@ -438,45 +470,6 @@ void HIRVerifier::verifyExpr(HIRExpr *expr, bool isRead) {
       checkInitialize(load->place.get());
     }
     verifyExpr(load->place.get());
-    break;
-  }
-  case HIRNodeKind::AssignExpr: {
-    auto assign = expect<HIRAssignExpr>(expr, HIRNodeKind::AssignExpr);
-    if (assign->type == nullptr) {
-      Error::internal(assign->span, "assign's type is nullptr");
-    }
-    if (assign->lhs == nullptr) {
-      Error::internal(assign->span, "assign's lhs is nullptr");
-    }
-    if (isObserver(assign->lhs->type)) {
-      Error::internal(assign->span, "observer cannot be assigned");
-    }
-    if (assign->rhs == nullptr) {
-      Error::internal(assign->span, "assign's rhs is nullptr");
-    }
-    verifyExpr(assign->lhs.get());
-    initialize(assign->lhs.get());
-    verifyExpr(assign->rhs.get());
-    break;
-  }
-  case HIRNodeKind::CompoundAssignExpr: {
-    auto compound =
-        expect<HIRCompoundAssignExpr>(expr, HIRNodeKind::CompoundAssignExpr);
-    if (compound->type == nullptr) {
-      Error::internal("compoundAssignExpr's type is nullptr");
-    }
-    if (compound->lhs == nullptr) {
-      Error::internal("compoundAssignExpr's lhs is nullptr");
-    }
-    if (isObserver(compound->lhs->type)) {
-      Error::internal("observer cannot be assigned");
-    }
-    if (compound->rhs == nullptr) {
-      Error::internal("compoundAssignExpr's rhs is nullptr");
-    }
-    verifyExpr(compound->lhs.get());
-    initialize(compound->lhs.get());
-    verifyExpr(compound->rhs.get());
     break;
   }
   case HIRNodeKind::UnaryExpr: {
@@ -705,17 +698,6 @@ void HIRVerifier::verifyExpr(HIRExpr *expr, bool isRead) {
     }
     break;
   }
-  case HIRNodeKind::TempPlaceExpr: {
-    auto temp = expect<HIRLocalPlaceExpr>(expr, HIRNodeKind::TempPlaceExpr);
-    if (temp->type == nullptr) {
-      Error::internal("tempPlaceExpr's type is nullptr");
-    }
-    if (temp->local == nullptr) {
-      Error::internal("tempPlaceExpr's local is nullptr");
-    }
-    verifyLocal(temp->local);
-    break;
-  }
   case HIRNodeKind::ArrayAccessExpr: {
     auto arr =
         expect<HIRArrayAccessPlaceExpr>(expr, HIRNodeKind::ArrayAccessExpr);
@@ -774,9 +756,6 @@ void HIRVerifier::verifyExpr(HIRExpr *expr, bool isRead) {
       }
       verifyExpr(a.get());
     }
-    break;
-  }
-  case HIRNodeKind::WildcardValue: {
     break;
   }
   default:

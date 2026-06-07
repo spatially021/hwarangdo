@@ -8,6 +8,7 @@
 #include "IR/HIR/HIRType.h"
 
 #include "SemanticAnalyzer/symbol/MethodSymbol.h"
+#include "SemanticAnalyzer/symbol/TypeSymbol.h"
 #include "SemanticAnalyzer/symbol/ValueSymbol.h"
 #include <memory>
 #include <string>
@@ -35,6 +36,8 @@ struct HIRTypeDecl : HIRDecl {
   int nextFieldId = 0;
   int nextMethodID = 0;
 
+  TypeSymbol *symbol = nullptr;
+
   std::vector<std::unique_ptr<HIRField>> fields;
   std::unordered_map<ValueSymbol *, HIRField *> fieldMap;
 
@@ -47,9 +50,10 @@ struct HIRTypeDecl : HIRDecl {
   // enum 전용
   std::vector<std::unique_ptr<HIREnumVariant>> enumVariants;
 
-  HIRTypeDecl(SourceSpan s, HIRTypeDeclKind dk, std::string n, HIRType *ty)
+  HIRTypeDecl(SourceSpan s, HIRTypeDeclKind dk, std::string n, HIRType *ty,
+              TypeSymbol *sym)
       : HIRDecl(s, HIRNodeKind::TypeDecl), typeDeclKind(dk), name(std::move(n)),
-        type(ty) {}
+        type(ty), symbol(sym) {}
 };
 
 struct HIRMethodDecl : HIRDecl {

@@ -13,6 +13,7 @@
 #include <vector>
 
 struct HIRValueExpr;
+struct HIRPlaceExpr;
 
 struct HIRStmt : HIRNode {
   explicit HIRStmt(SourceSpan s, HIRNodeKind k) : HIRNode(s, k) {}
@@ -64,11 +65,11 @@ struct HIRWhileStmt : HIRStmt {
 };
 
 struct HIRForRangeStmt : HIRStmt {
-  HIRLocal *indexVar;
-  std::unique_ptr<HIRExpr> start;
-  std::unique_ptr<HIRExpr> end;
-  std::unique_ptr<HIRExpr> step; // nullable -> default 1
-  std::unique_ptr<HIRBlockStmt> body;
+  HIRLocal *indexVar = nullptr;
+  std::unique_ptr<HIRExpr> start = nullptr;
+  std::unique_ptr<HIRExpr> end = nullptr;
+  std::unique_ptr<HIRExpr> step = nullptr; // nullable -> default 1
+  std::unique_ptr<HIRBlockStmt> body = nullptr;
 
   HIRForRangeStmt(SourceSpan s, HIRLocal *idx, std::unique_ptr<HIRExpr> st,
                   std::unique_ptr<HIRExpr> ed, std::unique_ptr<HIRExpr> sp,
@@ -145,4 +146,25 @@ struct HIRDestroyStmt : HIRStmt {
 
 struct HIRQuitStmt : HIRStmt {
   HIRQuitStmt(SourceSpan s) : HIRStmt(s, HIRNodeKind::QuitStmt) {}
+};
+
+struct HIRAssignStmt : HIRStmt {
+  unique_ptr<HIRPlaceExpr> lhs = nullptr;
+  unique_ptr<HIRValueExpr> rhs = nullptr;
+
+  HIRAssignStmt(SourceSpan s, unique_ptr<HIRPlaceExpr> l,
+                unique_ptr<HIRValueExpr> r)
+      : HIRStmt(s, HIRNodeKind::AssignStmt), lhs(std::move(l)),
+        rhs(std::move(r)) {}
+};
+
+struct HIRCompoundAssignStmt : HIRStmt {
+  unique_ptr<HIRPlaceExpr> lhs;
+  unique_ptr<HIRValueExpr> rhs;
+  Operator op;
+
+  HIRCompoundAssignStmt(SourceSpan s, unique_ptr<HIRPlaceExpr> l,
+                        unique_ptr<HIRValueExpr> r, Operator o)
+      : HIRStmt(s, HIRNodeKind::CompoundAssignStmt), lhs(std::move(l)),
+        rhs(std::move(r)), op(o) {}
 };

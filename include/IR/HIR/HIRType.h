@@ -42,6 +42,7 @@ class TypeSymbol;
 struct HIRType {
   HIRTypeKind kind;
   string name;
+  TypeSymbol *typeSymbol = nullptr;
 
   explicit HIRType(HIRTypeKind k, string n) : kind(k), name(std::move(n)) {}
   virtual ~HIRType() = default;

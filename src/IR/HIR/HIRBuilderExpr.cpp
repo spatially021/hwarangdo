@@ -4,12 +4,11 @@
 #include "IR/HIR/HIRDecl.h"
 #include "IR/HIR/HIRExpr.h"
 #include "IR/HIR/HIRHelper.h"
+#include "IR/HIR/HIRStmt.h"
 #include "IR/HIR/HIRSymbol.h"
 #include "IR/HIR/HIRType.h"
 #include "SemanticAnalyzer/symbol/MethodSymbol.h"
 #include "SemanticAnalyzer/symbol/Symbol.h"
-#include "Token.h"
-#include "enums/Operator.h"
 #include "util/Error.h"
 #include <cassert>
 #include <cstddef>
@@ -121,97 +120,6 @@ unique_ptr<HIRValueExpr> HIRBuilder::lowerCallArg(Expr *expr, Param *param) {
   }
 
   return lowerValue(expr);
-}
-
-unique_ptr<HIRExpr> HIRBuilder::lowerAssign(AssignExpr *expr) {
-  unique_ptr<HIRPlaceExpr> lhs = nullptr;
-  if (auto name = dynamic_cast<NameExpr *>(expr->target.get())) {
-    // nameExpr -> place
-    lhs = lowerPlace(name);
-  } else if (auto member = dynamic_cast<MemberExpr *>(expr->target.get())) {
-    // memberExpr -> fieldplace
-    lhs = lowerMember(member);
-  } else if (auto array = dynamic_cast<ArrayAccessExpr *>(expr->target.get())) {
-    lhs = lowerArrayAccess(array);
-  } else {
-    Error::internal(expr->span, "lhs is not nameExpr");
-  }
-
-  if (auto local = dynamic_cast<HIRLocalPlaceExpr *>(lhs.get())) {
-    if (!local->local->isMutable) {
-      if (local->local->isCaseValue) {
-        Error::diagnostic(expr->target->span,
-                          " cannot assign to payload binding ");
-      } else {
-        Error::diagnostic(expr->target->span, "const value cannot reallocate");
-      }
-    }
-  }
-
-  if (auto field = dynamic_cast<HIRFieldPlaceExpr *>(lhs.get())) {
-    if (!field->field->isMutable) {
-      Error::diagnostic(expr->target->span, "const value cannot reallocate");
-    }
-  }
-
-  unique_ptr<HIRValueExpr> rhs = lowerValue(expr->value.get());
-
-  switch (expr->op.kind) {
-
-  case TKind::PLUS_EQUAL:
-    return make_unique<HIRCompoundAssignExpr>(expr->span, std::move(lhs),
-                                              std::move(rhs), Operator::ADD);
-
-  case TKind::MINUS_EQUAL:
-    return make_unique<HIRCompoundAssignExpr>(expr->span, std::move(lhs),
-                                              std::move(rhs), Operator::SUB);
-
-  case TKind::STAR_EQUAL:
-    return make_unique<HIRCompoundAssignExpr>(expr->span, std::move(lhs),
-                                              std::move(rhs), Operator::MUL);
-
-  case TKind::DOUBLE_STAR_EQUAL:
-    return make_unique<HIRCompoundAssignExpr>(expr->span, std::move(lhs),
-                                              std::move(rhs), Operator::POW);
-
-  case TKind::SLASH_EQUAL:
-    return make_unique<HIRCompoundAssignExpr>(expr->span, std::move(lhs),
-                                              std::move(rhs), Operator::SUB);
-
-  case TKind::PERCENT_EQUAL:
-    return make_unique<HIRCompoundAssignExpr>(expr->span, std::move(lhs),
-                                              std::move(rhs), Operator::REM);
-
-  case TKind::CARET_EQUAL:
-    return make_unique<HIRCompoundAssignExpr>(expr->span, std::move(lhs),
-                                              std::move(rhs), Operator::B_AND);
-
-  case TKind::AMPERSAND_EQAUL:
-    return make_unique<HIRCompoundAssignExpr>(expr->span, std::move(lhs),
-                                              std::move(rhs), Operator::B_XOR);
-
-  case TKind::PIPE_EQUAL:
-    return make_unique<HIRCompoundAssignExpr>(expr->span, std::move(lhs),
-                                              std::move(rhs), Operator::B_OR);
-
-  case TKind::DOUBLE_ANGLEBUCKET_EQAUL:
-    return make_unique<HIRCompoundAssignExpr>(expr->span, std::move(lhs),
-                                              std::move(rhs), Operator::LSH);
-
-  case TKind::DOUBLE_RIGHT_ANGLE_BUCKET_EQUAL:
-    return make_unique<HIRCompoundAssignExpr>(expr->span, std::move(lhs),
-                                              std::move(rhs), Operator::RSH);
-
-  case TKind::EQUAL:
-    return make_unique<HIRAssignExpr>(expr->span, std::move(lhs),
-                                      std::move(rhs));
-  default:
-    Error::internal(expr->span, "illegal operator kind");
-    break;
-  }
-
-  // expr->hirvalueExpr
-  // not allowed nullptr
 }
 
 unique_ptr<HIRExpr> HIRBuilder::lowerTernary(TernaryExpr *expr) {
@@ -332,17 +240,22 @@ unique_ptr<HIRExpr> HIRBuilder::lowerView(ViewExpr *expr) {
 
 unique_ptr<HIRExpr> HIRBuilder::lowerInitCall(CallExpr *expr) {
   assert(expr);
+  HIRBlockStmt *defaultInit = nullptr;
+  auto type = table->getType(expr->methodName);
+  if (type == nullptr) {
+    Error::internal(expr->span, "fail to get typeSymbol");
+  }
+  auto typeIt = program->typeDeclMap.find(type);
+  if (typeIt == program->typeDeclMap.end()) {
+    Error::internal(expr->span, "fail to get receiver's typeDecl");
+  }
+  defaultInit = typeIt->second->defaultInitBlock.get();
+
   if (expr->resolved != nullptr) {
     HIRMethodDecl *methodDecl = nullptr;
+
     if (auto method = dynamic_cast<MethodSymbol *>(expr->resolved)) {
-      auto type = table->getType(expr->methodName);
-      if (type == nullptr) {
-        Error::internal(expr->span, "fail to get typeSymbol");
-      }
-      auto typeIt = program->typeDeclMap.find(type);
-      if (typeIt == program->typeDeclMap.end()) {
-        Error::internal(expr->span, "fail to get receiver's typeDecl");
-      }
+
       auto it = typeIt->second->initMap.find(method);
       if (it == currentType->initMap.end()) {
         Error::internal(expr->span, "fail to find methodDecl");
@@ -374,12 +287,12 @@ unique_ptr<HIRExpr> HIRBuilder::lowerInitCall(CallExpr *expr) {
     auto rType = it->second;
 
     return make_unique<HIRStructInitExpr>(expr->span, methodDecl,
-                                          std::move(args), rType);
+                                          std::move(args), rType, defaultInit);
   }
   vector<unique_ptr<HIRExpr>> args;
 
   return make_unique<HIRStructInitExpr>(expr->span, nullptr, std::move(args),
-                                        program->voidType, true);
+                                        program->voidType, defaultInit, true);
 }
 
 unique_ptr<HIRExpr> HIRBuilder::lowerLiteral(LiteralExpr *expr) {

@@ -100,7 +100,9 @@ void HIRBuilder::visit(CallExpr *expr) {
     return;
   }
 }
-void HIRBuilder::visit(AssignExpr *expr) { exprResult = lowerAssign(expr); }
+void HIRBuilder::visit(AssignExpr *expr) {
+  Error::diagnostic(expr->span, "not allowed assign in expression");
+}
 void HIRBuilder::visit(MemberExpr *expr) {
   if (isTypeReceiver(expr->object.get())) {
     if (expr->object->resolvedType->kind == TypeSymbol::TypeKind::ENUM) {
@@ -156,13 +158,15 @@ void HIRBuilder::visit(ViewExpr *expr) {
   return;
 }
 void HIRBuilder::visit(DestroyExpr *expr) {
-  Error::internal(expr->span, "not allowed destroy in expression");
+  Error::diagnostic(expr->span, "not allowed destroy in expression");
 }
 
 void HIRBuilder::visit(QuitExpr *expr) {
-  Error::internal(expr->span, "not allowed quit in expression");
+  Error::diagnostic(expr->span, "not allowed quit in expression");
 }
-void HIRBuilder::visit(DefaultValueExpr *) {}
+void HIRBuilder::visit(DefaultValueExpr *expr) {
+  Error::internal(expr->span, "use defaultValue with default");
+}
 void HIRBuilder::visit(Range *) {
   // for내부에서 처리
 }

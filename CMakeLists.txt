@@ -79,6 +79,9 @@ src/IR/HIR/HIRHelper.cpp
   src/Debugger/ParserDebugger.cpp
   src/Debugger/ResolverDebugger.cpp
   src/Debugger/BuilderDebugger.cpp
+  src/IR/MIR/MIRBuilder.cpp
+  src/IR/MIR/MIRUtil.cpp
+  src/IR/MIR/MIRStmtBuilder.cpp
   
 )
 

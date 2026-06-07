@@ -14,7 +14,7 @@ Ptr Parser::assignment() { // 대입 연산 처리
   Ptr left = ternary();
   if (isAssign()) {
     Token op = advance();
-    Ptr right = expression();
+    Ptr right = ternary();
     if (!isAssginable(left))
       Error::diagnostic(left->span, "expression is not assignable");
     return make_shared<AssignExpr>(makeSpan(left->span, right->span), left, op,

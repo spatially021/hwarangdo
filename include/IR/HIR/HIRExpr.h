@@ -122,27 +122,6 @@ struct HIRLoadExpr : HIRValueExpr {
       : HIRValueExpr(s, HIRNodeKind::LoadExpr, p->type), place(std::move(p)) {}
 };
 
-struct HIRAssignExpr : HIRValueExpr {
-  unique_ptr<HIRPlaceExpr> lhs = nullptr;
-  unique_ptr<HIRValueExpr> rhs = nullptr;
-
-  HIRAssignExpr(SourceSpan s, unique_ptr<HIRPlaceExpr> l,
-                unique_ptr<HIRValueExpr> r)
-      : HIRValueExpr(s, HIRNodeKind::AssignExpr, l->type), lhs(std::move(l)),
-        rhs(std::move(r)) {}
-};
-
-struct HIRCompoundAssignExpr : HIRValueExpr {
-  unique_ptr<HIRPlaceExpr> lhs;
-  unique_ptr<HIRValueExpr> rhs;
-  Operator op;
-
-  HIRCompoundAssignExpr(SourceSpan s, unique_ptr<HIRPlaceExpr> l,
-                        unique_ptr<HIRValueExpr> r, Operator o)
-      : HIRValueExpr(s, HIRNodeKind::CompoundAssignExpr, l->type),
-        lhs(std::move(l)), rhs(std::move(r)), op(o) {}
-};
-
 struct HIRUnaryExpr : HIRValueExpr {
   Operator op;
   unique_ptr<HIRExpr> operand = nullptr;
@@ -203,11 +182,12 @@ struct HIRStructInitExpr : HIRValueExpr {
   HIRMethodDecl *method = nullptr;
   std::vector<std::unique_ptr<HIRExpr>> args;
   bool isDefault = false;
+  HIRBlockStmt *defaultInit = nullptr;
   HIRStructInitExpr(SourceSpan s, HIRMethodDecl *m,
                     std::vector<std::unique_ptr<HIRExpr>> a, HIRType *r,
-                    bool d = false)
+                    HIRBlockStmt *de, bool d = false)
       : HIRValueExpr(s, HIRNodeKind::StructInitExpr, r), method(m),
-        args(std::move(a)), isDefault(d) {}
+        args(std::move(a)), isDefault(d), defaultInit(de) {}
 };
 
 struct HIRSpawnExpr : HIRValueExpr {
@@ -232,11 +212,6 @@ struct HIRViewExpr : HIRValueExpr {
               unique_ptr<HIRValueExpr> h, HIREntityType *ent)
       : HIRValueExpr(s, HIRNodeKind::ViewExpr, outType), storage(st),
         handle(std::move(h)), entityType(ent) {}
-};
-
-struct HIRWildCardValue : HIRValueExpr {
-  HIRWildCardValue(SourceSpan s, HIRType *ty)
-      : HIRValueExpr(s, HIRNodeKind::WildcardValue, ty) {}
 };
 
 struct HIRMatchExpr : HIRValueExpr {

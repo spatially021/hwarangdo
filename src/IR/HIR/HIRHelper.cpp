@@ -154,7 +154,7 @@ HIRType *HIRHelper::getOrCreateType(HIRProgram *program, HIRSource *source,
     if (hirType == nullptr) {
       Error::internal("fail to make ptr");
     }
-
+    hirType->typeSymbol = symbol;
     type = hirType.get();
     program->typeCache.emplace(symbol, type);
     source->types.push_back(std::move(hirType));

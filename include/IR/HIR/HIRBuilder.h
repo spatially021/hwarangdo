@@ -72,6 +72,7 @@ private:
   std::unique_ptr<HIRStmt> lowerExprStmt(ExprStmt *stmt);
   std::unique_ptr<HIRStmt> lowerDestroyStmt(DestroyExpr *expr);
   std::unique_ptr<HIRStmt> lowerQuitStmt(QuitExpr *expr);
+  std::unique_ptr<HIRStmt> lowerAssign(AssignExpr *expr);
 
   // expr
   std::unique_ptr<HIRExpr> lowerExpr(Expr *expr);
@@ -81,7 +82,6 @@ private:
   std::unique_ptr<HIRExpr> lowerCall(CallExpr *expr);
   std::unique_ptr<HIRExpr> lowerInitCall(CallExpr *expr);
   std::unique_ptr<HIRExpr> lowerImplictCall(CallExpr *expr);
-  std::unique_ptr<HIRExpr> lowerAssign(AssignExpr *expr);
   std::unique_ptr<HIRExpr> lowerTernary(TernaryExpr *expr);
   std::unique_ptr<HIRExpr> lowerCast(CastExpr *expr);
   std::unique_ptr<HIRExpr> lowerLiteral(LiteralExpr *expr);
@@ -99,7 +99,7 @@ private:
   // helper
   std::unique_ptr<HIRExpr>
   insertImplicitCastIfNeeded(std::unique_ptr<HIRExpr> expr, HIRType *expected);
-  HIRLocal *makeTemp(HIRType *type);
+  // HIRLocal *makeTemp(HIRType *type);
   HIRLocal *lookUpLocal(ValueSymbol *);
   unique_ptr<HIRValueExpr> lowerValue(Expr *expr);
   std::unique_ptr<HIRSelfExpr> lowerImplictSelf();

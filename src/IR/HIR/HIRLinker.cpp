@@ -100,7 +100,8 @@ void HIRLinker::lowerTypeShell(Decl *decl) {
     Error::internal(decl->span, "lowerType returned nullptr");
   }
 
-  auto ty = make_unique<HIRTypeDecl>(decl->span, kind, typeSymbol->name, type);
+  auto ty = make_unique<HIRTypeDecl>(decl->span, kind, typeSymbol->name, type,
+                                     typeSymbol);
 
   auto *raw = ty.get();
   auto [it, inserted] = program->typeDeclMap.emplace(typeSymbol, raw);

@@ -30,21 +30,21 @@ unique_ptr<HIRSelfExpr> HIRBuilder::lowerImplictSelf() {
       type, type, type);
 }
 
-HIRLocal *HIRBuilder::makeTemp(HIRType *type) {
-  auto local = make_unique<HIRLocal>();
-  local->id = allocLocalID();
-  local->type = type;
-  local->symbol = nullptr;
-  local->kind = HIRLocalKind::Temp;
-  local->isMutable = false;
-  local->isInitialized = false;
-  local->name = "";
-  auto raw = local.get();
+// HIRLocal *HIRBuilder::makeTemp(HIRType *type) {
+//   auto local = make_unique<HIRLocal>();
+//   local->id = allocLocalID();
+//   local->type = type;
+//   local->symbol = nullptr;
+//   local->kind = HIRLocalKind::Temp;
+//   local->isMutable = false;
+//   local->isInitialized = false;
+//   local->name = "";
+//   auto raw = local.get();
 
-  currentMethod->locals.push_back(std::move(local));
+//   currentMethod->locals.push_back(std::move(local));
 
-  return raw;
-}
+//   return raw;
+// }
 
 HIRLocal *HIRBuilder::lookUpLocal(ValueSymbol *symbol) {
   assert(currentBlock);
@@ -127,9 +127,8 @@ void HIRBuilder::setDefaultInit(HIRTypeDecl *type) {
         f.first);
     auto rhs = lowerValue(f.second);
     auto assign =
-        make_unique<HIRAssignExpr>(span, std::move(place), std::move(rhs));
-    block->statements.push_back(
-        make_unique<HIRExprStmt>(span, std::move(assign)));
+        make_unique<HIRAssignStmt>(span, std::move(place), std::move(rhs));
+    block->statements.push_back(std::move(assign));
   }
 }
 

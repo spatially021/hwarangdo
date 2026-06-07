@@ -28,12 +28,12 @@ enum class HIRNodeKind {
   ValueTransferStmt,
   DestroyStmt,
   QuitStmt,
+  AssignStmt,
+  CompoundAssignStmt,
 
   // expr
   LiteralExpr,
   LoadExpr,
-  AssignExpr,
-  CompoundAssignExpr,
   UnaryExpr,
   BinaryExpr,
   CastExpr,
@@ -52,7 +52,6 @@ enum class HIRNodeKind {
   SelfExpr,
   // SuperExpr,
   RootExpr,
-  TempPlaceExpr,
   ArrayAccessExpr,
 
   // value
@@ -62,7 +61,6 @@ enum class HIRNodeKind {
   LiteralPattern,
   EnumPattern,
   CasePattern,
-  WildcardValue,
 };
 
 struct HIRNode {

@@ -1,9 +1,11 @@
 #pragma once
 
 #include "IR/MIR/MIRExpr.h"
-#include "IR/MIR/MIRInst.h"
+#include "IR/MIR/MIRStmt.h"
+#include "SemanticAnalyzer/ResolvedLit.h"
 #include "SemanticAnalyzer/symbol/MethodSymbol.h"
 #include "SemanticAnalyzer/symbol/TypeSymbol.h"
+#include "SemanticAnalyzer/symbol/ValueSymbol.h"
 #include "util/Error.h"
 #include <cstdint>
 #include <memory>
@@ -26,20 +28,32 @@ struct GotoTerminator {
 };
 
 struct BranchTerminator {
-  unique_ptr<MIRExpr> cond;
+  unique_ptr<MIRValue> cond;
   BlockID trueBlock;
   BlockID falseBlock;
-  BranchTerminator(unique_ptr<MIRExpr> co, BlockID tr, BlockID fa)
+  BranchTerminator(unique_ptr<MIRValue> co, BlockID tr, BlockID fa)
       : cond(std::move(co)), trueBlock(tr), falseBlock(fa) {}
 };
 
 struct ReturnTerminator {
-  // void return이면 비워도 됨
-  // 값 반환 지원하려면 나중에 optional<MIRValue> value;
+  unique_ptr<MIRValue> value = nullptr;
+  ReturnTerminator(unique_ptr<MIRValue> v) : value(std::move(v)) {}
+};
+
+using MIRCaseValue = std::variant<ResolvedLit, EnumVariantSymbol *>;
+struct MIRCase {
+  MIRCaseValue value;
+  BlockID target;
+  MIRCase(ResolvedLit v, BlockID t) : value(v), target(t) {}
+  MIRCase(EnumVariantSymbol *v, BlockID t) : value(v), target(t) {}
 };
 
 struct SwitchTerminator {
-  // 나중에 채우기
+  unique_ptr<MIRValue> cond;
+  vector<MIRCase> cases;
+  BlockID defaultTarget;
+  SwitchTerminator(unique_ptr<MIRValue> c, vector<MIRCase> ca, BlockID d)
+      : cond(std::move(c)), cases(std::move(ca)), defaultTarget(d) {}
 };
 
 using MIRTerminator = variant<std::monostate, GotoTerminator, BranchTerminator,
@@ -48,7 +62,7 @@ using MIRTerminator = variant<std::monostate, GotoTerminator, BranchTerminator,
 struct BasicBlock {
   BlockID id = 0;
   MIRTerminator terminator;
-  vector<unique_ptr<MIRInst>> insts;
+  vector<unique_ptr<MIRStmt>> stmts;
   BasicBlock(BlockID i) { id = i; }
 };
 

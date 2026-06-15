@@ -372,3 +372,12 @@ bool SymbolTable::isSigned(TypeSymbol *symbol) {
 
   return false;
 }
+
+ValueSymbol *SymbolTable::makePayloadValue(TypeSymbol *type) {
+  unique_ptr<ValueSymbol> symbol = make_unique<ValueSymbol>();
+  symbol->typeSymbol = type;
+  symbol->isPayload = true;
+  auto raw = symbol.get();
+  payloadSymbols.push_back(std::move(symbol));
+  return raw;
+}

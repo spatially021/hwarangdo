@@ -88,7 +88,10 @@ void Resolver::visit(Case *stmt) {
       Error::internal(stmt->span, "illegal expr kind");
     }
     t->accept(this);
-
+    if (t->payload && stmt->values.size() > 1) {
+      Error::diagnostic(stmt->span,
+                        "payload case cannot be used in multi-value case");
+    }
     if (t->isWildCard) {
       stmt->isWildCard = true;
     }

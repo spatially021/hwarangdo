@@ -82,6 +82,8 @@ src/IR/HIR/HIRHelper.cpp
   src/IR/MIR/MIRBuilder.cpp
   src/IR/MIR/MIRUtil.cpp
   src/IR/MIR/MIRStmtBuilder.cpp
+  src/SemanticAnalyzer/symbol/SymbolHelper.cpp
+  src/IR/MIR/MIRPlace.cpp
   
 )
 

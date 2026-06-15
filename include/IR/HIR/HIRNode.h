@@ -55,7 +55,7 @@ enum class HIRNodeKind {
   ArrayAccessExpr,
 
   // value
-  EnumVairantValue,
+  EnumVariantValue,
   StructInitExpr,
   // pattern
   LiteralPattern,

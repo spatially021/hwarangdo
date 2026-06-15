@@ -13,6 +13,7 @@
 #include "util/TypeResolver.h"
 #include <cassert>
 #include <memory>
+#include <utility>
 #include <vector>
 
 Linker::Linker(SymbolTable *t) : table(t) {}
@@ -189,7 +190,7 @@ void Linker::visit(EnumDecl *decl) {
             t->span, "entity types are not allowed in enum variant payloads");
       }
       t->resolved = s;
-      decl->symbol->variantMap[v->name]->payloadType = table->getType(t);
+      v->symbol->payloadType = table->getType(t);
     }
   }
 }
@@ -269,7 +270,7 @@ void Linker::visit(FuncDecl *decl) {
   for (auto &p : decl->params) {
     p->accept(this);
     p->symbol->typeSymbol = p->type->resolved;
-    decl->methodSymbol->paramTypes.push_back(p->type->resolved);
+    decl->methodSymbol->params.push_back(p->symbol);
   }
 
   auto it = currentType->memberScope->methodMap.find(decl->methodSymbol->name);
@@ -283,6 +284,14 @@ void Linker::visit(FuncDecl *decl) {
     Error::diagnostic(decl->span,
                       "duplicate method declaration '" + decl->name + "'");
   }
+
+  unique_ptr<ValueSymbol> selfReceiver = make_unique<ValueSymbol>();
+  selfReceiver->typeSymbol = currentType;
+  selfReceiver->name = decl->name + "self";
+  auto rawSelf = selfReceiver.get();
+
+  table->selfSymbols.push_back(std::move(selfReceiver));
+  raw->selfReceiver = rawSelf;
 
   decl->body->accept(this);
 }
@@ -314,7 +323,7 @@ void Linker::visit(InitDecl *decl) {
   for (auto &p : decl->params) {
     p->accept(this);
     p->symbol->typeSymbol = p->type->resolved;
-    decl->methodSymbol->paramTypes.push_back(p->type->resolved);
+    decl->methodSymbol->params.push_back(p->symbol);
   }
   decl->body->accept(this);
 }

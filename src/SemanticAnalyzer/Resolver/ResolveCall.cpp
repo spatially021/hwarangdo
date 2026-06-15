@@ -49,7 +49,7 @@ void Resolver::resolveInit(CallExpr *expr) {
   }
   vector<pair<vector<ArgMatchKind>, MethodSymbol *>> candidates;
   for (auto &m : bucket) {
-    if (m->paramTypes.size() != args.size()) {
+    if (m->params.size() != args.size()) {
       continue;
     }
 
@@ -61,8 +61,8 @@ void Resolver::resolveInit(CallExpr *expr) {
       Error::internal(expr->span, "illegal ast kind");
     }
 
-    for (size_t i = 0; i < m->paramTypes.size(); ++i) {
-      auto kind = matchArgument(args[i], m->paramTypes[i],
+    for (size_t i = 0; i < m->params.size(); ++i) {
+      auto kind = matchArgument(args[i], m->params[i]->typeSymbol,
                                 func->params[i]->defaultValue.has_value());
       if (kind == ArgMatchKind::Invalid) {
         viable = false;
@@ -155,7 +155,7 @@ void Resolver::resolveCall(CallExpr *expr, Scope *scope, bool isImplict) {
   }
   vector<pair<vector<ArgMatchKind>, MethodSymbol *>> candidates;
   for (auto &m : bucket) {
-    if (m->paramTypes.size() != args.size()) {
+    if (m->params.size() != args.size()) {
       continue;
     }
 
@@ -167,8 +167,8 @@ void Resolver::resolveCall(CallExpr *expr, Scope *scope, bool isImplict) {
       Error::internal(expr->span, "illegal ast kind");
     }
 
-    for (size_t i = 0; i < m->paramTypes.size(); ++i) {
-      auto kind = matchArgument(args[i], m->paramTypes[i],
+    for (size_t i = 0; i < m->params.size(); ++i) {
+      auto kind = matchArgument(args[i], m->params[i]->typeSymbol,
                                 func->params[i]->defaultValue.has_value());
       if (kind == ArgMatchKind::Invalid) {
         viable = false;

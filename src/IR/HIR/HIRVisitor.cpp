@@ -185,7 +185,9 @@ void HIRBuilder::visit(IfStmt *stmt) { emit(lowerIf(stmt)); }
 void HIRBuilder::visit(ForStmt *stmt) { emit(lowerFor(stmt)); }
 void HIRBuilder::visit(WhileStmt *stmt) { emit(lowerWhile(stmt)); }
 void HIRBuilder::visit(SwitchStmt *stmt) { emit(lowerSwitch(stmt)); }
-void HIRBuilder::visit(Case *) {}
+void HIRBuilder::visit(Case *) {
+  // visitor 접근으로 처리 안함
+}
 
 void HIRBuilder::visit(ReturnStmt *stmt) { emit(lowerReturn(stmt)); }
 

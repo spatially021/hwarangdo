@@ -34,7 +34,6 @@ class EnumVariantSymbol : public ValueSymbol {
 public:
   int ordinal;
   TypeSymbol *payloadType = nullptr;
-  optional<ValueSymbol> payloadValue = nullopt;
   EnumVariantSymbol() { type = Symbol::SymbolType::ENUM_VARIANT; }
 
 protected:

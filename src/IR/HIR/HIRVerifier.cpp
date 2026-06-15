@@ -717,9 +717,9 @@ void HIRVerifier::verifyExpr(HIRExpr *expr, bool isRead) {
     verifyExpr(arr->index.get());
     break;
   }
-  case HIRNodeKind::EnumVairantValue: {
+  case HIRNodeKind::EnumVariantValue: {
     auto varaint =
-        expect<HIRVaraintValueExpr>(expr, HIRNodeKind::EnumVairantValue);
+        expect<HIRVaraintValueExpr>(expr, HIRNodeKind::EnumVariantValue);
     if (varaint->type == nullptr) {
       Error::internal("variantValueExpr's type is nullptr");
     }

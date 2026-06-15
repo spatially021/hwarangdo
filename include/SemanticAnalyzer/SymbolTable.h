@@ -3,12 +3,14 @@
 #include "AST/ASTNode.h"
 #include "Scope.h"
 #include "SemanticAnalyzer/symbol/MethodSymbol.h"
+#include "SemanticAnalyzer/symbol/ValueSymbol.h"
 #include "symbol/Symbol.h"
 #include "symbol/TypeSymbol.h"
 #include <cstddef>
 #include <functional>
 #include <llvm/ADT/APInt.h>
 #include <memory>
+#include <utility>
 #include <vector>
 
 struct ArrayTypeKey {
@@ -142,6 +144,10 @@ public:
   Scope *getCurrent();
 
   void addImpl(unique_ptr<ImplSymbol>);
+  void addTemp(unique_ptr<ValueSymbol> symbol) {
+    tmps.push_back(std::move(symbol));
+  }
+  ValueSymbol *makePayloadValue(TypeSymbol *type);
 
 private:
   Scope *current = nullptr;
@@ -149,6 +155,9 @@ private:
   TypeSymbol *currentType = nullptr;
   unique_ptr<Scope> topLevel;
   unique_ptr<BuiltInScope> builtIn;
+  vector<unique_ptr<ValueSymbol>> tmps;
+  vector<unique_ptr<ValueSymbol>> payloadSymbols;
+  vector<unique_ptr<ValueSymbol>> selfSymbols;
 
   bool addValue(unique_ptr<ValueSymbol> symbol);
   bool addType(unique_ptr<TypeSymbol> symbol);

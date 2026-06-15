@@ -6,13 +6,23 @@
 #include "IR/HIR/HIRStmt.h"
 #include "IR/HIR/HIRType.h"
 #include "IR/MIR/MIRExpr.h"
-#include "IR/MIR/MIRInst.h"
 #include "IR/MIR/MIRNode.h"
 #include "IR/MIR/MIRProgram.h"
-#include "IR/MIR/MIRType.h"
+#include "SemanticAnalyzer/SymbolTable.h"
 #include "SemanticAnalyzer/symbol/TypeSymbol.h"
+#include "SemanticAnalyzer/symbol/ValueSymbol.h"
 #include "magic_enum/magic_enum.hpp"
 #include <memory>
+
+struct LoopContext {
+  BlockID continueTarget = 0;
+  BlockID breakTarget = 0;
+};
+
+struct MatchContext {
+  ValueSymbol *result = nullptr;
+  BlockID join;
+};
 
 class MIRBuilder {
 
@@ -41,25 +51,25 @@ class MIRBuilder {
 public:
   HIRProgram *HirProgram = nullptr;
   MIRProgram *program = nullptr;
+  SymbolTable *table = nullptr;
 
-  MIRBuilder(HIRProgram *hp, MIRProgram *mp) : HirProgram(hp), program(mp) {}
+  MIRBuilder(HIRProgram *hp, MIRProgram *mp, SymbolTable *&ta)
+      : HirProgram(hp), program(mp), table(ta) {}
 
   void build();
 
 private:
   MIRFunction *currentFunc = nullptr;
   BlockID currentBlock = 0;
-
-  void emit(unique_ptr<MIRInst> inst);
+  vector<LoopContext> loops;
+  vector<MatchContext> matches;
+  void emit(unique_ptr<MIRStmt> inst);
 
 private:
   BlockID makeBlock();
   BasicBlock *getBlock(BlockID id);
   bool hasTerminator(BlockID id);
-
-private:
-  MIRType *getType(TypeSymbol *type);
-  MIRType *getType(HIRType *type);
+  ValueSymbol *makeTemp(TypeSymbol *type);
 
 private:
   void lowerType(HIRTypeDecl *type);
@@ -73,6 +83,33 @@ private:
   void lowerForRange(HIRForRangeStmt *stmt);
   void lowerAssign(HIRAssignStmt *stmt);
   void lowerCompoundAssign(HIRCompoundAssignStmt *stmt);
+  void lowerBreak(HIRBreakStmt *stmt);
+  void lowerContinue(HIRContinueStmt *stmt);
+  void loewrLocalDecl(HIRLocalDeclStmt *stmt);
+  void lowerQuit(HIRQuitStmt *stmt);
+  void lowerReturn(HIRReturnStmt *stmt);
+  void lowerSwitch(HIRSwitchStmt *stmt);
+  void lowerValueTransfer(HIRValueTransferStmt *stmt);
+  void lowerDestroy(HIRDestroyStmt *stmt);
 
-  unique_ptr<MIRExpr> lowerExpr(HIRExpr *expr);
+  unique_ptr<MIRValue> lowerExpr(HIRExpr *expr);
+  unique_ptr<MIRValue> lowerTernary(HIRTernaryExpr *expr);
+  unique_ptr<MIRValue> lowerMatch(HIRMatchExpr *expr);
+  unique_ptr<MIRValue> lowerLiteral(HIRLiteralExpr *expr);
+  unique_ptr<MIRValue> lowerLoad(HIRLoadExpr *expr);
+  std::unique_ptr<MIRValue> lowerUnary(HIRUnaryExpr *expr);
+  unique_ptr<MIRValue> lowerBinary(HIRBinaryExpr *expr);
+  unique_ptr<MIRValue> lowerCast(HIRCastExpr *expr);
+  unique_ptr<MIRValue> lowerCall(HIRMethodCallExpr *expr);
+  unique_ptr<MIRValue> lowerSpawn(HIRSpawnExpr *expr);
+  unique_ptr<MIRValue> lowerView(HIRViewExpr *expr);
+  unique_ptr<MIRValue> lowerStructInit(HIRStructInitExpr *expr);
+  unique_ptr<MIRValue> lowerVariantValue(HIRVaraintValueExpr *expr);
+
+  unique_ptr<MIRPlace> lowerPlace(HIRPlaceExpr *expr);
+  unique_ptr<MIRLocalPlace> lowerLocal(HIRLocalPlaceExpr *expr);
+  unique_ptr<MIRParamPlace> lowerParam(HIRParamPlaceExpr *expr);
+  unique_ptr<MIRArrayAccessPlace> lowerArray(HIRArrayAccessPlaceExpr *expr);
+  unique_ptr<MIRFieldPlace> lowerField(HIRFieldPlaceExpr *expr);
+  unique_ptr<MIRPlace> lowerReceiverToPlace(HIRExpr *receiver);
 };

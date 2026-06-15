@@ -50,7 +50,7 @@ struct HIRVaraintValueExpr : HIRValueExpr {
   std::unique_ptr<HIRExpr> payload = nullptr;
   HIRVaraintValueExpr(SourceSpan s, HIRType *t, HIREnumVariant *v,
                       std::unique_ptr<HIRExpr> p = nullptr)
-      : HIRValueExpr(s, HIRNodeKind::EnumVairantValue, t), varaint(v),
+      : HIRValueExpr(s, HIRNodeKind::EnumVariantValue, t), varaint(v),
         payload(std::move(p)) {}
 };
 
@@ -69,11 +69,11 @@ struct HIRParamPlaceExpr : HIRPlaceExpr {
 };
 
 struct HIRArrayAccessPlaceExpr : HIRPlaceExpr {
-  unique_ptr<HIRValueExpr> object = nullptr;
+  unique_ptr<HIRPlaceExpr> object = nullptr;
   unique_ptr<HIRValueExpr> index = nullptr;
   HIRType *elementType = nullptr;
 
-  HIRArrayAccessPlaceExpr(SourceSpan s, unique_ptr<HIRValueExpr> o,
+  HIRArrayAccessPlaceExpr(SourceSpan s, unique_ptr<HIRPlaceExpr> o,
                           unique_ptr<HIRValueExpr> i, HIRType *et)
       : HIRPlaceExpr(s, HIRNodeKind::ArrayAccessExpr, et), object(std::move(o)),
         index(std::move(i)), elementType(et) {}

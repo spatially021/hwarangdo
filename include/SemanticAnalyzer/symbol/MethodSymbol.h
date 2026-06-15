@@ -1,7 +1,9 @@
 #pragma once
 
 #include "SemanticAnalyzer/symbol/TypeSymbol.h"
+#include "SemanticAnalyzer/symbol/ValueSymbol.h"
 #include "Symbol.h"
+#include <vector>
 class Scope;
 
 class MethodSymbol : public Symbol {
@@ -12,7 +14,7 @@ public:
   TypeSymbol *declType = nullptr;
   TypeSymbol *returnType = nullptr;
   ASTNode *decl = nullptr;
-  vector<TypeSymbol *> paramTypes;
+  vector<ValueSymbol *> params;
   Expr::State state = Expr::State::RESOLVED;
   Scope *scope = nullptr;
   Scope *selfScope = nullptr;
@@ -24,6 +26,8 @@ public:
   bool isOverride = false;
   std::vector<ReturnStmt *> returns;
   AModifier modifier = AModifier::PUBLIC;
+
+  ValueSymbol *selfReceiver = nullptr;
 
 protected:
   void _anchor() override {};

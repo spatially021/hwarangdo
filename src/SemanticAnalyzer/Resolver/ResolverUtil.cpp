@@ -438,12 +438,12 @@ pair<bool, MethodSymbol *> Resolver::lookupMethod(str name, Scope *scope,
     return {true, nullptr};
   }
   for (auto &m : bucket) {
-    if (m->paramTypes.size() != args.size()) {
+    if (m->params.size() != args.size()) {
       continue;
     }
     bool flag = true;
     for (unsigned int i = 0; i < args.size(); ++i) {
-      if (m->paramTypes[i] != args[i]) {
+      if (m->params[i]->typeSymbol != args[i]) {
         flag = false;
         break;
       }

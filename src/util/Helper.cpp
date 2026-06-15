@@ -22,13 +22,13 @@ bool Helper::hasSameMethodSig(const vector<MethodSymbol *> &vec,
       continue;
     }
 
-    if (m->paramTypes.size() != symbol->paramTypes.size()) {
+    if (m->params.size() != symbol->params.size()) {
       continue;
     }
 
     bool same = true;
-    for (size_t i = 0; i < m->paramTypes.size(); ++i) {
-      if (m->paramTypes[i] != symbol->paramTypes[i]) {
+    for (size_t i = 0; i < m->params.size(); ++i) {
+      if (m->params[i]->typeSymbol != symbol->params[i]->typeSymbol) {
         same = false;
         break;
       }
@@ -48,13 +48,13 @@ bool Helper::hasSameSig(const vector<MethodSymbol *> &vec,
     if (m == symbol)
       continue;
 
-    if (m->paramTypes.size() != symbol->paramTypes.size()) {
+    if (m->params.size() != symbol->params.size()) {
       continue;
     }
 
     bool same = true;
-    for (size_t i = 0; i < m->paramTypes.size(); ++i) {
-      if (m->paramTypes[i] != symbol->paramTypes[i]) {
+    for (size_t i = 0; i < m->params.size(); ++i) {
+      if (m->params[i]->typeSymbol != symbol->params[i]->typeSymbol) {
         same = false;
         break;
       }

@@ -1,11 +1,15 @@
-#include "SemanticAnalyzer/Verifier.h"
-#include "AST/Decl.h"
-#include "AST/Expr.h"
-#include "AST/Stmt.h"
-#include "SemanticAnalyzer/symbol//TypeSymbol.h"
-#include "enums/InheritState.h"
-#include "util/Error.h"
+#include "hrd/SemanticAnalyzer/Verifier.h"
+#include "hrd/AST/Decl.h"
+#include "hrd/AST/Expr.h"
+#include "hrd/AST/Stmt.h"
+#include "hrd/SemanticAnalyzer/symbol//MethodSymbol.h"
+#include "hrd/SemanticAnalyzer/symbol//TypeSymbol.h"
+#include "hrd/SemanticAnalyzer/symbol/RuntimeSymbol.h"
+#include "hrd/SemanticAnalyzer/symbol/ValueSymbol.h"
+#include "hrd/enums/InheritState.h"
+#include "hrd/util/Error.h"
 #include <cerrno>
+#include <variant>
 
 void Verifier::verify() {
   InheritState i = InheritState::Unvisited;
@@ -74,17 +78,25 @@ void Verifier::visit(CallExpr *expr) {
   for (auto &a : expr->arguments) {
     a->accept(this);
   }
-  if (expr->receiver != nullptr)
+
+  if (expr->receiver != nullptr &&
+      get_if<RuntimeSymbol *>(&expr->resolved) == nullptr) {
     expr->receiver->accept(this);
+  }
+
   if (expr->callType == CallExpr::CallType::FUNC_CALL) {
-    if (expr->resolved == nullptr)
+    if (get_if<MethodSymbol *>(&expr->resolved) == nullptr)
       unresolved(expr, "method is unresolved");
   } else if (expr->callType == CallExpr::CallType::PAYLOAD_CALL) {
-    if (expr->resolved == nullptr)
+    if (get_if<EnumVariantSymbol *>(&expr->resolved) == nullptr)
       unresolved(expr, "variant is unresolved");
   } else if (expr->callType == CallExpr::CallType::INIT_CALL) {
-    if (expr->resolvedType == nullptr) {
+    if (get_if<MethodSymbol *>(&expr->resolved) == nullptr) {
       unresolved(expr, "init is unresolved");
+    }
+  } else if (expr->callType == CallExpr::CallType::RUNTIME_CALL) {
+    if (get_if<RuntimeSymbol *>(&expr->resolved) == nullptr) {
+      unresolved(expr, "runtimeCall is unresolved");
     }
   } else {
     unresolved(expr, "callExpr unresolved");
@@ -283,6 +295,9 @@ void Verifier::visit(TraitSig *sig) {
 void Verifier::visit(FuncDecl *decl) {
   if (decl->methodSymbol == nullptr)
     unresolved(decl, "funcDecl is unresolved");
+  if (decl->methodSymbol->returnType == nullptr) {
+    unresolved(decl, "funcDecl's retrunType is nullptr");
+  }
   for (auto &p : decl->params)
     p->accept(this);
   decl->body->accept(this);

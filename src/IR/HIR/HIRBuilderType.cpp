@@ -1,7 +1,7 @@
-#include "IR/HIR/HIRBuilder.h"
-#include "IR/HIR/HIRType.h"
-#include "enums/StorageKind.h"
-#include "util/Error.h"
+#include "hrd/IR/HIR/HIRBuilder.h"
+#include "hrd/IR/HIR/HIRType.h"
+#include "hrd/enums/StorageKind.h"
+#include "hrd/util/Error.h"
 #include <cassert>
 #include <memory>
 #include <utility>

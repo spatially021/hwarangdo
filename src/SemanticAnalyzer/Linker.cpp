@@ -1,18 +1,19 @@
-#include "SemanticAnalyzer/Linker.h"
-#include "AST/Decl.h"
-#include "AST/Expr.h"
-#include "AST/Stmt.h"
-#include "IR/HIR/HIRType.h"
-#include "SemanticAnalyzer/Scope.h"
-#include "SemanticAnalyzer/SymbolTable.h"
-#include "SemanticAnalyzer/symbol/MethodSymbol.h"
-#include "SemanticAnalyzer/symbol/TypeSymbol.h"
-#include "SemanticAnalyzer/symbol/ValueSymbol.h"
-#include "util/Error.h"
-#include "util/Guard.h"
-#include "util/TypeResolver.h"
+#include "hrd/SemanticAnalyzer/Linker.h"
+#include "hrd/AST/Decl.h"
+#include "hrd/AST/Expr.h"
+#include "hrd/AST/Stmt.h"
+#include "hrd/IR/HIR/HIRType.h"
+#include "hrd/SemanticAnalyzer/Scope.h"
+#include "hrd/SemanticAnalyzer/SymbolTable.h"
+#include "hrd/SemanticAnalyzer/symbol/MethodSymbol.h"
+#include "hrd/SemanticAnalyzer/symbol/TypeSymbol.h"
+#include "hrd/SemanticAnalyzer/symbol/ValueSymbol.h"
+#include "hrd/util/Error.h"
+#include "hrd/util/Guard.h"
+#include "hrd/util/TypeResolver.h"
 #include <cassert>
 #include <memory>
+#include <utility>
 #include <vector>
 
 Linker::Linker(SymbolTable *t) : table(t) {}
@@ -66,14 +67,26 @@ void Linker::visit(DestroyExpr *expr) {
 }
 void Linker::visit(QuitExpr *) {}
 void Linker::visit(DefaultValueExpr *) {}
-void Linker::visit(Range *) {}
+void Linker::visit(Range *expr) {
+  expr->from->accept(this);
+  expr->to->accept(this);
+  if (expr->step) {
+    expr->step->accept(this);
+  }
+}
 void Linker::visit(CaseValueExpr *expr) {
   expr->value->accept(this);
   if (expr->arg) {
     expr->arg->accept(this);
   }
 }
-void Linker::visit(MatchExpr *) {}
+void Linker::visit(MatchExpr *expr) {
+  ScopeGuard _(*table, expr->blockScope);
+  expr->value->accept(this);
+  for (auto &c : expr->cases) {
+    c->accept(this);
+  }
+}
 // Statement Linker::visitor methods
 void Linker::visit(ExprStmt *stmt) { stmt->expr->accept(this); }
 void Linker::visit(BlockStmt *stmt) {
@@ -124,7 +137,21 @@ void Linker::visit(ClassDecl *decl) {
     } else if (bucket.size() > 1) {
       Error::diagnostic(decl->span, "'update' methods cannot be overloaded");
     }
-    symbol->main = bucket[0];
+    symbol->update = bucket[0];
+
+    bucket = symbol->memberScope->inits;
+    if (bucket.size() > 1) {
+      Error::diagnostic(decl->span, "Main's init not allowed overload");
+    }
+
+    if (bucket.size() == 1) {
+      auto init = bucket[0];
+      if (!init->params.empty()) {
+        Error::diagnostic(init->decl->span,
+                          "Main;s init not allowed parameter");
+      }
+      symbol->init = init;
+    }
   }
 
   if (decl->baseClass.has_value()) {
@@ -157,8 +184,9 @@ void Linker::visit(ClassDecl *decl) {
   ScopeGuard _(*table, decl->symbol->memberScope);
   TypeContextGuard __(currentType, decl->symbol);
 
-  for (auto &a : decl->fields)
+  for (auto &a : decl->fields) {
     a->accept(this);
+  }
   for (auto &a : decl->methods) {
     a->accept(this);
   }
@@ -189,7 +217,7 @@ void Linker::visit(EnumDecl *decl) {
             t->span, "entity types are not allowed in enum variant payloads");
       }
       t->resolved = s;
-      decl->symbol->variantMap[v->name]->payloadType = table->getType(t);
+      v->symbol->payloadType = table->getType(t);
     }
   }
 }
@@ -247,7 +275,7 @@ void Linker::visit(ImplDecl *decl) {
 
     a->accept(this);
 
-    methodSymbol->onwer = symbol;
+    methodSymbol->owner = symbol;
     methodSymbol->selfScope = symbol->memberScope;
   }
 }
@@ -269,7 +297,7 @@ void Linker::visit(FuncDecl *decl) {
   for (auto &p : decl->params) {
     p->accept(this);
     p->symbol->typeSymbol = p->type->resolved;
-    decl->methodSymbol->paramTypes.push_back(p->type->resolved);
+    decl->methodSymbol->params.push_back(p->symbol);
   }
 
   auto it = currentType->memberScope->methodMap.find(decl->methodSymbol->name);
@@ -284,11 +312,22 @@ void Linker::visit(FuncDecl *decl) {
                       "duplicate method declaration '" + decl->name + "'");
   }
 
+  unique_ptr<ValueSymbol> selfReceiver = make_unique<ValueSymbol>();
+  selfReceiver->typeSymbol = currentType;
+  selfReceiver->name = decl->name + "self";
+  auto rawSelf = selfReceiver.get();
+
+  table->selfSymbols.push_back(std::move(selfReceiver));
+  raw->selfReceiver = rawSelf;
+
   decl->body->accept(this);
 }
 void Linker::visit(VarDecl *decl) {
   decl->type->accept(this);
   decl->symbol->typeSymbol = decl->type->resolved;
+  if (decl->init) {
+    decl->init->accept(this);
+  }
 }
 
 void Linker::visit(TypeNode *type) {
@@ -299,6 +338,7 @@ void Linker::visit(ASTNode *) {}
 void Linker::visit(TraitSig *sig) {
   for (auto &p : sig->params) {
     p->accept(this);
+    sig->symbol->params.push_back(p->symbol);
   }
   sig->type->accept(this);
   sig->symbol->returnType = sig->type->resolved;
@@ -314,7 +354,7 @@ void Linker::visit(InitDecl *decl) {
   for (auto &p : decl->params) {
     p->accept(this);
     p->symbol->typeSymbol = p->type->resolved;
-    decl->methodSymbol->paramTypes.push_back(p->type->resolved);
+    decl->methodSymbol->params.push_back(p->symbol);
   }
   decl->body->accept(this);
 }

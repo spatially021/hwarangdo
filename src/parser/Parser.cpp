@@ -1,9 +1,9 @@
-#include "Parser.h"
-#include "AST/Decl.h"
-#include "AST/DeclContext.h"
-#include "AST/TokenStream.h"
-#include "Token.h"
-#include "util/Error.h"
+#include "hrd/Parser.h"
+#include "hrd/AST/Decl.h"
+#include "hrd/AST/DeclContext.h"
+#include "hrd/AST/TokenStream.h"
+#include "hrd/Token.h"
+#include "hrd/util/Error.h"
 #include <memory>
 
 using ptr = shared_ptr<ASTNode>;

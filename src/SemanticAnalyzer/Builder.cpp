@@ -1,12 +1,12 @@
-#include "SemanticAnalyzer/Builder.h"
-#include "AST/ASTNode.h"
-#include "AST/Decl.h"
-#include "AST/Expr.h"
-#include "SemanticAnalyzer/Scope.h"
-#include "SemanticAnalyzer/symbol/MethodSymbol.h"
-#include "SemanticAnalyzer/symbol/ValueSymbol.h"
-#include "util/Error.h"
-#include "util/Guard.h"
+#include "hrd/SemanticAnalyzer/Builder.h"
+#include "hrd/AST/ASTNode.h"
+#include "hrd/AST/Decl.h"
+#include "hrd/AST/Expr.h"
+#include "hrd/SemanticAnalyzer/Scope.h"
+#include "hrd/SemanticAnalyzer/symbol/MethodSymbol.h"
+#include "hrd/SemanticAnalyzer/symbol/ValueSymbol.h"
+#include "hrd/util/Error.h"
+#include "hrd/util/Guard.h"
 #include <memory>
 #include <utility>
 
@@ -127,8 +127,12 @@ void Builder::visit(SwitchStmt *stmt) {
 }
 void Builder::visit(Case *stmt) { stmt->body->accept(this); }
 
-void Builder::visit(ReturnStmt *) {}
-void Builder::visit(ValueTransferStmt *) {}
+void Builder::visit(ReturnStmt *stmt) {
+  if (stmt->value) {
+    stmt->value->accept(this);
+  }
+}
+void Builder::visit(ValueTransferStmt *stmt) { stmt->value->accept(this); }
 void Builder::visit(BreakStmt *) {}
 void Builder::visit(ContinueStmt *) {}
 
@@ -174,6 +178,7 @@ void Builder::buildMain(ClassDecl *decl) {
   table->getCurrent()->scopeKind = Scope::ScopeKind::FIELD;
   for (auto &a : decl->fields) {
     a->accept(this);
+    raw->fields.push_back(a->symbol);
   }
   for (auto &a : decl->methods) {
     a->accept(this);
@@ -226,6 +231,7 @@ void Builder::visit(ClassDecl *decl) {
   raw->memberScope = table->getCurrent();
   for (auto &a : decl->fields) {
     a->accept(this);
+    raw->fields.push_back(a->symbol);
   }
   for (auto &a : decl->methods) {
     a->accept(this);
@@ -280,6 +286,7 @@ void Builder::visit(StructDecl *decl) {
   raw->memberScope = table->getCurrent();
   for (auto &a : decl->fields) {
     a->accept(this);
+    raw->fields.push_back(a->symbol);
   }
 
   for (auto &i : decl->inits) {
@@ -352,7 +359,7 @@ void Builder::visit(ImplDecl *decl) {
   symbol->memberScope = table->getCurrent();
   for (auto &a : decl->LinkedImplMethods) {
     a->accept(this);
-    a->methodSymbol->onwer = nullptr;
+    a->methodSymbol->owner = nullptr;
   }
 
   table->impls.push_back(std::move(symbol));
@@ -407,7 +414,7 @@ void Builder::visit(TraitSig *sig) {
 
   symbol->name = sig->name;
   symbol->decl = sig;
-  symbol->onwer = currentType;
+  symbol->owner = currentType;
   auto raw = symbol.get();
 
   auto result = table->add(std::move(symbol));
@@ -476,7 +483,7 @@ void Builder::visit(FuncDecl *decl) {
 
   symbol->name = decl->name;
   symbol->decl = decl;
-  symbol->onwer = currentType;
+  symbol->owner = currentType;
   symbol->declType = currentType;
   symbol->modifier = decl->aModifier;
   auto raw = symbol.get();
@@ -620,7 +627,7 @@ void Builder::visit(InitDecl *decl) {
 
   symbol->name = decl->name;
   symbol->decl = decl;
-  symbol->onwer = currentType;
+  symbol->owner = currentType;
   symbol->isInit = true;
   symbol->returnType = table->getBuilt("void");
   auto raw = symbol.get();

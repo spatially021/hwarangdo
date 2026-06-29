@@ -1,25 +1,26 @@
 
 
-#include "AST/Expr.h"
-#include "IR/HIR/HIRBuilder.h"
-#include "IR/HIR/HIRExpr.h"
-#include "IR/HIR/HIRHelper.h"
-#include "IR/HIR/HIRSymbol.h"
-#include "SemanticAnalyzer/symbol/TypeSymbol.h"
-#include "SemanticAnalyzer/symbol/ValueSymbol.h"
-#include "util/Error.h"
+#include "hrd/AST/Expr.h"
+#include "hrd/IR/HIR/HIRBuilder.h"
+#include "hrd/IR/HIR/HIRExpr.h"
+#include "hrd/IR/HIR/HIRHelper.h"
+#include "hrd/IR/HIR/HIRSymbol.h"
+#include "hrd/SemanticAnalyzer/symbol/TypeSymbol.h"
+#include "hrd/SemanticAnalyzer/symbol/ValueSymbol.h"
+#include "hrd/util/Error.h"
 #include <memory>
 #include <utility>
+#include <variant>
 
 std::unique_ptr<HIRValueExpr> HIRBuilder::lowerVariantValue(CallExpr *expr) {
-  auto symbol = dynamic_cast<EnumVariantSymbol *>(expr->resolved);
+  auto symbol = get_if<EnumVariantSymbol *>(&expr->resolved);
   if (symbol == nullptr) {
     Error::internal(
         expr->span,
         "in enum variant context but resolved is not EnumVariantSymbol");
   }
 
-  auto [found, variant] = lookupVariant(symbol);
+  auto [found, variant] = lookupVariant(*symbol);
   if (!found || variant == nullptr) {
     Error::internal(expr->span, "failed to find HIR enum variant");
   }
@@ -61,7 +62,7 @@ std::unique_ptr<HIRValueExpr> HIRBuilder::lowerVariantValue(CallExpr *expr) {
     }
   }
 
-  return std::make_unique<HIRVaraintValueExpr>(expr->span, owner->type, variant,
+  return std::make_unique<HIRVariantValueExpr>(expr->span, owner->type, variant,
                                                std::move(payload));
 }
 
@@ -95,7 +96,7 @@ std::unique_ptr<HIRValueExpr> HIRBuilder::lowerVariantValue(MemberExpr *expr) {
     Error::internal(expr->span, "mismatched variant owner");
   }
 
-  return make_unique<HIRVaraintValueExpr>(expr->span, owner->type, variant,
+  return make_unique<HIRVariantValueExpr>(expr->span, owner->type, variant,
                                           nullptr);
 }
 
@@ -156,9 +157,13 @@ std::unique_ptr<HIRFieldPlaceExpr> HIRBuilder::lowerMember(MemberExpr *expr) {
     }
   }
 
-  if (auto [cond, result] = lookupField(it->second, value); cond) {
-    return make_unique<HIRFieldPlaceExpr>(expr->span, std::move(receiver),
-                                          result);
+  auto type = it->second;
+
+  for (; type != nullptr; type = type->base) {
+    if (auto [cond, result] = lookupField(type, value); cond) {
+      return make_unique<HIRFieldPlaceExpr>(expr->span, std::move(receiver),
+                                            result);
+    }
   }
 
   Error::internal(expr->span, "fail to lower field");
@@ -174,7 +179,11 @@ HIRBuilder::lowerArrayAccess(ArrayAccessExpr *expr) {
 
   // Expr -> hirValueExpr
   // nullptr아님을 보장
-  unique_ptr<HIRValueExpr> object = lowerValue(expr->object.get());
+  auto name = dynamic_cast<NameExpr *>(expr->object.get());
+  if (name == nullptr) {
+    Error::internal(expr->span, "array's object is not place");
+  }
+  unique_ptr<HIRPlaceExpr> object = lowerPlace(name);
   unique_ptr<HIRValueExpr> index = lowerValue(expr->index.get());
 
   // TypeSymbol -> hirType

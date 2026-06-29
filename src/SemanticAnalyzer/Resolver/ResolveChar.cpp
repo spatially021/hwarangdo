@@ -1,7 +1,8 @@
-#include "SemanticAnalyzer/ResolvedLit.h"
-#include "SemanticAnalyzer/Resolver.h"
-#include "SemanticAnalyzer/symbol/TypeSymbol.h"
-#include "SourceSpan.h"
+#include "hrd/SemanticAnalyzer/ResolvedLit.h"
+#include "hrd/SemanticAnalyzer/Resolver.h"
+#include "hrd/SemanticAnalyzer/symbol/TypeSymbol.h"
+#include "hrd/SourceSpan.h"
+#include "hrd/util/Error.h"
 #include <vector>
 
 ResolvedLit Resolver::resolveChar(LiteralExpr *expr) {
@@ -31,14 +32,19 @@ ResolvedLit Resolver::resolveString(LiteralExpr *expr) {
     c.push_back(cp);
   }
 
-  TypeSymbol *type;
+  TypeSymbol *type = nullptr;
 
   if (maxCp <= 0xFF) {
-    type = table->getType("string8");
+    type = table->getType("s8");
   } else if (maxCp <= 0xFFFF) {
-    type = table->getType("string16");
-  } else
-    type = table->getType("string32");
+    type = table->getType("s16");
+  } else {
+    type = table->getType("s32");
+  }
+
+  if (type == nullptr) {
+    Error::internal(expr->span, "fail to get string");
+  }
 
   ResolvedLit r;
   r.type = type;

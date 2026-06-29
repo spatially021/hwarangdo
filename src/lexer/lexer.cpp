@@ -1,7 +1,7 @@
-#include "Lexer.h"
-#include "AST/TokenStream.h"
-#include "Token.h"
-#include "util/Error.h"
+#include "hrd/Lexer.h"
+#include "hrd/AST/TokenStream.h"
+#include "hrd/Token.h"
+#include "hrd/util/Error.h"
 #include <cctype>
 #include <string>
 #include <sys/types.h>

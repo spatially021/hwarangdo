@@ -1,18 +1,18 @@
-#include "AST/ASTNode.h"
-#include "AST/Decl.h"
-#include "AST/DeclContext.h"
-#include "AST/Expr.h"
-#include "AST/Stmt.h"
-#include "IR/HIR/HIRType.h"
-#include "SemanticAnalyzer/ResolvedLit.h"
-#include "SemanticAnalyzer/Resolver.h"
-#include "SemanticAnalyzer/symbol/MethodSymbol.h"
-#include "SemanticAnalyzer/symbol/Symbol.h"
-#include "SemanticAnalyzer/symbol/TypeSymbol.h"
-#include "SemanticAnalyzer/symbol/ValueSymbol.h"
-#include "util/Error.h"
-#include "util/Guard.h"
-#include "util/TypeResolver.h"
+#include "hrd/AST/ASTNode.h"
+#include "hrd/AST/Decl.h"
+#include "hrd/AST/DeclContext.h"
+#include "hrd/AST/Expr.h"
+#include "hrd/AST/Stmt.h"
+#include "hrd/IR/HIR/HIRType.h"
+#include "hrd/SemanticAnalyzer/ResolvedLit.h"
+#include "hrd/SemanticAnalyzer/Resolver.h"
+#include "hrd/SemanticAnalyzer/symbol/MethodSymbol.h"
+#include "hrd/SemanticAnalyzer/symbol/Symbol.h"
+#include "hrd/SemanticAnalyzer/symbol/TypeSymbol.h"
+#include "hrd/SemanticAnalyzer/symbol/ValueSymbol.h"
+#include "hrd/util/Error.h"
+#include "hrd/util/Guard.h"
+#include "hrd/util/TypeResolver.h"
 #include <llvm/ADT/APInt.h>
 #include <string>
 
@@ -32,7 +32,7 @@ void Resolver::visit(ClassDecl *decl) {
     a->accept(this);
   }
 
-  if (!Helper::checkImpletTraitSig(decl->symbol)) {
+  if (!Helper::checkImplementTraitSig(decl->symbol)) {
     Error::internal(decl->span, "not implement trait");
   }
 }
@@ -51,7 +51,7 @@ void Resolver::visit(StructDecl *decl) {
     i->accept(this);
   }
 
-  if (!Helper::checkImpletTraitSig(decl->symbol)) {
+  if (!Helper::checkImplementTraitSig(decl->symbol)) {
     Error::internal(decl->span, "not implement trait");
   }
 }

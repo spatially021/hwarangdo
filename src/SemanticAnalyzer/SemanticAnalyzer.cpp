@@ -1,8 +1,9 @@
-#include "SemanticAnalyzer.h"
-#include "AST/Program.h"
-#include "SemanticAnalyzer/Builder.h"
-#include "SemanticAnalyzer/Linker.h"
-#include "SemanticAnalyzer/SymbolTable.h"
+#include "hrd/SemanticAnalyzer.h"
+#include "hrd/AST/Program.h"
+#include "hrd/SemanticAnalyzer/Builder.h"
+#include "hrd/SemanticAnalyzer/Linker.h"
+#include "hrd/SemanticAnalyzer/SymbolTable.h"
+#include "hrd/SemanticAnalyzer/symbol/TypeSymbol.h"
 
 #include <stdexcept>
 
@@ -35,6 +36,12 @@ void SemanticAnalyzer::link() {
       throw e;
     }
   }
+
+  for (auto &t : symbolTable.types) {
+    fieldIndexing(t);
+  }
+
+  prepareRuntime();
 }
 
 void SemanticAnalyzer::resolve() {
@@ -49,4 +56,41 @@ void SemanticAnalyzer::resolve() {
       throw e;
     }
   }
+}
+
+void SemanticAnalyzer::fieldIndexing(TypeSymbol *type) {
+  if (type->kind != TypeSymbol::TypeKind::CLASS &&
+      type->kind != TypeSymbol::TypeKind::STRUCT) {
+    return;
+  }
+
+  if (layoutState[type] == LayoutState::Done) {
+    return;
+  }
+
+  if (layoutState[type] == LayoutState::Visiting) {
+    Error::diagnostic(type->decl->span, "cyclic inheritance detected");
+    return;
+  }
+
+  layoutState[type] = LayoutState::Visiting;
+
+  uint32_t index = 0;
+
+  if (type->base != nullptr) {
+    fieldIndexing(type->base);
+
+    if (layoutState[type->base] != LayoutState::Done) {
+      return;
+    }
+
+    index = type->base->fieldCount;
+  }
+
+  for (auto *field : type->fields) {
+    field->index = index++;
+  }
+
+  type->fieldCount = index;
+  layoutState[type] = LayoutState::Done;
 }

@@ -1,16 +1,17 @@
-#include "IR/HIR/HIRVerifier.h"
-#include "AST/Stmt.h"
-#include "IR/HIR/HIRDecl.h"
-#include "IR/HIR/HIRExpr.h"
-#include "IR/HIR/HIRNode.h"
-#include "IR/HIR/HIRPattern.h"
-#include "IR/HIR/HIRProgram.h"
-#include "IR/HIR/HIRStmt.h"
-#include "IR/HIR/HIRSymbol.h"
-#include "IR/HIR/HIRType.h"
-#include "enums/InheritState.h"
+#include "hrd/IR/HIR/HIRVerifier.h"
+#include "hrd/AST/Stmt.h"
+#include "hrd/IR/HIR/HIRDecl.h"
+#include "hrd/IR/HIR/HIRExpr.h"
+#include "hrd/IR/HIR/HIRNode.h"
+#include "hrd/IR/HIR/HIRPattern.h"
+#include "hrd/IR/HIR/HIRProgram.h"
+#include "hrd/IR/HIR/HIRStmt.h"
+#include "hrd/IR/HIR/HIRSymbol.h"
+#include "hrd/IR/HIR/HIRType.h"
+#include "hrd/SemanticAnalyzer/symbol/TypeSymbol.h"
+#include "hrd/enums/InheritState.h"
+#include "hrd/util/Error.h"
 #include "magic_enum/magic_enum.hpp"
-#include "util/Error.h"
 #include <cassert>
 #include <llvm/ADT/APInt.h>
 #include <unordered_map>
@@ -38,6 +39,12 @@ void HIRVerifier::verify() {
   }
 
   for (auto &t : program->typeDeclMap) {
+    for (auto &f : t.second->fields) {
+      linkField(f.get());
+    }
+  }
+
+  for (auto &t : program->typeDeclMap) {
     if (inheritStates[t.second] == InheritState::Unvisited) {
       verifyType(t.second);
     }
@@ -50,6 +57,9 @@ void HIRVerifier::verifyRoot(HIRField *root) {
   }
   if (root->type == nullptr) {
     Error::internal("root's type is nullptr");
+  }
+  if (root->type->typeSymbol == nullptr) {
+    Error::internal("root's typeSymbol is nullptr");
   }
 }
 
@@ -79,20 +89,17 @@ void HIRVerifier::verifyType(HIRTypeDecl *type) {
   if (type->type == nullptr) {
     Error::internal(type->span, "hirType is nullptr");
   }
+
+  if (type->type->typeSymbol == nullptr) {
+    Error::internal(type->span, "hirType's typeSymbol is nullptr");
+  }
+
   if (type == nullptr) {
     Error::internal("hirTypeDecl is nullptr");
   }
 
   if (type->type == nullptr) {
     Error::internal(type->span, "hirType is nullptr");
-  }
-
-  for (auto &f : type->fieldMap) {
-    verifyField(f.second);
-    initmap.fieldStates.emplace(
-        f.second, InitState(f.second->isInitialized,
-                            f.second->isInitialized &&
-                                f.second->type->kind == HIRTypeKind::Array));
   }
 
   if (type->typeDeclKind == HIRTypeDeclKind::Enum) {
@@ -144,6 +151,17 @@ void HIRVerifier::verifyMethod(HIRMethodDecl *method) {
   }
 
   verifyBlock(method->body.get());
+  if (method->returnType == nullptr) {
+    Error::internal(method->name + "'s return type is nullptr");
+  }
+  if (method->returnType->typeSymbol == nullptr) {
+    Error::internal(method->name + "'s return type's symbol is nullptr");
+  }
+  if (method->returnType->typeSymbol->kind != TypeSymbol::TypeKind::VOID &&
+      !definitelyReturns(method->body.get())) {
+    Error::diagnostic(method->span, "non-void function '" + method->name +
+                                        "' may exit without returning a value");
+  }
 }
 
 void HIRVerifier::verifyParam(HIRParam *param) {
@@ -404,7 +422,39 @@ void HIRVerifier::verifyStmt(HIRStmt *stmt) {
   case HIRNodeKind::QuitStmt: {
     break;
   }
-
+  case HIRNodeKind::AssignStmt: {
+    auto assign = expect<HIRAssignStmt>(stmt, HIRNodeKind::AssignStmt);
+    if (assign->lhs == nullptr) {
+      Error::internal(assign->span, "assign's lhs is nullptr");
+    }
+    if (isObserver(assign->lhs->type)) {
+      Error::internal(assign->span, "observer cannot be assigned");
+    }
+    if (assign->rhs == nullptr) {
+      Error::internal(assign->span, "assign's rhs is nullptr");
+    }
+    verifyExpr(assign->lhs.get());
+    initialize(assign->lhs.get());
+    verifyExpr(assign->rhs.get());
+    break;
+  }
+  case HIRNodeKind::CompoundAssignStmt: {
+    auto compound =
+        expect<HIRCompoundAssignStmt>(stmt, HIRNodeKind::CompoundAssignStmt);
+    if (compound->lhs == nullptr) {
+      Error::internal("compoundAssignExpr's lhs is nullptr");
+    }
+    if (isObserver(compound->lhs->type)) {
+      Error::internal("observer cannot be assigned");
+    }
+    if (compound->rhs == nullptr) {
+      Error::internal("compoundAssignExpr's rhs is nullptr");
+    }
+    verifyExpr(compound->lhs.get());
+    initialize(compound->lhs.get());
+    verifyExpr(compound->rhs.get());
+    break;
+  }
   default:
     Error::internal("illegal stmt kind : " +
                     std::string(magic_enum::enum_name(stmt->kind)));
@@ -438,45 +488,6 @@ void HIRVerifier::verifyExpr(HIRExpr *expr, bool isRead) {
       checkInitialize(load->place.get());
     }
     verifyExpr(load->place.get());
-    break;
-  }
-  case HIRNodeKind::AssignExpr: {
-    auto assign = expect<HIRAssignExpr>(expr, HIRNodeKind::AssignExpr);
-    if (assign->type == nullptr) {
-      Error::internal(assign->span, "assign's type is nullptr");
-    }
-    if (assign->lhs == nullptr) {
-      Error::internal(assign->span, "assign's lhs is nullptr");
-    }
-    if (isObserver(assign->lhs->type)) {
-      Error::internal(assign->span, "observer cannot be assigned");
-    }
-    if (assign->rhs == nullptr) {
-      Error::internal(assign->span, "assign's rhs is nullptr");
-    }
-    verifyExpr(assign->lhs.get());
-    initialize(assign->lhs.get());
-    verifyExpr(assign->rhs.get());
-    break;
-  }
-  case HIRNodeKind::CompoundAssignExpr: {
-    auto compound =
-        expect<HIRCompoundAssignExpr>(expr, HIRNodeKind::CompoundAssignExpr);
-    if (compound->type == nullptr) {
-      Error::internal("compoundAssignExpr's type is nullptr");
-    }
-    if (compound->lhs == nullptr) {
-      Error::internal("compoundAssignExpr's lhs is nullptr");
-    }
-    if (isObserver(compound->lhs->type)) {
-      Error::internal("observer cannot be assigned");
-    }
-    if (compound->rhs == nullptr) {
-      Error::internal("compoundAssignExpr's rhs is nullptr");
-    }
-    verifyExpr(compound->lhs.get());
-    initialize(compound->lhs.get());
-    verifyExpr(compound->rhs.get());
     break;
   }
   case HIRNodeKind::UnaryExpr: {
@@ -705,17 +716,6 @@ void HIRVerifier::verifyExpr(HIRExpr *expr, bool isRead) {
     }
     break;
   }
-  case HIRNodeKind::TempPlaceExpr: {
-    auto temp = expect<HIRLocalPlaceExpr>(expr, HIRNodeKind::TempPlaceExpr);
-    if (temp->type == nullptr) {
-      Error::internal("tempPlaceExpr's type is nullptr");
-    }
-    if (temp->local == nullptr) {
-      Error::internal("tempPlaceExpr's local is nullptr");
-    }
-    verifyLocal(temp->local);
-    break;
-  }
   case HIRNodeKind::ArrayAccessExpr: {
     auto arr =
         expect<HIRArrayAccessPlaceExpr>(expr, HIRNodeKind::ArrayAccessExpr);
@@ -735,9 +735,9 @@ void HIRVerifier::verifyExpr(HIRExpr *expr, bool isRead) {
     verifyExpr(arr->index.get());
     break;
   }
-  case HIRNodeKind::EnumVairantValue: {
+  case HIRNodeKind::EnumVariantValue: {
     auto varaint =
-        expect<HIRVaraintValueExpr>(expr, HIRNodeKind::EnumVairantValue);
+        expect<HIRVariantValueExpr>(expr, HIRNodeKind::EnumVariantValue);
     if (varaint->type == nullptr) {
       Error::internal("variantValueExpr's type is nullptr");
     }
@@ -776,9 +776,18 @@ void HIRVerifier::verifyExpr(HIRExpr *expr, bool isRead) {
     }
     break;
   }
-  case HIRNodeKind::WildcardValue: {
+
+  case HIRNodeKind::RuntimeCallExpr: {
+    auto runtime = expect<HIRRuntimeCall>(expr, HIRNodeKind::RuntimeCallExpr);
+    if (runtime->symbol == nullptr) {
+      Error::internal(expr->span, "runtime's symbol is nullptr");
+    }
+    for (auto &a : runtime->args) {
+      verifyExpr(a.get());
+    }
     break;
-  }
+  };
+
   default:
     Error::internal("illegal expr kind");
     break;
@@ -1002,4 +1011,58 @@ void HIRVerifier::verifyCasePattern(HIRCasePattern *pattern) {
         }
       },
       pattern->selector);
+}
+
+void HIRVerifier::linkField(HIRField *field) {
+  verifyField(field);
+  initmap.fieldStates.emplace(
+      field, InitState(field->isInitialized,
+                       field->isInitialized &&
+                           field->type->kind == HIRTypeKind::Array));
+}
+
+bool HIRVerifier::definitelyReturns(HIRStmt *stmt) {
+  switch (stmt->kind) {
+  case HIRNodeKind::ReturnStmt:
+    return true;
+
+  case HIRNodeKind::BlockStmt: {
+    auto block = expect<HIRBlockStmt>(stmt, HIRNodeKind::BlockStmt);
+    for (auto &s : block->statements) {
+      if (definitelyReturns(s.get()))
+        return true;
+    }
+    return false;
+  }
+
+  case HIRNodeKind::IfStmt: {
+    auto ifs = expect<HIRIfStmt>(stmt, HIRNodeKind::IfStmt);
+    if (!ifs->elseBlock)
+      return false;
+    return definitelyReturns(ifs->thenBlock.get()) &&
+           definitelyReturns(ifs->elseBlock.get());
+  }
+
+  case HIRNodeKind::SwitchStmt: {
+    auto sw = expect<HIRSwitchStmt>(stmt, HIRNodeKind::SwitchStmt);
+
+    bool hasDefault = false;
+
+    for (auto &c : sw->cases) {
+      if (c->defaultKind == HIRDefaultKind::Default)
+        hasDefault = true;
+
+      if (!definitelyReturns(c->body.get()))
+        return false;
+    }
+
+    return hasDefault;
+  }
+
+  case HIRNodeKind::WhileStmt:
+    return false; // 기본은 안전하게 false
+
+  default:
+    return false;
+  }
 }

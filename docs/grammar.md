@@ -1369,6 +1369,7 @@ async는 비동기 처리 함수를 선언할 때 사용하는 수식자이다.
 ### 10.1 case 값 규칙
 case value는 리터럴과 enum variant만 위치할 수 있다.
 switch에서 case value는 복수의 값을 가질 수 있다.
+단 payload는 예외적으로 단독 값만 허용한다.
 match에서 case value는 단일 값만 허용한다.
 
 ### 10.2 default 규칙

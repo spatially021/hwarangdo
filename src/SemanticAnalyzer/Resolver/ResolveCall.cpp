@@ -1,113 +1,203 @@
-#include "AST/Decl.h"
-#include "AST/Expr.h"
-#include "AST/Stmt.h"
-#include "SemanticAnalyzer/Resolver.h"
-#include "SemanticAnalyzer/Scope.h"
-#include "SemanticAnalyzer/symbol/MethodSymbol.h"
-#include "SemanticAnalyzer/symbol/TypeSymbol.h"
-#include "SemanticAnalyzer/symbol/ValueSymbol.h"
-#include "SourceSpan.h"
-#include "util/Error.h"
+#include "hrd/AST/Decl.h"
+#include "hrd/AST/Expr.h"
+#include "hrd/AST/Stmt.h"
+#include "hrd/SemanticAnalyzer/Resolver.h"
+#include "hrd/SemanticAnalyzer/Scope.h"
+#include "hrd/SemanticAnalyzer/symbol/MethodSymbol.h"
+#include "hrd/SemanticAnalyzer/symbol/TypeSymbol.h"
+#include "hrd/SemanticAnalyzer/symbol/ValueSymbol.h"
+#include "hrd/SourceSpan.h"
+#include "hrd/util/Error.h"
 #include <cstddef>
+#include <variant>
 #include <vector>
 
 inline Expr::Ptr cloneExpr(const Expr::Ptr &expr) {
   return expr ? expr->deepCopy() : nullptr;
 }
 
-namespace {
-
-// resolved가 특정 타입 심볼인지 강하게 확인
-template <typename T>
-T *checkedSymbolCast(Symbol *symbol, const SourceSpan &token,
-                     const std::string &msg) {
-  auto *result = dynamic_cast<T *>(symbol);
-  if (!result) {
-    Error::internal(token, msg);
-  }
-  return result;
+MethodSymbol *
+Resolver::resolveMethodOverload(SourceSpan span,
+                                const vector<MethodSymbol *> &bucket,
+                                const vector<Expr *> &args) {
+  return resolveOverload<MethodSymbol>(
+      span, bucket, args, [](MethodSymbol *m) { return m->params.size(); },
+      [](MethodSymbol *m, size_t i) { return m->params[i]->typeSymbol; },
+      [](MethodSymbol *m, size_t i) {
+        auto *func = dynamic_cast<FuncDecl *>(m->decl);
+        if (!func)
+          Error::internal("illegal ast kind");
+        return func->params[i]->defaultValue.has_value();
+      },
+      "unknown call", "ambiguous overload call");
 }
 
-} // namespace
+RuntimeSymbol *
+Resolver::resolveRuntimeOverload(SourceSpan span,
+                                 const vector<RuntimeSymbol *> &bucket,
+                                 const vector<Expr *> &args) {
+  return resolveOverload<RuntimeSymbol>(
+      span, bucket, args, [](RuntimeSymbol *r) { return r->params.size(); },
+      [](RuntimeSymbol *r, size_t i) { return r->params[i]; },
+      [](RuntimeSymbol *, size_t) { return false; },
+      "no matching runtime function found", "ambiguous runtime overload call");
+}
 
-void Resolver::resolveInit(CallExpr *expr) {
-  auto type = table->getType(expr->methodName);
-  if (type->memberScope->inits.empty()) {
-    if (expr->arguments.empty()) {
-      expr->resolvedType = type;
-      expr->resolved = nullptr;
+void Resolver::checkMethodAccess(CallExpr *expr, MethodSymbol *method,
+                                 bool isImplicit) {
+  if (isImplicit) {
+    return;
+  }
+
+  auto isInternalReceiver = [&]() {
+    if (expr->receiver == nullptr) {
+      return true;
+    }
+
+    if (dynamic_cast<SelfExpr *>(expr->receiver.get())) {
+      return true;
+    }
+
+    if (dynamic_cast<ThisExpr *>(expr->receiver.get())) {
+      return true;
+    }
+
+    if (dynamic_cast<SuperExpr *>(expr->receiver.get())) {
+      return true;
+    }
+
+    return false;
+  };
+
+  switch (method->modifier) {
+  case AModifier::PUBLIC:
+    return;
+
+  case AModifier::PROTECTED:
+    if (isInternalReceiver()) {
       return;
     }
-    Error::diagnostic(expr->span, "no matching init declaration found");
-  }
+    Error::diagnostic(expr->span,
+                      "cannot access protected method in this context");
+    return;
 
-  auto &bucket = type->memberScope->inits;
-  vector<Expr *> args;
-  for (auto &a : expr->arguments) {
-    a->accept(this);
-    args.push_back(a.get());
+  case AModifier::PRIVATE:
+    if (isInternalReceiver()) {
+      return;
+    }
+    Error::diagnostic(expr->span,
+                      "cannot access private method in this context");
+    return;
   }
-  vector<pair<vector<ArgMatchKind>, MethodSymbol *>> candidates;
-  for (auto &m : bucket) {
-    if (m->paramTypes.size() != args.size()) {
+}
+
+template <typename SymbolT, typename ParamCount, typename ParamType,
+          typename HasDefault>
+SymbolT *Resolver::resolveOverload(SourceSpan span,
+                                   const std::vector<SymbolT *> &bucket,
+                                   const std::vector<Expr *> &args,
+                                   ParamCount paramCount, ParamType paramType,
+                                   HasDefault hasDefault,
+                                   std::string_view unknownMessage,
+                                   std::string_view ambiguousMessage) {
+
+  struct Candidate {
+    std::vector<ArgMatchKind> kinds;
+    SymbolT *symbol;
+  };
+
+  std::vector<Candidate> candidates;
+
+  for (auto *sym : bucket) {
+    if (paramCount(sym) != args.size()) {
       continue;
     }
 
-    vector<ArgMatchKind> kinds;
+    std::vector<ArgMatchKind> kinds;
     bool viable = true;
 
-    auto func = dynamic_cast<FuncDecl *>(m->decl);
-    if (func == nullptr) {
-      Error::internal(expr->span, "illegal ast kind");
-    }
+    for (size_t i = 0; i < args.size(); ++i) {
+      auto kind = matchArgument(args[i], paramType(sym, i), hasDefault(sym, i));
 
-    for (size_t i = 0; i < m->paramTypes.size(); ++i) {
-      auto kind = matchArgument(args[i], m->paramTypes[i],
-                                func->params[i]->defaultValue.has_value());
       if (kind == ArgMatchKind::Invalid) {
         viable = false;
         break;
       }
+
       kinds.push_back(kind);
     }
 
     if (viable) {
-      candidates.push_back({std::move(kinds), m});
+      candidates.push_back({std::move(kinds), sym});
     }
   }
-  vector<size_t> bestIdx;
+
+  std::vector<size_t> bestIdx;
+
   for (size_t i = 0; i < candidates.size(); ++i) {
     bool beaten = false;
+
     for (size_t j = 0; j < candidates.size(); ++j) {
-      if (i == j)
+      if (i == j) {
         continue;
-      if (isBetterThan(candidates[j].first, candidates[i].first)) {
+      }
+
+      if (isBetterThan(candidates[j].kinds, candidates[i].kinds)) {
         beaten = true;
         break;
       }
     }
+
     if (!beaten) {
       bestIdx.push_back(i);
     }
   }
 
   if (bestIdx.empty()) {
+    Error::diagnostic(span, std::string(unknownMessage));
+  }
+
+  if (bestIdx.size() > 1) {
+    Error::diagnostic(span, std::string(ambiguousMessage));
+  }
+
+  return candidates[bestIdx[0]].symbol;
+}
+
+void Resolver::resolveInit(CallExpr *expr) {
+  auto *type = table->getType(expr->methodName);
+
+  std::vector<Expr *> args;
+  for (auto &a : expr->arguments) {
+    a->accept(this);
+    args.push_back(a.get());
+  }
+
+  auto &bucket = type->memberScope->inits;
+
+  if (bucket.empty()) {
+    if (args.empty()) {
+      expr->resolvedType = type;
+      return;
+    }
+
     Error::diagnostic(expr->span, "no matching init declaration found");
   }
 
-  if (bestIdx.size() == 1) {
-    auto best = candidates[bestIdx[0]].second;
-    expr->resolved = best;
-    expr->resolvedType = type;
-    return;
-  }
+  auto *best = resolveMethodOverload(expr->span, bucket, args);
 
-  Error::diagnostic(expr->span, "ambiguous init call");
+  expr->resolved = best;
+  expr->resolvedType = type;
 }
 
 void Resolver::ResolveEnumVariant(CallExpr *expr) {
-  auto *variant = checkedSymbolCast<EnumVariantSymbol>(
-      expr->resolved, expr->span, "expected enum variant symbol");
+
+  EnumVariantSymbol *variant = nullptr;
+  if (auto e = get_if<EnumVariantSymbol *>(&expr->resolved)) {
+    variant = *e;
+  } else {
+    Error::internal(expr->span, "illegal symbol kindi");
+  }
 
   if (expr->arguments.size() > 1) {
     Error::diagnostic(expr->span,
@@ -147,114 +237,30 @@ void Resolver::ResolveEnumVariant(CallExpr *expr) {
 }
 
 void Resolver::resolveCall(CallExpr *expr, Scope *scope, bool isImplict) {
-  auto &bucket = scope->methodMap[expr->methodName];
-  vector<Expr *> args; // nullptr -> defaultValue
+  auto bucketIt = scope->methodMap.find(expr->methodName);
+  if (bucketIt == scope->methodMap.end()) {
+    Error::diagnostic(expr->span, "unknown call");
+  }
+
+  std::vector<Expr *> args;
   for (auto &a : expr->arguments) {
     a->accept(this);
     args.push_back(a.get());
   }
-  vector<pair<vector<ArgMatchKind>, MethodSymbol *>> candidates;
-  for (auto &m : bucket) {
-    if (m->paramTypes.size() != args.size()) {
-      continue;
-    }
 
-    vector<ArgMatchKind> kinds;
-    bool viable = true;
+  auto *best = resolveMethodOverload(expr->span, bucketIt->second, args);
 
-    auto func = dynamic_cast<FuncDecl *>(m->decl);
-    if (func == nullptr) {
-      Error::internal(expr->span, "illegal ast kind");
-    }
+  checkMethodAccess(expr, best, isImplict);
 
-    for (size_t i = 0; i < m->paramTypes.size(); ++i) {
-      auto kind = matchArgument(args[i], m->paramTypes[i],
-                                func->params[i]->defaultValue.has_value());
-      if (kind == ArgMatchKind::Invalid) {
-        viable = false;
-        break;
-      }
-      kinds.push_back(kind);
-    }
+  expr->resolved = best;
 
-    if (viable) {
-      candidates.push_back({std::move(kinds), m});
-    }
-  }
-  vector<size_t> bestIdx;
-  for (size_t i = 0; i < candidates.size(); ++i) {
-    bool beaten = false;
-    for (size_t j = 0; j < candidates.size(); ++j) {
-      if (i == j)
-        continue;
-      if (isBetterThan(candidates[j].first, candidates[i].first)) {
-        beaten = true;
-        break;
-      }
-    }
-    if (!beaten) {
-      bestIdx.push_back(i);
-    }
+  if (best->returnType == nullptr) {
+    Error::internal(expr->span, "methodSymbol's returnType is nullptr");
   }
 
-  if (bestIdx.empty()) {
-    Error::diagnostic(expr->span, "unknown call");
-  }
-
-  if (bestIdx.size() == 1) {
-    auto best = candidates[bestIdx[0]].second;
-
-    if (!isImplict) {
-      switch (best->modifier) {
-      case AModifier::PUBLIC: {
-        break;
-      }
-      case AModifier::PROTECTED: {
-        if (expr->receiver == nullptr) {
-          break;
-        }
-        if (dynamic_cast<SelfExpr *>(expr->receiver.get())) {
-          break;
-        }
-
-        if (dynamic_cast<ThisExpr *>(expr->receiver.get())) {
-          break;
-        }
-
-        if (dynamic_cast<SuperExpr *>(expr->receiver.get())) {
-          break;
-        }
-
-        Error::diagnostic(expr->span,
-                          "cannot access protected method in this context");
-      }
-      case AModifier::PRIVATE: {
-        if (expr->receiver == nullptr) {
-          break;
-        }
-        if (dynamic_cast<SelfExpr *>(expr->receiver.get())) {
-          break;
-        }
-
-        if (dynamic_cast<ThisExpr *>(expr->receiver.get())) {
-          break;
-        }
-        Error::diagnostic(expr->span,
-                          "cannot access private method in this context");
-      }
-      }
-    }
-
-    expr->resolved = best;
-    if (best->returnType == nullptr) {
-      Error::internal(expr->span, "methodSymbol's returnType is nullptr");
-    }
-    expr->resolvedType = best->returnType;
-    return;
-  }
-
-  Error::diagnostic(expr->span, "ambiguous overload call");
+  expr->resolvedType = best->returnType;
 }
+
 int Resolver::rankOf(const ArgMatchKind &kind) {
   switch (kind) {
   case ArgMatchKind::Exact:
@@ -313,9 +319,47 @@ ArgMatchKind Resolver::matchArgument(Expr *arg, TypeSymbol *param,
 
   return ArgMatchKind::Invalid;
 }
+bool Resolver::tryResolveRuntime(CallExpr *expr) {
+  if (expr->receiver == nullptr) {
+    return false;
+  }
 
+  auto *name = dynamic_cast<NameExpr *>(expr->receiver.get());
+  if (name == nullptr) {
+    return false;
+  }
+
+  auto ns = table->runtimeMap.find(name->name);
+  if (ns == table->runtimeMap.end()) {
+    return false;
+  }
+
+  auto it = ns->second.functions.find(expr->methodName);
+  if (it == ns->second.functions.end()) {
+    Error::diagnostic(expr->span, "unknown runtime function '" + name->name +
+                                      "." + expr->methodName + "'");
+  }
+
+  std::vector<Expr *> args;
+  for (auto &a : expr->arguments) {
+    a->accept(this);
+    args.push_back(a.get());
+  }
+
+  auto *best = resolveRuntimeOverload(expr->span, it->second, args);
+
+  expr->resolved = best;
+  expr->resolvedType = best->returnType;
+
+  return true;
+}
 void Resolver::visit(CallExpr *expr) {
   if (expr->callType != CallExpr::CallType::UNRESOLVED) {
+    return;
+  }
+
+  if (tryResolveRuntime(expr)) {
+    expr->callType = CallExpr::CallType::RUNTIME_CALL;
     return;
   }
 

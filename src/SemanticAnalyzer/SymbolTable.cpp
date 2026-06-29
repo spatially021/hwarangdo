@@ -1,11 +1,11 @@
-#include "SemanticAnalyzer/SymbolTable.h"
-#include "AST/ASTNode.h"
-#include "BuiltInType.h"
-#include "SemanticAnalyzer/Scope.h"
-#include "SemanticAnalyzer/symbol/MethodSymbol.h"
-#include "SemanticAnalyzer/symbol/TypeSymbol.h"
-#include "SemanticAnalyzer/symbol/ValueSymbol.h"
-#include "util/Error.h"
+#include "hrd/SemanticAnalyzer/SymbolTable.h"
+#include "hrd/AST/ASTNode.h"
+#include "hrd/BuiltInType.h"
+#include "hrd/SemanticAnalyzer/Scope.h"
+#include "hrd/SemanticAnalyzer/symbol/MethodSymbol.h"
+#include "hrd/SemanticAnalyzer/symbol/TypeSymbol.h"
+#include "hrd/SemanticAnalyzer/symbol/ValueSymbol.h"
+#include "hrd/util/Error.h"
 #include <cassert>
 #include <llvm/ADT/APInt.h>
 #include <memory>
@@ -144,7 +144,6 @@ SymbolTable::Result SymbolTable::add(unique_ptr<Symbol> symbol) {
   switch (symbol->type) {
   case Symbol::SymbolType::TYPE: {
     std::unique_ptr<TypeSymbol> s(static_cast<TypeSymbol *>(symbol.release()));
-
     if (getType(s->name) != nullptr) {
       if (s->isReserved)
         return {false, Result::RESERVED};
@@ -171,6 +170,7 @@ SymbolTable::Result SymbolTable::add(unique_ptr<Symbol> symbol) {
   case Symbol::SymbolType::MAIN: {
     bool b = addType(
         unique_ptr<MainSymbol>(static_cast<MainSymbol *>(symbol.release())));
+
     return SymbolTable::Result(
         {b, (b ? SymbolTable::Result::NONE : SymbolTable::Result::DUPLICATED)});
   }
@@ -181,6 +181,7 @@ SymbolTable::Result SymbolTable::add(unique_ptr<Symbol> symbol) {
 }
 
 bool SymbolTable::addType(unique_ptr<TypeSymbol> symbol) {
+  types.push_back(symbol.get());
   return current->type.emplace(symbol->name, std::move(symbol)).second;
 }
 
@@ -331,6 +332,7 @@ SymbolTable::GenericInsGetOrCreate(TypeSymbol *origin,
     auto raw = ins.get();
     genericInsStorage.push_back(std::move(ins));
     it = genericInsSMap.emplace(key, raw).first;
+    types.push_back(raw);
   }
   return it->second;
 }
@@ -351,6 +353,7 @@ ArrayTypeSymbol *SymbolTable::arrayTypeGetOrCreate(TypeSymbol *base,
     auto raw = type.get();
     arrayTypeStorage.push_back(std::move(type));
     it = arrayTypeMap.emplace(key, raw).first;
+    types.push_back(raw);
   }
   return it->second;
 }
@@ -371,4 +374,13 @@ bool SymbolTable::isSigned(TypeSymbol *symbol) {
   }
 
   return false;
+}
+
+ValueSymbol *SymbolTable::makePayloadValue(TypeSymbol *type) {
+  unique_ptr<ValueSymbol> symbol = make_unique<ValueSymbol>();
+  symbol->typeSymbol = type;
+  symbol->isPayload = true;
+  auto raw = symbol.get();
+  payloadSymbols.push_back(std::move(symbol));
+  return raw;
 }

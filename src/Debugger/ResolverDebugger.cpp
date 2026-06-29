@@ -1,7 +1,7 @@
-#include "Debugger/ResolverDebugger.h"
-#include "SemanticAnalyzer/symbol/MethodSymbol.h"
-#include "SemanticAnalyzer/symbol/TypeSymbol.h"
-#include "SemanticAnalyzer/symbol/ValueSymbol.h"
+#include "hrd/Debugger/ResolverDebugger.h"
+#include "hrd/SemanticAnalyzer/symbol/MethodSymbol.h"
+#include "hrd/SemanticAnalyzer/symbol/TypeSymbol.h"
+#include "hrd/SemanticAnalyzer/symbol/ValueSymbol.h"
 #include "magic_enum/magic_enum.hpp"
 #include <iostream>
 #include <string>

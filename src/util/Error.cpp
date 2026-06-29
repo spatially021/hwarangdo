@@ -1,7 +1,6 @@
-#include "util/Error.h"
-#include "SemanticAnalyzer/symbol/Symbol.h"
-#include "Token.h"
-#include "util/Printor.h"
+#include "hrd/util/Error.h"
+#include "hrd/Token.h"
+#include "hrd/util/Printor.h"
 #include <iostream>
 #include <sstream>
 #include <stdexcept>
@@ -35,13 +34,6 @@ void Error::diagnostic(const SourceSpan &span, const std::string &message) {
   throwError(oss.str());
 }
 
-[[noreturn]]
-void Error::symbol(const Symbol &symbol, const std::string &message) {
-  std::ostringstream oss;
-  oss << "[error] <symbol '" << symbol.name << "'>: " << message;
-
-  throwError(oss.str());
-}
 [[noreturn]]
 void Error::internal(const std::string &message) {
   std::cerr << "[internal compiler error]\n";

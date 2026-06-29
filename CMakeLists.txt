@@ -28,6 +28,16 @@ endif()
 add_subdirectory(external/magic_enum)
 
 # ============================================================
+# LLVM
+# ============================================================
+find_package(LLVM REQUIRED CONFIG)
+
+add_library(llvm_interface INTERFACE)
+target_link_libraries(llvm_interface INTERFACE LLVM)
+target_include_directories(llvm_interface INTERFACE ${LLVM_INCLUDE_DIRS})
+target_compile_definitions(llvm_interface INTERFACE ${LLVM_DEFINITIONS})
+
+# ============================================================
 # Core Library
 # ============================================================
 add_library(hgm_core STATIC
@@ -51,12 +61,13 @@ add_library(hgm_core STATIC
   src/SemanticAnalyzer/Resolver/ResolveChar.cpp
   src/SemanticAnalyzer/Resolver/ResolveCall.cpp
 
-
   src/SemanticAnalyzer/SymbolTable.cpp
   src/SemanticAnalyzer/Linker.cpp
   src/SemanticAnalyzer/Verifier.cpp
   src/SemanticAnalyzer/symbol/TypeSymbol.cpp
+  src/SemanticAnalyzer/symbol/SymbolHelper.cpp
   src/SemanticAnalyzer/Scope.cpp
+  src/SemanticAnalyzer/PrepareRuntime.cpp
 
   src/IR/HIR/HIRBuilder.cpp
   src/IR/HIR/HIRBuilderDecl.cpp
@@ -67,9 +78,7 @@ add_library(hgm_core STATIC
   src/IR/HIR/HIRBuilderType.cpp
   src/IR/HIR/HIRBuilderPlace.cpp
   src/IR/HIR/HIRVerifier.cpp
-
-src/IR/HIR/HIRHelper.cpp
-
+  src/IR/HIR/HIRHelper.cpp
   src/IR/HIR/HIRLinker.cpp
 
   src/util/Printor.cpp
@@ -79,29 +88,49 @@ src/IR/HIR/HIRHelper.cpp
   src/Debugger/ParserDebugger.cpp
   src/Debugger/ResolverDebugger.cpp
   src/Debugger/BuilderDebugger.cpp
+  src/Debugger/HIRDebugger.cpp
+  src/Debugger/MIRDebugger/MIRDebuuger.cpp
+  src/Debugger/DebugUtil.cpp
+  src/Debugger/MIRDebugger/MIRGraphvizDebugger.cpp
+
   src/IR/MIR/MIRBuilder.cpp
   src/IR/MIR/MIRUtil.cpp
   src/IR/MIR/MIRStmtBuilder.cpp
-  src/SemanticAnalyzer/symbol/SymbolHelper.cpp
+  src/IR/MIR/MIRExprBuilder.cpp
   src/IR/MIR/MIRPlace.cpp
-  
+
+  src/IR/llvmIR/llvmCodegen.cpp
+  src/IR/llvmIR/lowerStmt.cpp
+  src/IR/llvmIR/lowerPlace.cpp
+  src/IR/llvmIR/lowerValue.cpp
+  src/IR/llvmIR/llvmUtil.cpp
 )
 
 target_include_directories(hgm_core PUBLIC
   ${PROJECT_SOURCE_DIR}/include
 )
 
-target_link_libraries(hgm_core PUBLIC magic_enum::magic_enum)
+target_link_libraries(hgm_core PUBLIC
+  magic_enum::magic_enum
+  llvm_interface
+)
+
+# ============================================================
+# HwarangDo Runtime Library
+# ============================================================
+add_library(hrd_runtime STATIC
+  runtime/hrd_runtime.cpp
+)
+
+target_include_directories(hrd_runtime PUBLIC
+  ${PROJECT_SOURCE_DIR}/include
+)
+
 # ============================================================
 # Executable
 # ============================================================
 add_executable(hgm src/main.cpp)
 target_link_libraries(hgm PRIVATE hgm_core)
-
-# ============================================================
-# Debug Configuration
-# ============================================================
-
 
 # ============================================================
 # Linux runtime symbol export
@@ -113,7 +142,6 @@ endif()
 # ============================================================
 # Output naming
 # ============================================================
-
 if(CMAKE_BUILD_TYPE STREQUAL "Release")
   set_target_properties(hgm PROPERTIES
     OUTPUT_NAME "hwarangdo"
@@ -131,16 +159,3 @@ else()
     OUTPUT_NAME "hrd_debug"
   )
 endif()
-
-# ============================================================
-# LLVM
-# ============================================================
-find_package(LLVM REQUIRED CONFIG)
-
-add_library(llvm_interface INTERFACE)
-target_link_libraries(llvm_interface INTERFACE LLVM)
-target_include_directories(llvm_interface INTERFACE ${LLVM_INCLUDE_DIRS})
-target_compile_definitions(llvm_interface INTERFACE ${LLVM_DEFINITIONS})
-
-target_link_libraries(hgm PRIVATE llvm_interface)
-

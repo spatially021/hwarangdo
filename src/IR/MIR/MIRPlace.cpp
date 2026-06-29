@@ -1,9 +1,9 @@
 
-#include "AST/Expr.h"
-#include "IR/HIR/HIRExpr.h"
-#include "IR/MIR/MIRBuilder.h"
-#include "IR/MIR/MIRExpr.h"
-#include "util/Error.h"
+#include "hrd/AST/Expr.h"
+#include "hrd/IR/HIR/HIRExpr.h"
+#include "hrd/IR/MIR/MIRBuilder.h"
+#include "hrd/IR/MIR/MIRExpr.h"
+#include "hrd/util/Error.h"
 #include <memory>
 #include <utility>
 

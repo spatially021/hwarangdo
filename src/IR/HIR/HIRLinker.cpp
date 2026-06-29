@@ -1,12 +1,12 @@
-#include "IR/HIR/HIRLinker.h"
-#include "AST/Decl.h"
-#include "IR/HIR/HIRDecl.h"
-#include "IR/HIR/HIRHelper.h"
-#include "IR/HIR/HIRType.h"
-#include "SemanticAnalyzer/symbol/MethodSymbol.h"
-#include "SemanticAnalyzer/symbol/TypeSymbol.h"
-#include "util/Error.h"
-#include "util/Guard.h"
+#include "hrd/IR/HIR/HIRLinker.h"
+#include "hrd/AST/Decl.h"
+#include "hrd/IR/HIR/HIRDecl.h"
+#include "hrd/IR/HIR/HIRHelper.h"
+#include "hrd/IR/HIR/HIRType.h"
+#include "hrd/SemanticAnalyzer/symbol/MethodSymbol.h"
+#include "hrd/SemanticAnalyzer/symbol/TypeSymbol.h"
+#include "hrd/util/Error.h"
+#include "hrd/util/Guard.h"
 #include <memory>
 #include <utility>
 
@@ -91,7 +91,9 @@ void HIRLinker::lowerTypeShell(Decl *decl) {
   TypeSymbol *typeSymbol = getTypeSymbolFromDecl(decl, kind);
 
   if (typeSymbol == nullptr) {
-    // nullptr일 경우 trait
+    if (dynamic_cast<TraitDecl *>(decl) == nullptr) {
+      Error::internal(decl->span, "decl's typeSymbol is nullptr");
+    }
     return;
   }
 

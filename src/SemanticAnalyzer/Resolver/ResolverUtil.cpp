@@ -1,11 +1,11 @@
-#include "AST/ASTNode.h"
-#include "AST/Expr.h"
-#include "SemanticAnalyzer/Resolver.h"
-#include "SemanticAnalyzer/symbol/MethodSymbol.h"
-#include "SemanticAnalyzer/symbol/TypeSymbol.h"
-#include "SemanticAnalyzer/symbol/ValueSymbol.h"
-#include "SourceSpan.h"
-#include "util/Error.h"
+#include "hrd/AST/ASTNode.h"
+#include "hrd/AST/Expr.h"
+#include "hrd/SemanticAnalyzer/Resolver.h"
+#include "hrd/SemanticAnalyzer/symbol/MethodSymbol.h"
+#include "hrd/SemanticAnalyzer/symbol/TypeSymbol.h"
+#include "hrd/SemanticAnalyzer/symbol/ValueSymbol.h"
+#include "hrd/SourceSpan.h"
+#include "hrd/util/Error.h"
 #include <cassert>
 
 ValueSymbol *Resolver::resolveValue(str name) {
@@ -207,9 +207,11 @@ pair<bool, CastingFailKind> Resolver::canImplicitlyConvert(TypeSymbol *from,
   if (!to) {
     Error::internal("to is nullptr");
   }
-
-  if (from == to)
-    return {true, CastingFailKind::None};
+  for (auto p = from; p != nullptr; p = p->base) {
+    if (p == to) {
+      return {true, CastingFailKind::None};
+    }
+  }
 
   if (from->kind != TypeSymbol::TypeKind::PRIMITIVE ||
       to->kind != TypeSymbol::TypeKind::PRIMITIVE) {

@@ -1,9 +1,9 @@
-#include "IR/MIR/MIRBuilder.h"
-#include "IR/MIR/MIRNode.h"
-#include "IR/MIR/MIRStmt.h"
-#include "SemanticAnalyzer/SymbolTable.h"
-#include "SemanticAnalyzer/symbol/TypeSymbol.h"
-#include "SemanticAnalyzer/symbol/ValueSymbol.h"
+#include "hrd/IR/MIR/MIRBuilder.h"
+#include "hrd/IR/MIR/MIRNode.h"
+#include "hrd/IR/MIR/MIRStmt.h"
+#include "hrd/SemanticAnalyzer/SymbolTable.h"
+#include "hrd/SemanticAnalyzer/symbol/TypeSymbol.h"
+#include "hrd/SemanticAnalyzer/symbol/ValueSymbol.h"
 #include <memory>
 #include <string>
 #include <utility>

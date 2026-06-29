@@ -1,4 +1,4 @@
-#include "SemanticAnalyzer/Scope.h"
+#include "hrd/SemanticAnalyzer/Scope.h"
 
 Scope::Scope() = default;
 Scope::~Scope() = default;

@@ -1,19 +1,19 @@
 
-#include "AST/Decl.h"
-#include "AST/Expr.h"
-#include "IR/HIR/HIRBuilder.h"
-#include "IR/HIR/HIRDecl.h"
-#include "IR/HIR/HIRExpr.h"
-#include "IR/HIR/HIRHelper.h"
-#include "IR/HIR/HIRProgram.h"
-#include "IR/HIR/HIRStmt.h"
-#include "IR/HIR/HIRSymbol.h"
-#include "IR/HIR/HIRType.h"
-#include "SemanticAnalyzer/symbol/MethodSymbol.h"
-#include "SemanticAnalyzer/symbol/ValueSymbol.h"
-#include "SourceSpan.h"
-#include "util/Error.h"
-#include "util/Guard.h"
+#include "hrd/AST/Decl.h"
+#include "hrd/AST/Expr.h"
+#include "hrd/IR/HIR/HIRBuilder.h"
+#include "hrd/IR/HIR/HIRDecl.h"
+#include "hrd/IR/HIR/HIRExpr.h"
+#include "hrd/IR/HIR/HIRHelper.h"
+#include "hrd/IR/HIR/HIRProgram.h"
+#include "hrd/IR/HIR/HIRStmt.h"
+#include "hrd/IR/HIR/HIRSymbol.h"
+#include "hrd/IR/HIR/HIRType.h"
+#include "hrd/SemanticAnalyzer/symbol/MethodSymbol.h"
+#include "hrd/SemanticAnalyzer/symbol/ValueSymbol.h"
+#include "hrd/SourceSpan.h"
+#include "hrd/util/Error.h"
+#include "hrd/util/Guard.h"
 #include <cassert>
 #include <memory>
 #include <utility>
@@ -133,7 +133,7 @@ void HIRBuilder::setDefaultInit(HIRTypeDecl *type) {
 }
 
 void HIRBuilder::bindMethod(FuncDecl *decl) {
-  auto it = program->typeDeclMap.find(decl->methodSymbol->onwer);
+  auto it = program->typeDeclMap.find(decl->methodSymbol->owner);
   if (it == program->typeDeclMap.end()) {
     Error::internal(decl->span, "fail to find method's owner type");
   }

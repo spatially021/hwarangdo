@@ -1,12 +1,12 @@
-#include "AST/Decl.h"
-#include "AST/Expr.h"
-#include "AST/Stmt.h"
-#include "SemanticAnalyzer/Resolver.h"
-#include "SemanticAnalyzer/Scope.h"
-#include "SemanticAnalyzer/symbol/MethodSymbol.h"
-#include "SemanticAnalyzer/symbol/TypeSymbol.h"
-#include "util/Error.h"
-#include "util/Guard.h"
+#include "hrd/AST/Decl.h"
+#include "hrd/AST/Expr.h"
+#include "hrd/AST/Stmt.h"
+#include "hrd/SemanticAnalyzer/Resolver.h"
+#include "hrd/SemanticAnalyzer/Scope.h"
+#include "hrd/SemanticAnalyzer/symbol/MethodSymbol.h"
+#include "hrd/SemanticAnalyzer/symbol/TypeSymbol.h"
+#include "hrd/util/Error.h"
+#include "hrd/util/Guard.h"
 #include <memory>
 
 // Statement Resolver::visitor methods

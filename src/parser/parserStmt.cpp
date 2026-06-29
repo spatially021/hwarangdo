@@ -1,10 +1,10 @@
-#include "AST/Decl.h"
-#include "AST/Expr.h"
-#include "AST/Stmt.h"
-#include "Parser.h"
-#include "SourceSpan.h"
-#include "Token.h"
-#include "util/Error.h"
+#include "hrd/AST/Decl.h"
+#include "hrd/AST/Expr.h"
+#include "hrd/AST/Stmt.h"
+#include "hrd/Parser.h"
+#include "hrd/SourceSpan.h"
+#include "hrd/Token.h"
+#include "hrd/util/Error.h"
 #include <memory>
 #include <optional>
 

@@ -1,20 +1,20 @@
-#include "AST/ASTNode.h"
-#include "AST/CaseKey.h"
-#include "AST/Decl.h"
-#include "AST/Expr.h"
-#include "AST/Stmt.h"
-#include "SemanticAnalyzer/ResolvedLit.h"
-#include "SemanticAnalyzer/Resolver.h"
-#include "SemanticAnalyzer/Scope.h"
-#include "SemanticAnalyzer/symbol/MethodSymbol.h"
-#include "SemanticAnalyzer/symbol/StorageSymbol.h"
-#include "SemanticAnalyzer/symbol/TypeSymbol.h"
-#include "SemanticAnalyzer/symbol/ValueSymbol.h"
-#include "Token.h"
-#include "enums/Operator.h"
-#include "util/Error.h"
-#include "util/Guard.h"
-#include "util/TypeResolver.h"
+#include "hrd/AST/ASTNode.h"
+#include "hrd/AST/CaseKey.h"
+#include "hrd/AST/Decl.h"
+#include "hrd/AST/Expr.h"
+#include "hrd/AST/Stmt.h"
+#include "hrd/SemanticAnalyzer/ResolvedLit.h"
+#include "hrd/SemanticAnalyzer/Resolver.h"
+#include "hrd/SemanticAnalyzer/Scope.h"
+#include "hrd/SemanticAnalyzer/symbol/MethodSymbol.h"
+#include "hrd/SemanticAnalyzer/symbol/StorageSymbol.h"
+#include "hrd/SemanticAnalyzer/symbol/TypeSymbol.h"
+#include "hrd/SemanticAnalyzer/symbol/ValueSymbol.h"
+#include "hrd/Token.h"
+#include "hrd/enums/Operator.h"
+#include "hrd/util/Error.h"
+#include "hrd/util/Guard.h"
+#include "hrd/util/TypeResolver.h"
 #include <memory>
 #include <string>
 #include <utility>
@@ -70,12 +70,18 @@ void Resolver::visit(BinaryExpr *expr) {
 
   if (isBinaryOperatalbe(expr->op, expr->left->resolvedType,
                          expr->right->resolvedType)) {
+    auto op =
+        binaryCasting(expr->left->resolvedType, expr->right->resolvedType);
     auto temp = binaryResult(expr->op, expr->left->resolvedType,
                              expr->right->resolvedType);
     if (!temp) {
       Error::internal(expr->span, "fail to get binaryResult");
     }
+    if (op == nullptr) {
+      Error::internal("fail to get operrand Type");
+    }
     expr->resolvedType = temp;
+    expr->operrandType = op;
   } else {
     Error::diagnostic(expr->span, "leftExpr and rightExpr cannot operate. [ " +
                                       expr->left->resolvedType->name + " " +
@@ -194,23 +200,18 @@ void Resolver::visit(MemberExpr *expr) {
     Error::diagnostic(expr->span, "cannot access field with handle");
   }
 
-  Scope *scope = nullptr;
-  if (s == table->main) {
-    scope = table->rootScope.get();
-  } else {
-    scope = s->memberScope;
+  ValueSymbol *member = nullptr;
+  for (auto type = symbol; type != nullptr; type = type->base) {
+    auto it = type->memberScope->value.find(expr->member);
+    if (it != type->memberScope->value.end()) {
+      member = it->second.get();
+      break;
+    }
   }
 
-  if (!scope)
-    Error::diagnostic(expr->span, "type has no members ");
-
-  auto it = scope->value.find(expr->member);
-  if (it == scope->value.end())
+  if (member == nullptr) {
     Error::diagnostic(expr->span, "undeclared member '" + expr->member + "'");
-
-  auto member = it->second.get();
-  if (!member)
-    Error::diagnostic(expr->span, "member '" + expr->member + "' is null");
+  }
 
   switch (member->modifier) {
 

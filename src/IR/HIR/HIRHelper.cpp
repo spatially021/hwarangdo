@@ -1,11 +1,11 @@
 
-#include "IR/HIR/HIRHelper.h"
-#include "AST/Decl.h"
-#include "IR/HIR/HIRDecl.h"
-#include "IR/HIR/HIRProgram.h"
-#include "IR/HIR/HIRType.h"
-#include "SemanticAnalyzer/symbol/TypeSymbol.h"
-#include "util/Error.h"
+#include "hrd/IR/HIR/HIRHelper.h"
+#include "hrd/AST/Decl.h"
+#include "hrd/IR/HIR/HIRDecl.h"
+#include "hrd/IR/HIR/HIRProgram.h"
+#include "hrd/IR/HIR/HIRType.h"
+#include "hrd/SemanticAnalyzer/symbol/TypeSymbol.h"
+#include "hrd/util/Error.h"
 #include <utility>
 
 void HIRHelper::linkSecondPass(HIRProgram *program) {
@@ -104,7 +104,7 @@ HIRType *HIRHelper::getOrCreateType(HIRProgram *program, HIRSource *source,
         auto hType = getOrCreateHandleType(
             program, source,
             HIRHelper::lowerEntityType(program, source, handle->args[0]),
-            dynamic_cast<HandleSymbol *>(handle->origin)->storage);
+            symbol, dynamic_cast<HandleSymbol *>(handle->origin)->storage);
         program->typeCache.emplace(symbol, hType);
         return hType;
       } else {
@@ -176,6 +176,7 @@ HIREntityType *HIRHelper::lowerEntityType(HIRProgram *program,
 HIRHandleType *HIRHelper::getOrCreateHandleType(HIRProgram *program,
                                                 HIRSource *source,
                                                 HIREntityType *entity,
+                                                TypeSymbol *type,
                                                 StorageKind storage) {
   auto it = program->handleCache.find(entity);
   HIRHandleType *result = nullptr;
@@ -183,6 +184,9 @@ HIRHandleType *HIRHelper::getOrCreateHandleType(HIRProgram *program,
     unique_ptr<HIRHandleType> handle =
         make_unique<HIRHandleType>(entity, storage);
     result = handle.get();
+    result->storage = storage;
+    result->entityType = entity;
+    result->typeSymbol = type;
     program->handleCache.emplace(entity, result);
     source->handles.push_back(std::move(handle));
 

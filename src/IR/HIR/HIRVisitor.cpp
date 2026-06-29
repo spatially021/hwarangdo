@@ -1,20 +1,21 @@
-#include "AST/Decl.h"
-#include "AST/Expr.h"
-#include "AST/Stmt.h"
-#include "IR/HIR/HIRBuilder.h"
-#include "IR/HIR/HIRExpr.h"
-#include "IR/HIR/HIRHelper.h"
-#include "IR/HIR/HIRProgram.h"
-#include "IR/HIR/HIRStmt.h"
-#include "IR/HIR/HIRSymbol.h"
-#include "IR/HIR/HIRType.h"
-#include "SemanticAnalyzer/SymbolTable.h"
-#include "SemanticAnalyzer/symbol/Symbol.h"
-#include "SemanticAnalyzer/symbol/TypeSymbol.h"
-#include "util/Error.h"
-#include "util/Guard.h"
+#include "hrd/AST/Decl.h"
+#include "hrd/AST/Expr.h"
+#include "hrd/AST/Stmt.h"
+#include "hrd/IR/HIR/HIRBuilder.h"
+#include "hrd/IR/HIR/HIRExpr.h"
+#include "hrd/IR/HIR/HIRHelper.h"
+#include "hrd/IR/HIR/HIRProgram.h"
+#include "hrd/IR/HIR/HIRStmt.h"
+#include "hrd/IR/HIR/HIRSymbol.h"
+#include "hrd/IR/HIR/HIRType.h"
+#include "hrd/SemanticAnalyzer/SymbolTable.h"
+#include "hrd/SemanticAnalyzer/symbol/Symbol.h"
+#include "hrd/SemanticAnalyzer/symbol/TypeSymbol.h"
+#include "hrd/util/Error.h"
+#include "hrd/util/Guard.h"
 #include <memory>
 #include <utility>
+#include <variant>
 
 using std::unique_ptr;
 
@@ -34,8 +35,9 @@ void HIRBuilder::visit(BinaryExpr *expr) {
     Error::internal(expr->span, "fail to get binary's type");
   }
 
-  exprResult = make_unique<HIRBinaryExpr>(expr->span, type, expr->op,
-                                          std::move(left), std::move(right));
+  exprResult =
+      make_unique<HIRBinaryExpr>(expr->span, type, expr->op, std::move(left),
+                                 std::move(right), expr->operrandType);
 }
 void HIRBuilder::visit(NameExpr *expr) {
   if (expr == nullptr) {
@@ -73,6 +75,12 @@ void HIRBuilder::visit(UnaryExpr *expr) {
 }
 
 void HIRBuilder::visit(CallExpr *expr) {
+
+  if (get_if<RuntimeSymbol *>(&expr->resolved)) {
+    exprResult = lowerRuntime(expr);
+    return;
+  }
+
   if (expr->receiver == nullptr) { // 해당 객체 내에서 this생략한 call
     if (expr->callType == CallExpr::CallType::INIT_CALL) {
       exprResult = lowerInitCall(expr);
@@ -302,6 +310,10 @@ void HIRBuilder::visit(VarDecl *decl) {
       auto local = lowerLocal(decl);
       if (local == nullptr) {
         Error::internal("local is nullptr");
+      }
+
+      if (local->type->typeSymbol == nullptr) {
+        Error::internal(decl->span, "local's typeSymbol is nullptr");
       }
 
       unique_ptr<HIRValueExpr> init = nullptr;

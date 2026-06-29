@@ -1,6 +1,6 @@
 
-#include "SemanticAnalyzer/symbol/SymbolHelper.h"
-#include "SemanticAnalyzer/symbol/TypeSymbol.h"
+#include "hrd/SemanticAnalyzer/symbol/SymbolHelper.h"
+#include "hrd/SemanticAnalyzer/symbol/TypeSymbol.h"
 
 bool SymbolHelper::isHandle(TypeSymbol *symbol) {
 

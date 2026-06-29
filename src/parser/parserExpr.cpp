@@ -1,9 +1,9 @@
-#include "AST/ASTNode.h"
-#include "AST/Expr.h"
-#include "Parser.h"
-#include "SourceSpan.h"
-#include "Token.h"
-#include "util/Error.h"
+#include "hrd/AST/ASTNode.h"
+#include "hrd/AST/Expr.h"
+#include "hrd/Parser.h"
+#include "hrd/SourceSpan.h"
+#include "hrd/Token.h"
+#include "hrd/util/Error.h"
 #include <memory>
 #include <string>
 

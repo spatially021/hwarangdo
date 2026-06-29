@@ -1,10 +1,10 @@
-#include "IR/HIR/HIRBuilder.h"
-#include "AST/Program.h"
-#include "AST/Stmt.h"
-#include "IR/HIR/HIRExpr.h"
-#include "IR/HIR/HIRProgram.h"
-#include "IR/HIR/HIRStmt.h"
-#include "util/Error.h"
+#include "hrd/IR/HIR/HIRBuilder.h"
+#include "hrd/AST/Program.h"
+#include "hrd/AST/Stmt.h"
+#include "hrd/IR/HIR/HIRExpr.h"
+#include "hrd/IR/HIR/HIRProgram.h"
+#include "hrd/IR/HIR/HIRStmt.h"
+#include "hrd/util/Error.h"
 
 #include <cassert>
 #include <utility>

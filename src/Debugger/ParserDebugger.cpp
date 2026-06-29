@@ -1,8 +1,8 @@
-#include "Debugger/ParserDebugger.h"
-#include "AST/ASTNode.h"
-#include "AST/Decl.h"
-#include "AST/Expr.h"
-#include "AST/Stmt.h"
+#include "hrd/Debugger/ParserDebugger.h"
+#include "hrd/AST/ASTNode.h"
+#include "hrd/AST/Decl.h"
+#include "hrd/AST/Expr.h"
+#include "hrd/AST/Stmt.h"
 #include <iostream>
 #include <string>
 

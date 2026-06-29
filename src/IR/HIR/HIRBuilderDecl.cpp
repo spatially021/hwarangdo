@@ -1,9 +1,9 @@
-#include "AST/Decl.h"
-#include "IR/HIR/HIRBuilder.h"
-#include "IR/HIR/HIRExpr.h"
-#include "IR/HIR/HIRHelper.h"
-#include "IR/HIR/HIRSymbol.h"
-#include "util/Error.h"
+#include "hrd/AST/Decl.h"
+#include "hrd/IR/HIR/HIRBuilder.h"
+#include "hrd/IR/HIR/HIRExpr.h"
+#include "hrd/IR/HIR/HIRHelper.h"
+#include "hrd/IR/HIR/HIRSymbol.h"
+#include "hrd/util/Error.h"
 #include <cassert>
 #include <memory>
 #include <utility>

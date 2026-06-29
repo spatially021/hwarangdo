@@ -1,27 +1,35 @@
-#include "AST/Program.h"
-#include "AST/TokenStream.h"
-#include "Color.h"
-#include "Debugger/BuilderDebugger.h"
-#include "Debugger/ParserDebugger.h"
-#include "Debugger/ResolverDebugger.h"
-#include "IR/HIR/HIRBuilder.h"
-#include "IR/HIR/HIRHelper.h"
-#include "IR/HIR/HIRLinker.h"
-#include "IR/HIR/HIRProgram.h"
-#include "IR/HIR/HIRVerifier.h"
-#include "Inputs.h"
-#include "Lexer.h"
-#include "Parser.h"
-#include "SemanticAnalyzer.h"
-#include "SemanticAnalyzer/Verifier.h"
-#include "SourceSpan.h"
-#include "Token.h"
+#include "hrd/AST/Program.h"
+#include "hrd/AST/TokenStream.h"
+#include "hrd/Color.h"
+#include "hrd/Debugger/BuilderDebugger.h"
+#include "hrd/Debugger/HIRDebugger.h"
+#include "hrd/Debugger/MIRDebugger/MIRDebuuger.h"
+#include "hrd/Debugger/MIRDebugger/MIRGraphvizDebugger.h"
+#include "hrd/Debugger/ParserDebugger.h"
+#include "hrd/Debugger/ResolverDebugger.h"
+#include "hrd/IR/HIR/HIRBuilder.h"
+#include "hrd/IR/HIR/HIRHelper.h"
+#include "hrd/IR/HIR/HIRLinker.h"
+#include "hrd/IR/HIR/HIRProgram.h"
+#include "hrd/IR/HIR/HIRVerifier.h"
+#include "hrd/IR/MIR/MIRBuilder.h"
+#include "hrd/IR/MIR/MIRProgram.h"
+#include "hrd/IR/llvmIR/llvmCodegen.h"
+#include "hrd/Inputs.h"
+#include "hrd/Lexer.h"
+#include "hrd/Parser.h"
+#include "hrd/SemanticAnalyzer.h"
+#include "hrd/SemanticAnalyzer/Verifier.h"
+#include "hrd/SourceSpan.h"
+#include "hrd/Token.h"
+#include <llvm/IR/Verifier.h>
 
 #include <algorithm>
 #include <filesystem>
 #include <fstream>
 #include <functional>
 #include <iostream>
+#include <llvm/Support/raw_ostream.h>
 #include <magic_enum/magic_enum.hpp>
 #include <memory>
 #include <sstream>
@@ -45,7 +53,7 @@ inline string_view tokenToString(TKind kind);
 ProjectInput projectInput;
 
 bool logLexer = false, logParser = false, logBuilder = false,
-     logResolver = false, test = false, logHir = false;
+     logResolver = false, test = false, logHir = false, logMir = false;
 
 void tester() {}
 
@@ -188,9 +196,11 @@ static bool parseOptions(int argc, char *argv[]) {
       {"--builder", [&] { logBuilder = true; }},
       {"--resolver", [&] { logResolver = true; }},
       {"--hir", [&] { logHir = true; }},
+      {"--mir", [&] { logMir = true; }},
       {"--all",
        [&] {
-         logLexer = logParser = logBuilder = logResolver = logHir = true;
+         logLexer = logParser = logBuilder = logResolver = logHir = logMir =
+             true;
        }},
   };
 
@@ -199,9 +209,12 @@ static bool parseOptions(int argc, char *argv[]) {
       {'p', [&] { logParser = true; }},
       {'b', [&] { logBuilder = true; }},
       {'r', [&] { logResolver = true; }},
+      {'h', [&] { logHir = true; }},
+      {'m', [&] { logMir = true; }},
       {'a',
        [&] {
-         logLexer = logParser = logBuilder = logResolver = logHir = true;
+         logLexer = logParser = logBuilder = logResolver = logHir = logMir =
+             true;
        }},
       {'t', [&] { test = true; }},
       {'h', [&] { logHir = true; }},
@@ -441,7 +454,8 @@ int main(int argc, char *argv[]) {
 
   if (logHir) {
     cout << "===== HIR result =====" << endl;
-
+    HIRDebugger hirDebugger = HIRDebugger(hirProgram.get());
+    hirDebugger.debug();
     cout << "=========================" << endl;
   }
 
@@ -455,7 +469,62 @@ int main(int argc, char *argv[]) {
     cout << Color::RESET << e.what() << "\n";
     return -1;
   }
+  unique_ptr<MIRProgram> mirProgram = make_unique<MIRProgram>();
 
+  try {
+    MIRBuilder mirBuilder(hirProgram.get(), mirProgram.get(),
+                          &analyzer.symbolTable);
+    mirBuilder.build();
+  } catch (std::runtime_error &e) {
+#if HGM_DEBUG
+    cout << Color::RED << "error occur while mir building\n";
+#endif
+    cout << Color::RESET << e.what() << "\n";
+    return -1;
+  }
+
+  if (logMir) {
+    cout << "===== MIR result =====" << endl;
+    MIRDebugger mirDebugger = MIRDebugger(mirProgram.get());
+    mirDebugger.debug();
+    MIRGraphvizDebugger graphDebugger = MIRGraphvizDebugger(mirProgram.get());
+    graphDebugger.debug();
+    cout << "=========================" << endl;
+  }
+  llvmCodegen codegen(mirProgram.get(), &analyzer.symbolTable);
+  try {
+
+    codegen.generate();
+
+    std::error_code ec;
+    llvm::raw_fd_ostream out("out.ll", ec);
+
+    if (ec) {
+      throw std::runtime_error("failed to open out.ll: " + ec.message());
+    }
+
+    codegen.llvmModule->print(out, nullptr);
+    out.flush();
+
+  } catch (std::runtime_error &e) {
+#if HGM_DEBUG
+    cout << Color::RED << "error occur while codegen\n";
+#endif
+    cout << Color::RESET << e.what() << "\n";
+    return -1;
+  }
+
+  if (llvm::verifyModule(*codegen.llvmModule, &llvm::errs())) {
+    throw std::runtime_error("invalid llvm module");
+  }
+
+  int result = std::system("clang++ out.ll runtime/hrd_runtime.cpp "
+                           "-I./include "
+                           "-o hello");
+  if (result != 0) {
+    std::cerr << "link failed\n";
+    return -1;
+  }
   cout << "end compile\n";
   return 0;
 }

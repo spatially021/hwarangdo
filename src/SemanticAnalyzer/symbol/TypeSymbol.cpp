@@ -1,6 +1,6 @@
-#include "SemanticAnalyzer/symbol/TypeSymbol.h"
-#include "SemanticAnalyzer/Scope.h"
-#include "SemanticAnalyzer/symbol/MethodSymbol.h"
+#include "hrd/SemanticAnalyzer/symbol/TypeSymbol.h"
+#include "hrd/SemanticAnalyzer/Scope.h"
+#include "hrd/SemanticAnalyzer/symbol/MethodSymbol.h"
 #include <vector>
 
 TypeSymbol::TypeSymbol() {
@@ -27,7 +27,18 @@ MainSymbol::MainSymbol() {
 }
 MainSymbol::~MainSymbol() = default;
 GenericSymbol::GenericSymbol(TypeSymbol *o, std::vector<TypeSymbol *> a)
-    : origin(o), args(a) {
+    : origin(o), args(std::move(a)) {
   kind = o->kind;
-};
+
+  name = origin->name + "<";
+
+  for (size_t i = 0; i < args.size(); i++) {
+    if (i != 0)
+      name += ", ";
+
+    name += args[i]->name;
+  }
+
+  name += ">";
+}
 GenericSymbol::~GenericSymbol() = default;

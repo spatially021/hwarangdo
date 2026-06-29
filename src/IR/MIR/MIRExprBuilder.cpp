@@ -1,12 +1,12 @@
 
-#include "IR/HIR/HIRExpr.h"
-#include "IR/HIR/HIRNode.h"
-#include "IR/HIR/HIRSymbol.h"
-#include "IR/MIR/MIRBuilder.h"
-#include "IR/MIR/MIRExpr.h"
-#include "IR/MIR/MIRNode.h"
-#include "IR/MIR/MIRStmt.h"
-#include "util/Error.h"
+#include "hrd/IR/HIR/HIRExpr.h"
+#include "hrd/IR/HIR/HIRNode.h"
+#include "hrd/IR/HIR/HIRSymbol.h"
+#include "hrd/IR/MIR/MIRBuilder.h"
+#include "hrd/IR/MIR/MIRExpr.h"
+#include "hrd/IR/MIR/MIRNode.h"
+#include "hrd/IR/MIR/MIRStmt.h"
+#include "hrd/util/Error.h"
 #include <memory>
 #include <utility>
 #include <vector>
@@ -39,6 +39,12 @@ unique_ptr<MIRValue> MIRBuilder::lowerExpr(HIRExpr *expr) {
     auto call = expect<HIRMethodCallExpr>(expr, HIRNodeKind::MethodCallExpr);
     return lowerCall(call);
   }
+
+  case HIRNodeKind::RuntimeCallExpr: {
+    auto runtime = expect<HIRRuntimeCall>(expr, HIRNodeKind::RuntimeCallExpr);
+    return lowerRuntime(runtime);
+  }
+
   case HIRNodeKind::SpawnExpr: {
     auto spawn = expect<HIRSpawnExpr>(expr, HIRNodeKind::SpawnExpr);
     return lowerSpawn(spawn);
@@ -57,12 +63,17 @@ unique_ptr<MIRValue> MIRBuilder::lowerExpr(HIRExpr *expr) {
   }
   case HIRNodeKind::EnumVariantValue: {
     auto variant =
-        expect<HIRVaraintValueExpr>(expr, HIRNodeKind::EnumVariantValue);
+        expect<HIRVariantValueExpr>(expr, HIRNodeKind::EnumVariantValue);
     return lowerVariantValue(variant);
   }
   case HIRNodeKind::StructInitExpr: {
     auto init = expect<HIRStructInitExpr>(expr, HIRNodeKind::StructInitExpr);
     return lowerStructInit(init);
+  }
+
+  case HIRNodeKind::SelfExpr: {
+    auto self = expect<HIRSelfExpr>(expr, HIRNodeKind::SelfExpr);
+    return lowerSelf(self);
   }
 
   default: {
@@ -103,7 +114,8 @@ unique_ptr<MIRValue> MIRBuilder::lowerTernary(HIRTernaryExpr *expr) {
   getBlock(else_)->terminator = GotoTerminator(join);
 
   currentBlock = join;
-  return make_unique<MIRLoad>(make_unique<MIRLocalPlace>(temp));
+  return make_unique<MIRLoad>(make_unique<MIRLocalPlace>(temp),
+                              expr->type->typeSymbol);
 }
 
 unique_ptr<MIRValue> MIRBuilder::lowerMatch(HIRMatchExpr *expr) {
@@ -154,7 +166,9 @@ unique_ptr<MIRValue> MIRBuilder::lowerMatch(HIRMatchExpr *expr) {
             payload->binding->type->typeSymbol, payload->binding->symbol,
             make_unique<MIRPayloadExtractExpr>(
                 payload->variant->symbol,
-                make_unique<MIRLoad>(make_unique<MIRLocalPlace>(tempCond)))));
+                make_unique<MIRLoad>(make_unique<MIRLocalPlace>(tempCond),
+                                     expr->type->typeSymbol),
+                expr->type->typeSymbol)));
         cases.push_back(MIRCase(payload->variant->symbol, id));
       }
     }
@@ -169,30 +183,35 @@ unique_ptr<MIRValue> MIRBuilder::lowerMatch(HIRMatchExpr *expr) {
   }
 
   getBlock(cond)->terminator = SwitchTerminator(
-      make_unique<MIRLoad>(make_unique<MIRLocalPlace>(tempCond)),
+      make_unique<MIRLoad>(make_unique<MIRLocalPlace>(tempCond),
+                           expr->type->typeSymbol),
       std::move(cases), hasDefault ? defaultTarget : join);
   currentBlock = join;
 
   matches.pop_back();
 
-  return make_unique<MIRLoad>(make_unique<MIRLocalPlace>(temp));
+  return make_unique<MIRLoad>(make_unique<MIRLocalPlace>(temp),
+                              expr->type->typeSymbol);
 }
 
 unique_ptr<MIRValue> MIRBuilder::lowerLiteral(HIRLiteralExpr *expr) {
-  return make_unique<MIRLiteralExpr>(expr->resolvedLit);
+  return make_unique<MIRLiteralExpr>(expr->resolvedLit, expr->type->typeSymbol);
 }
 
 unique_ptr<MIRValue> MIRBuilder::lowerLoad(HIRLoadExpr *expr) {
-  return make_unique<MIRLoad>(lowerPlace(expr->place.get()));
+  return make_unique<MIRLoad>(lowerPlace(expr->place.get()),
+                              expr->type->typeSymbol);
 }
 
 unique_ptr<MIRValue> MIRBuilder::lowerUnary(HIRUnaryExpr *expr) {
-  return make_unique<MIRUnaryExpr>(lowerExpr(expr->operand.get()), expr->op);
+  return make_unique<MIRUnaryExpr>(lowerExpr(expr->operand.get()), expr->op,
+                                   expr->type->typeSymbol);
 }
 
 unique_ptr<MIRValue> MIRBuilder::lowerBinary(HIRBinaryExpr *expr) {
   return make_unique<MIRBinaryExpr>(lowerExpr(expr->left.get()),
-                                    lowerExpr(expr->right.get()), expr->op);
+                                    lowerExpr(expr->right.get()), expr->op,
+                                    expr->type->typeSymbol, expr->operand);
 }
 
 unique_ptr<MIRValue> MIRBuilder::lowerCast(HIRCastExpr *expr) {
@@ -208,7 +227,8 @@ unique_ptr<MIRValue> MIRBuilder::lowerCall(HIRMethodCallExpr *expr) {
   }
 
   return make_unique<MIRCallExpr>(lowerExpr(expr->receiver.get()),
-                                  std::move(args), expr->method->symbol);
+                                  std::move(args), expr->method->symbol,
+                                  expr->type->typeSymbol);
 }
 
 unique_ptr<MIRValue> MIRBuilder::lowerSpawn(HIRSpawnExpr *expr) {
@@ -217,12 +237,15 @@ unique_ptr<MIRValue> MIRBuilder::lowerSpawn(HIRSpawnExpr *expr) {
     args.push_back(lowerExpr(a.get()));
   }
   return make_unique<MIRSpawnExpr>(expr->entityType->typeSymbol,
-                                   expr->initMethod->symbol, std::move(args));
+                                   expr->initMethod ? expr->initMethod->symbol
+                                                    : nullptr,
+                                   std::move(args), expr->type->typeSymbol);
 }
 
 unique_ptr<MIRValue> MIRBuilder::lowerView(HIRViewExpr *expr) {
   return make_unique<MIRViewExpr>(expr->entityType->typeSymbol,
-                                  lowerExpr(expr->handle.get()));
+                                  lowerExpr(expr->handle.get()),
+                                  expr->type->typeSymbol);
 }
 
 unique_ptr<MIRValue> MIRBuilder::lowerStructInit(HIRStructInitExpr *expr) {
@@ -230,14 +253,33 @@ unique_ptr<MIRValue> MIRBuilder::lowerStructInit(HIRStructInitExpr *expr) {
   for (auto &a : expr->args) {
     args.push_back(lowerExpr(a.get()));
   }
-  return make_unique<MIRStructInitExpr>(expr->type->typeSymbol,
-                                        expr->method->symbol, std::move(args));
+  return make_unique<MIRStructInitExpr>(
+      expr->type->typeSymbol, expr->method ? expr->method->symbol : nullptr,
+      std::move(args), expr->type->typeSymbol);
 }
 
-unique_ptr<MIRValue> MIRBuilder::lowerVariantValue(HIRVaraintValueExpr *expr) {
+unique_ptr<MIRValue> MIRBuilder::lowerVariantValue(HIRVariantValueExpr *expr) {
   if (expr->payload) {
     return make_unique<MIRVariantExpr>(expr->varaint->symbol,
-                                       lowerExpr(expr->payload.get()));
+                                       lowerExpr(expr->payload.get()),
+                                       expr->type->typeSymbol);
   }
-  return make_unique<MIRVariantExpr>(expr->varaint->symbol, nullptr);
+  return make_unique<MIRVariantExpr>(expr->varaint->symbol, nullptr,
+                                     expr->type->typeSymbol);
+}
+
+unique_ptr<MIRValue> MIRBuilder::lowerSelf(HIRSelfExpr *expr) {
+  return make_unique<MIRLoad>(
+      make_unique<MIRParamPlace>(currentFunc->symbol->selfReceiver),
+      expr->selfKind == HIRSelfKind::Super ? expr->accessType->typeSymbol
+                                           : expr->ownerType->typeSymbol);
+}
+
+unique_ptr<MIRValue> MIRBuilder::lowerRuntime(HIRRuntimeCall *expr) {
+  vector<unique_ptr<MIRValue>> args;
+  for (auto &a : expr->args) {
+    args.push_back(lowerExpr(a.get()));
+  }
+  return make_unique<MIRRuntimeCallExpr>(expr->symbol, std::move(args),
+                                         expr->type->typeSymbol);
 }

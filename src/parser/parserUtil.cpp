@@ -1,8 +1,8 @@
-#include "AST/ASTNode.h"
-#include "AST/Expr.h"
-#include "Parser.h"
-#include "Token.h"
-#include "util/Error.h"
+#include "hrd/AST/ASTNode.h"
+#include "hrd/AST/Expr.h"
+#include "hrd/Parser.h"
+#include "hrd/Token.h"
+#include "hrd/util/Error.h"
 #include <iterator>
 #include <memory>
 #include <stdexcept>

@@ -1,10 +1,10 @@
-#include "util/Helper.h"
-#include "AST/ASTNode.h"
-#include "SemanticAnalyzer/SymbolTable.h"
-#include "SemanticAnalyzer/symbol/MethodSymbol.h"
-#include "SemanticAnalyzer/symbol/TypeSymbol.h"
-#include "util/Error.h"
-#include "util/TypeResolver.h"
+#include "hrd/util/Helper.h"
+#include "hrd/AST/ASTNode.h"
+#include "hrd/SemanticAnalyzer/SymbolTable.h"
+#include "hrd/SemanticAnalyzer/symbol/MethodSymbol.h"
+#include "hrd/SemanticAnalyzer/symbol/TypeSymbol.h"
+#include "hrd/util/Error.h"
+#include "hrd/util/TypeResolver.h"
 std::string Helper::apIntToString(const llvm::APInt &v) {
   llvm::SmallString<32> buf;
   v.toString(buf, 10, false);
@@ -250,25 +250,53 @@ ResolvedLit TypeResolver::resolveLitInt(LiteralExpr *expr, SymbolTable *table) {
   return resolvedLit;
 }
 
-bool Helper::checkImpletTraitSig(TypeSymbol *symbol) {
+bool Helper::checkImplementTraitSig(TypeSymbol *symbol) {
+  if (!symbol) {
+    Error::internal("null type symbol");
+  }
 
-  for (auto &traitType : symbol->traits) {
-    auto trait = dynamic_cast<TraitDecl *>(traitType->decl);
-    if (!trait) {
-      Error::internal("illegal type");
+  for (auto *traitType : symbol->traits) {
+    if (!traitType || !traitType->decl) {
+      Error::internal("illegal trait type");
     }
-    auto scope = symbol->memberScope;
-    for (auto t : trait->traitSigs) {
-      auto it = scope->methodMap.find(t->name);
-      if (it == scope->methodMap.end()) {
-        return false;
+
+    auto *trait = dynamic_cast<TraitDecl *>(traitType->decl);
+    if (!trait) {
+      Error::internal("illegal trait type");
+    }
+
+    for (auto &sig : trait->traitSigs) {
+      if (!sig.get() || !sig->symbol) {
+        Error::internal("illegal trait signature");
       }
-      auto &bucket = it->second;
-      if (!Helper::hasSameSig(bucket, t->symbol)) {
+
+      if (!Helper::hasMethodInHierarchyWithSameSig(symbol, sig->name,
+                                                   sig->symbol)) {
         return false;
       }
     }
   }
 
   return true;
+}
+
+bool Helper::hasMethodInHierarchyWithSameSig(TypeSymbol *type,
+                                             const std::string &name,
+                                             MethodSymbol *sig) {
+  for (auto *cur = type; cur; cur = cur->base) {
+    if (!cur->memberScope) {
+      continue;
+    }
+
+    auto it = cur->memberScope->methodMap.find(name);
+    if (it == cur->memberScope->methodMap.end()) {
+      continue;
+    }
+    auto vec = it->second;
+    if (Helper::hasSameSig(vec, sig)) {
+      return true;
+    }
+  }
+
+  return false;
 }

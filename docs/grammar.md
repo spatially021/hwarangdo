@@ -704,6 +704,15 @@ init은 entity 타입과 value 타입 모두에서 정의할 수 있다.
 
 8. 일반 메서드끼리는 field 초기화 효과를 공유하거나 전파하지 않는다.
 
+## 5.4 onDestroy
+onDestroy는 엔티티가 파괴될때 자동으로 실행되는 특수 메서드이다.
+onDestroy는 class 전용 특수 메서드다.
+onDestroy는 인자를 가질 수 없다.
+onDestroy는 반환 타입을 가질 수 없다.
+onDestroy는 오버로딩할 수 없다.
+onDestroy는 직접 호출할 수 없다.
+onDestroy는 world.destroy 시 런타임/컴파일러가 자동 호출한다.
+onDestroy는 field destroy 전에 실행된다.
 
 ---
 

@@ -99,5 +99,6 @@ protected:
       {"Error", TKind::ERROR},
       {"init", TKind::INIT},
       {"self", TKind::SELF},
-      {"by", TKind::BY}};
+      {"by", TKind::BY},
+      {"onDestroy", TKind::ONDESTROY}};
 };

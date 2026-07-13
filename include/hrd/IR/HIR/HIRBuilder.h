@@ -146,7 +146,10 @@ private:
   pair<bool, HIRParam *> lookupParam(ValueSymbol *symbol);
   pair<bool, HIRField *> lookupField(ValueSymbol *symbol);
   pair<bool, HIRField *> lookupField(HIRTypeDecl *type, ValueSymbol *symbol);
-  pair<bool, HIRMethodDecl *> lookupMethod(HIRTypeDecl *, MethodSymbol *symbol);
+  pair<bool, HIRMethodDecl *> lookupMethod(HIRTypeDecl *decl,
+                                           MethodSymbol *symbol);
+  pair<bool, HIRMethodDecl *> lookupInit(HIRTypeDecl *deck,
+                                         MethodSymbol *symbol);
 
   bool isTypeReceiver(Expr *expr);
   pair<bool, HIREnumVariant *> lookupVariant(EnumVariantSymbol *symbol);

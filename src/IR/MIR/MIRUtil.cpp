@@ -1,3 +1,5 @@
+#include "hrd/IR/HIR/HIRExpr.h"
+#include "hrd/IR/HIR/HIRStmt.h"
 #include "hrd/IR/MIR/MIRBuilder.h"
 #include "hrd/IR/MIR/MIRNode.h"
 #include "hrd/IR/MIR/MIRStmt.h"
@@ -31,4 +33,84 @@ ValueSymbol *MIRBuilder::makeTemp(TypeSymbol *type) {
   auto raw = symbol.get();
   table->addTemp(std::move(symbol));
   return raw;
+}
+
+void MIRBuilder::makeSwitch(SwitchData &data) {
+  vector<MIRCase> cases;
+  bool hasDefault = false;
+
+  auto condExpr = lowerExpr(data.condExpr);
+  auto temp = makeTemp(data.type);
+
+  currentScope->locals.push_back(temp);
+  emit(make_unique<MIRLocalDeclStmt>(temp->typeSymbol, temp,
+                                     std::move(condExpr)));
+
+  for (auto &c : data.cases) {
+
+    BlockID id;
+    if (c->defaultKind == HIRDefaultKind::Default ||
+        c->defaultKind == HIRDefaultKind::WildCard) {
+      id = data.defaultTarget;
+      hasDefault = true;
+    } else {
+      id = makeBlock();
+    }
+
+    currentBlock = id;
+
+    IRScope caseScope(&data.scope, data.scope.depth + 1);
+    currentScope = &caseScope;
+
+    for (auto &v : c->selectors) {
+      auto &selector = v->selector;
+
+      if (auto *lit = std::get_if<HIRLiteralCase>(&selector)) {
+        cases.emplace_back(lit->expr->resolvedLit, id);
+        continue;
+      }
+
+      if (auto *unit = std::get_if<HIRUnitCase>(&selector)) {
+        cases.emplace_back(unit->variant->symbol, id);
+        continue;
+      }
+
+      if (auto *payload = std::get_if<HIRPayloadCase>(&selector)) {
+        auto *binding = payload->binding->symbol;
+
+        caseScope.locals.push_back(binding);
+
+        emit(make_unique<MIRLocalDeclStmt>(
+            payload->binding->type->typeSymbol, binding,
+            make_unique<MIRPayloadExtractExpr>(
+                payload->variant->symbol,
+                make_unique<MIRLoad>(make_unique<MIRLocalPlace>(temp),
+                                     temp->typeSymbol),
+                temp->typeSymbol)));
+
+        cases.emplace_back(payload->variant->symbol, id);
+      }
+    }
+
+    lowerBlock(c->body.get());
+    emitCleanup(&caseScope);
+
+    if (!hasTerminator(currentBlock)) {
+      getBlock(currentBlock)->terminator = GotoTerminator(data.cleanup);
+    }
+
+    currentScope = &data.scope;
+  }
+
+  if (hasDefault && !hasTerminator(data.defaultTarget)) {
+    getBlock(data.defaultTarget)->terminator = GotoTerminator(data.cleanup);
+  }
+
+  getBlock(data.cond)->terminator = SwitchTerminator(
+      make_unique<MIRLoad>(make_unique<MIRLocalPlace>(temp), temp->typeSymbol),
+      std::move(cases), hasDefault ? data.defaultTarget : data.cleanup);
+
+  currentBlock = data.cleanup;
+  emitCleanup(&data.scope);
+  getBlock(currentBlock)->terminator = GotoTerminator(data.join);
 }

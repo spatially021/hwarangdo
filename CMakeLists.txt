@@ -104,6 +104,15 @@ add_library(hgm_core STATIC
   src/IR/llvmIR/lowerPlace.cpp
   src/IR/llvmIR/lowerValue.cpp
   src/IR/llvmIR/llvmUtil.cpp
+  src/IR/llvmIR/emits.cpp
+  src/IR/llvmIR/assign.cpp
+  src/IR/llvmIR/generateMain.cpp
+  src/IR/llvmIR/lowerType.cpp
+  src/IR/MIR/MIRScope.cpp
+  src/IR/llvmIR/lowerWorld.cpp
+  src/IR/llvmIR/Helper.cpp
+  src/IR/llvmIR/lowerFunc.cpp
+  src/IR/llvmIR/lowerSwitch.cpp
 )
 
 target_include_directories(hgm_core PUBLIC
@@ -119,7 +128,9 @@ target_link_libraries(hgm_core PUBLIC
 # HwarangDo Runtime Library
 # ============================================================
 add_library(hrd_runtime STATIC
-  runtime/hrd_runtime.cpp
+  runtime/world/hrd_runtime_world.cpp
+  runtime/log/hrd_runtime_log.cpp
+  runtime/string/hrd_runtime_string.cpp
 )
 
 target_include_directories(hrd_runtime PUBLIC

@@ -14,6 +14,9 @@ using std::unique_ptr;
 
 unique_ptr<HIRSource> HIRLinker::link() {
   for (auto &d : source->decls) {
+    if (dynamic_cast<ImplDecl *>(d.get())) {
+      continue;
+    }
     lowerTypeShell(d.get());
   }
   for (auto &d : source->decls) {
@@ -136,7 +139,7 @@ void HIRLinker::lowerMethodDeclShell(FuncDecl *decl, HIRTypeDecl *currentType) {
   auto *raw = method.get();
 
   method->isAsync = false;
-  method->isInit = decl->methodSymbol->isInit;
+  method->methodKind = decl->methodSymbol->methodKind;
   method->returnType = HIRHelper::lowerType(program, hirSource.get(),
                                             decl->methodSymbol->returnType);
   vector<unique_ptr<HIRParam>> params;
@@ -149,10 +152,17 @@ void HIRLinker::lowerMethodDeclShell(FuncDecl *decl, HIRTypeDecl *currentType) {
     method->setParam(std::move(params));
   }
   currentType->methods.push_back(std::move(method));
-  if (raw->isInit) {
-    currentType->initMap.emplace(decl->methodSymbol, raw);
-  } else {
+  switch (raw->methodKind) {
+
+  case MethodKind::Normal:
     currentType->methodMap.emplace(decl->methodSymbol, raw);
+    return;
+  case MethodKind::Init:
+    currentType->initMap.emplace(decl->methodSymbol, raw);
+    return;
+  case MethodKind::OnDestroy:
+    currentType->onDestroy = raw;
+    return;
   }
 }
 

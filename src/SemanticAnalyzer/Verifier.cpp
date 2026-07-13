@@ -8,7 +8,6 @@
 #include "hrd/SemanticAnalyzer/symbol/ValueSymbol.h"
 #include "hrd/enums/InheritState.h"
 #include "hrd/util/Error.h"
-#include <cerrno>
 #include <variant>
 
 void Verifier::verify() {
@@ -91,7 +90,7 @@ void Verifier::visit(CallExpr *expr) {
     if (get_if<EnumVariantSymbol *>(&expr->resolved) == nullptr)
       unresolved(expr, "variant is unresolved");
   } else if (expr->callType == CallExpr::CallType::INIT_CALL) {
-    if (get_if<MethodSymbol *>(&expr->resolved) == nullptr) {
+    if (expr->resolvedType == nullptr) {
       unresolved(expr, "init is unresolved");
     }
   } else if (expr->callType == CallExpr::CallType::RUNTIME_CALL) {
@@ -320,6 +319,13 @@ void Verifier::visit(InitDecl *decl) {
   }
   for (auto &p : decl->params)
     p->accept(this);
+  decl->body->accept(this);
+}
+
+void Verifier::visit(OnDestroyDecl *decl) {
+  if (decl->methodSymbol == nullptr) {
+    unresolved(decl, "onDestroy is unresolved");
+  }
   decl->body->accept(this);
 }
 

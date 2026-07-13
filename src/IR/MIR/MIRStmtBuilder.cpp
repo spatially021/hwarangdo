@@ -1,19 +1,21 @@
 #include "hrd/AST/Stmt.h"
 #include "hrd/IR/HIR/HIRNode.h"
-#include "hrd/IR/HIR/HIRPattern.h"
 #include "hrd/IR/HIR/HIRStmt.h"
 #include "hrd/IR/MIR/MIRBuilder.h"
 #include "hrd/IR/MIR/MIRExpr.h"
 #include "hrd/IR/MIR/MIRNode.h"
 #include "hrd/IR/MIR/MIRStmt.h"
+#include "hrd/SemanticAnalyzer/symbol/TypeSymbol.h"
 #include "hrd/enums/Operator.h"
 #include "hrd/util/Error.h"
 #include <cassert>
+#include <iostream>
 #include <memory>
 #include <utility>
-#include <variant>
 
 void MIRBuilder::lowerBlock(HIRBlockStmt *block) {
+  IRScope *scope = enterScope();
+
   for (auto &s : block->statements) {
     if (hasTerminator(currentBlock)) {
       break; // 또는 unreachable block 생성/경고 처리
@@ -21,6 +23,12 @@ void MIRBuilder::lowerBlock(HIRBlockStmt *block) {
 
     lowerStmt(s.get());
   }
+
+  if (!hasTerminator(currentBlock)) {
+    emitCleanup(scope);
+  }
+
+  exitScope();
 }
 
 void MIRBuilder::lowerStmt(HIRStmt *stmt) {
@@ -157,11 +165,13 @@ void MIRBuilder::lowerWhile(HIRWhileStmt *stmt) {
   BlockID else_ = makeBlock();
   BlockID join = makeBlock();
 
+  IRScope *loopOuterScope = currentScope;
+
   getBlock(cond)->terminator =
       BranchTerminator(std::move(condExpr), then, else_);
 
   currentBlock = then;
-  LoopContext l = {cond, join};
+  LoopContext l = {cond, join, loopOuterScope, loopOuterScope};
   loops.push_back(l);
   lowerBlock(stmt->body.get());
   loops.pop_back();
@@ -175,6 +185,8 @@ void MIRBuilder::lowerWhile(HIRWhileStmt *stmt) {
 }
 
 void MIRBuilder::lowerForRange(HIRForRangeStmt *stmt) {
+  IRScope *forScope = enterScope();
+
   BlockID entry = currentBlock;
   BlockID cond = makeBlock();
   BlockID body = makeBlock();
@@ -184,6 +196,7 @@ void MIRBuilder::lowerForRange(HIRForRangeStmt *stmt) {
   auto type = stmt->indexVar->type->typeSymbol;
   currentBlock = entry;
   auto symbol = stmt->indexVar->symbol;
+  currentScope->locals.push_back(symbol);
   emit(make_unique<MIRLocalDeclStmt>(type, symbol, nullptr));
   emit(make_unique<MIRAssignStmt>(make_unique<MIRLocalPlace>(symbol),
                                   lowerExpr(stmt->start.get())));
@@ -197,7 +210,7 @@ void MIRBuilder::lowerForRange(HIRForRangeStmt *stmt) {
       BranchTerminator(std::move(condExpr), body, join);
 
   currentBlock = body;
-  LoopContext l = {step_, join};
+  LoopContext l = {step_, join, forScope->parent, forScope};
   loops.push_back(l);
   lowerBlock(stmt->body.get());
   if (!hasTerminator(currentBlock)) {
@@ -210,10 +223,13 @@ void MIRBuilder::lowerForRange(HIRForRangeStmt *stmt) {
       make_unique<MIRLocalPlace>(symbol),
       make_unique<MIRBinaryExpr>(
           make_unique<MIRLoad>(make_unique<MIRLocalPlace>(symbol), type),
-          lowerExpr(stmt->step.get()), Operator::PLUS, type, type)));
+          lowerExpr(stmt->step.get()), Operator::ADD, type, type)));
 
   getBlock(step_)->terminator = GotoTerminator(cond);
+
   currentBlock = join;
+  emitCleanup(forScope);
+  exitScope();
 }
 
 void MIRBuilder::lowerAssign(HIRAssignStmt *stmt) {
@@ -235,12 +251,15 @@ void MIRBuilder::lowerCompoundAssign(HIRCompoundAssignStmt *stmt) {
 void MIRBuilder::lowerQuit(HIRQuitStmt *) { emit(make_unique<MIRQuitStmt>()); }
 
 void MIRBuilder::lowerBreak(HIRBreakStmt *) {
-  getBlock(currentBlock)->terminator = GotoTerminator(loops.back().breakTarget);
+  auto &loop = loops.back();
+  emitCleanupUntil(loop.breakScope);
+  getBlock(currentBlock)->terminator = GotoTerminator(loop.breakTarget);
 }
 
 void MIRBuilder::lowerContinue(HIRContinueStmt *) {
-  getBlock(currentBlock)->terminator =
-      GotoTerminator(loops.back().continueTarget);
+  auto &loop = loops.back();
+  emitCleanupUntil(loop.continueScope);
+  getBlock(currentBlock)->terminator = GotoTerminator(loop.continueTarget);
 }
 
 void MIRBuilder::loewrLocalDecl(HIRLocalDeclStmt *stmt) {
@@ -252,6 +271,7 @@ void MIRBuilder::loewrLocalDecl(HIRLocalDeclStmt *stmt) {
   if (stmt->init) {
     init = lowerExpr(stmt->init.get());
   }
+  currentScope->locals.push_back(stmt->local->symbol);
   emit(make_unique<MIRLocalDeclStmt>(type, stmt->local->symbol,
                                      std::move(init)));
 }
@@ -259,75 +279,37 @@ void MIRBuilder::loewrLocalDecl(HIRLocalDeclStmt *stmt) {
 void MIRBuilder::lowerReturn(HIRReturnStmt *stmt) {
   unique_ptr<MIRValue> v = nullptr;
   if (stmt->value) {
+    std::cout << magic_enum::enum_name(stmt->value->kind) << "\n";
     v = lowerExpr(stmt->value.get());
   }
+  emitCleanupUntil(nullptr);
   getBlock(currentBlock)->terminator = ReturnTerminator(std::move(v));
 }
 
 void MIRBuilder::lowerSwitch(HIRSwitchStmt *stmt) {
-  BlockID cond = currentBlock;
+  IRScope switchScope(currentScope, currentScope->depth + 1);
+
+  auto *outerScope = currentScope;
+  currentScope = &switchScope;
+
   BlockID defaultTarget = makeBlock();
+  BlockID cleanup = makeBlock();
   BlockID join = makeBlock();
-  vector<MIRCase> cases;
 
-  bool hasDefault = false;
-
-  unique_ptr<MIRValue> condExpr = lowerExpr(stmt->cond.get());
-  auto temp = makeTemp(stmt->cond->type->typeSymbol);
-
-  emit(make_unique<MIRLocalDeclStmt>(temp->typeSymbol, temp,
-                                     std::move(condExpr)));
-
-  for (auto &c : stmt->cases) {
-    assert(c->defaultKind != HIRDefaultKind::WildCard);
-    BlockID id;
-    if (c->defaultKind == HIRDefaultKind::Default) {
-      id = defaultTarget;
-      hasDefault = true;
-    } else {
-      id = makeBlock();
-    }
-    currentBlock = id;
-    for (auto &v : c->selectors) {
-      auto s = &v->selector;
-      if (auto lit = std::get_if<HIRLiteralCase>(s)) {
-        cases.push_back(MIRCase(lit->expr->resolvedLit, id));
-        continue;
-      }
-      if (auto unit = std::get_if<HIRUnitCase>(s)) {
-        cases.push_back(MIRCase(unit->variant->symbol, id));
-        continue;
-      }
-      if (auto payload = std::get_if<HIRPayloadCase>(s)) {
-
-        emit(make_unique<MIRLocalDeclStmt>(
-            payload->binding->type->typeSymbol, payload->binding->symbol,
-            make_unique<MIRPayloadExtractExpr>(
-                payload->variant->symbol,
-                make_unique<MIRLoad>(make_unique<MIRLocalPlace>(temp),
-                                     temp->typeSymbol),
-                temp->typeSymbol)));
-        cases.push_back(MIRCase(payload->variant->symbol, id));
-      }
-    }
-    lowerBlock(c->body.get());
-    if (!hasTerminator(currentBlock)) {
-      getBlock(currentBlock)->terminator = GotoTerminator(join);
-    }
-  }
-
-  if (hasDefault && !hasTerminator(defaultTarget)) {
-    getBlock(defaultTarget)->terminator = GotoTerminator(join);
-  }
-
-  getBlock(cond)->terminator = SwitchTerminator(
-      make_unique<MIRLoad>(make_unique<MIRLocalPlace>(temp), temp->typeSymbol),
-      std::move(cases), hasDefault ? defaultTarget : join);
+  SwitchData data = {currentBlock, defaultTarget,
+                     cleanup,      join,
+                     switchScope,  stmt->cond.get(),
+                     stmt->cases,  stmt->cond->type->typeSymbol};
+  makeSwitch(data);
+  currentScope = outerScope;
   currentBlock = join;
 }
 
 void MIRBuilder::lowerValueTransfer(HIRValueTransferStmt *stmt) {
   unique_ptr<MIRValue> value = lowerExpr(stmt->value.get());
+  if (dynamic_cast<StringType *>(stmt->value->type)) {
+    value->valueCategory = MIRValueCategory::OwnedTemp;
+  }
   emit(make_unique<MIRAssignStmt>(
       make_unique<MIRLocalPlace>(matches.back().result), std::move(value)));
   getBlock(currentBlock)->terminator = GotoTerminator(matches.back().join);
@@ -335,5 +317,6 @@ void MIRBuilder::lowerValueTransfer(HIRValueTransferStmt *stmt) {
 
 void MIRBuilder::lowerDestroy(HIRDestroyStmt *stmt) {
   unique_ptr<MIRValue> handle = lowerExpr(stmt->handle.get());
-  emit(make_unique<MIRDestroyStmt>(std::move(handle)));
+  emit(
+      make_unique<MIRDestroyStmt>(std::move(handle), stmt->entity->typeSymbol));
 }

@@ -92,6 +92,10 @@ Decl::Ptr Parser::declaration(DeclContext context) {
     return initDecl(prefix);
   }
 
+  if (check(TKind::ONDESTROY)) {
+    return onDestroyDecl(prefix);
+  }
+
   if (isType()) {
     if (isFunc()) {
       return functionDecl(prefix);

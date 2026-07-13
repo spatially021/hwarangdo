@@ -49,6 +49,7 @@ AST_NODE(EnumDecl)
 AST_NODE(FuncDecl)
 AST_NODE(VarDecl)
 AST_NODE(InitDecl)
+AST_NODE(OnDestroyDecl)
 
 // Other
 AST_NODE(TypeNode)

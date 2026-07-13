@@ -1,8 +1,12 @@
 #include "hrd/IR/MIR/MIRExpr.h"
 #include "hrd/IR/llvmIR/llvmCodegen.h"
+#include "hrd/SemanticAnalyzer/symbol/TypeSymbol.h"
 #include "hrd/enums/Operator.h"
 #include "hrd/util/Error.h"
+#include <llvm/IR/Constants.h>
+#include <llvm/IR/DerivedTypes.h>
 #include <llvm/IR/Value.h>
+#include <llvm/IR/Verifier.h>
 #include <memory>
 
 static bool isCompare(Operator op) {
@@ -37,7 +41,7 @@ static bool isCompare(Operator op) {
   return false;
 }
 
-llvm::Value *llvmCodegen::lowerValue(MIRValue *value, FuncContext &ctx) {
+LoweredValue llvmCodegen::lowerValue(MIRValue *value, FuncContext &ctx) {
   if (auto *v = dynamic_cast<MIRBinaryExpr *>(value)) {
     return lowerBinaryExpr(v, ctx);
   }
@@ -89,7 +93,7 @@ llvm::Value *llvmCodegen::lowerValue(MIRValue *value, FuncContext &ctx) {
   Error::internal("unknown MIRValue in LLVM lowering");
 }
 
-llvm::Value *llvmCodegen::lowerBinaryExpr(MIRBinaryExpr *expr,
+LoweredValue llvmCodegen::lowerBinaryExpr(MIRBinaryExpr *expr,
                                           FuncContext &ctx) {
   if (expr->op == Operator::AND) {
     return lowerLogicalAnd(expr, ctx);
@@ -100,47 +104,77 @@ llvm::Value *llvmCodegen::lowerBinaryExpr(MIRBinaryExpr *expr,
   }
 
   auto type = isCompare(expr->op) ? expr->operandType : expr->type;
-
-  auto lhs = castTo(lowerValue(expr->lhs.get(), ctx), expr->lhs->type, type);
+  auto lhsRaw = lowerValue(expr->lhs.get(), ctx);
+  LoweredValue lhs = {castTo(lhsRaw.value, expr->lhs->type, type), lhsRaw.addr,
+                      lhsRaw.category};
 
   auto rawRhs = lowerValue(expr->rhs.get(), ctx);
 
   bool usePowi = expr->op == Operator::POW && isInt(expr->rhs->type) &&
                  isFloat(expr->type);
 
-  auto rhs = usePowi ? castTo(rawRhs, expr->rhs->type, table->getBuilt("i32"))
-                     : castTo(rawRhs, expr->rhs->type, type);
+  LoweredValue rhs = {
+      usePowi ? castTo(rawRhs.value, expr->rhs->type, table->getBuilt("i32"))
+              : castTo(rawRhs.value, expr->rhs->type, type),
+      rawRhs.addr, rawRhs.category};
   switch (expr->op) {
 
   case Operator::ADD:
-    return isFloat(type) ? builder.CreateFAdd(lhs, rhs)
-                         : builder.CreateAdd(lhs, rhs);
+    if (isString(type)) {
+      auto *s8Ty = getType(expr->type);
+      auto *ptrTy = llvm::PointerType::getUnqual(context);
+      auto *voidTy = builder.getVoidTy();
+      auto *out = builder.CreateAlloca(s8Ty, nullptr, "s8.add.out");
+      auto *lhsPtr = lhsRaw.addr;
+      if (!lhsPtr) {
+        lhsPtr = builder.CreateAlloca(s8Ty, nullptr, "s8.add.lhs");
+        builder.CreateStore(lhsRaw.value, lhsPtr);
+      }
 
+      auto *rhsPtr = rhs.addr;
+      if (!rhsPtr) {
+        rhsPtr = builder.CreateAlloca(s8Ty, nullptr, "s8.add.rhs");
+        builder.CreateStore(rhs.value, rhsPtr);
+      }
+
+      auto *fnTy =
+          llvm::FunctionType::get(voidTy, {ptrTy, ptrTy, ptrTy}, false);
+      builder.CreateCall(getRuntimeFunc("hrd_add_s8", fnTy),
+                         {out, lhsPtr, rhsPtr});
+
+      ctx.cleanupStack.push_back({out, type});
+
+      return {builder.CreateLoad(s8Ty, out, "s8.add"), out,
+              expr->valueCategory};
+    }
+
+    return {isFloat(type) ? builder.CreateFAdd(lhs.value, rhs.value)
+                          : builder.CreateAdd(lhs.value, rhs.value)};
   case Operator::SUB:
-    return isFloat(type) ? builder.CreateFSub(lhs, rhs)
-                         : builder.CreateSub(lhs, rhs);
+    return {isFloat(type) ? builder.CreateFSub(lhs.value, rhs.value)
+                          : builder.CreateSub(lhs.value, rhs.value)};
 
   case Operator::MUL:
-    return isFloat(type) ? builder.CreateFMul(lhs, rhs)
-                         : builder.CreateMul(lhs, rhs);
+    return {isFloat(type) ? builder.CreateFMul(lhs.value, rhs.value)
+                          : builder.CreateMul(lhs.value, rhs.value)};
 
   case Operator::DIV: {
     if (isFloat(type)) {
-      return builder.CreateFDiv(lhs, rhs);
+      return {builder.CreateFDiv(lhs.value, rhs.value)};
     }
     if (isUnsigned(type)) {
-      return builder.CreateUDiv(lhs, rhs);
+      return {builder.CreateUDiv(lhs.value, rhs.value)};
     }
-    return builder.CreateSDiv(lhs, rhs);
+    return {builder.CreateSDiv(lhs.value, rhs.value)};
   }
   case Operator::REM: {
     if (isFloat(type)) {
-      return builder.CreateFRem(lhs, rhs);
+      return {builder.CreateFRem(lhs.value, rhs.value)};
     }
     if (isUnsigned(type)) {
-      return builder.CreateURem(lhs, rhs);
+      return {builder.CreateURem(lhs.value, rhs.value)};
     }
-    return builder.CreateSRem(lhs, rhs);
+    return {builder.CreateSRem(lhs.value, rhs.value)};
   }
   case Operator::POW: {
     if (isInt(expr->lhs->type) && isInt(expr->rhs->type)) {
@@ -151,42 +185,125 @@ llvm::Value *llvmCodegen::lowerBinaryExpr(MIRBinaryExpr *expr,
       auto pow = llvm::Intrinsic::getOrInsertDeclaration(
           llvmModule.get(), llvm::Intrinsic::powi, {getType(expr->type)});
 
-      return builder.CreateCall(pow, {lhs, rhs});
+      return {builder.CreateCall(pow, {lhs.value, rhs.value})};
     }
 
     auto pow = llvm::Intrinsic::getOrInsertDeclaration(
         llvmModule.get(), llvm::Intrinsic::pow, {getType(expr->type)});
 
-    return builder.CreateCall(pow, {lhs, rhs});
+    return {builder.CreateCall(pow, {lhs.value, rhs.value})};
   }
   case Operator::B_AND: {
-    return builder.CreateAnd(lhs, rhs);
+    return {builder.CreateAnd(lhs.value, rhs.value)};
   }
   case Operator::B_OR:
-    return builder.CreateOr(lhs, rhs);
+    return {builder.CreateOr(lhs.value, rhs.value)};
   case Operator::B_XOR:
-    return builder.CreateXor(lhs, rhs);
+    return {builder.CreateXor(lhs.value, rhs.value)};
+  case Operator::EQ: {
+    if (dynamic_cast<StringType *>(type)) {
+      auto *strTy = getLayoutType(type); // %string8 = { ptr, i64, i64 }
+      auto *ptrTy = llvm::PointerType::getUnqual(context);
 
-  case Operator::EQ:
+      auto *callTy =
+          llvm::FunctionType::get(builder.getInt1Ty(), {ptrTy, ptrTy}, false);
 
-  case Operator::NT:
-  case Operator::LS:
-  case Operator::LSE:
-  case Operator::GR:
-  case Operator::GRE:
-    // TODO: world처리 후 정책 정해서 처리하기.
-    Error::internal("compare operator not developed");
+      auto *func = getRuntimeFunc("hrd_string_eq_s8", callTy);
+      if (!func) {
+        Error::internal("missing runtime function: hrd_string_eq_s8");
+      }
+
+      auto *lhsAddr = builder.CreateAlloca(strTy, nullptr, "lhs.str.addr");
+      auto *rhsAddr = builder.CreateAlloca(strTy, nullptr, "rhs.str.addr");
+
+      builder.CreateStore(lhs.value, lhsAddr);
+      builder.CreateStore(rhs.value, rhsAddr);
+
+      return {builder.CreateCall(func, {lhsAddr, rhsAddr}, "s8.eq")};
+    }
+
+    if (isFloat(type)) {
+      return {builder.CreateFCmpOEQ(lhs.value, rhs.value)};
+    }
+
+    return {builder.CreateICmpEQ(lhs.value, rhs.value)};
+  }
+  case Operator::NT: {
+    if (dynamic_cast<StringType *>(type)) {
+      auto *strTy = getLayoutType(type); // %string8 = { ptr, i64, i64 }
+      auto *ptrTy = llvm::PointerType::getUnqual(context);
+
+      auto *callTy =
+          llvm::FunctionType::get(builder.getInt1Ty(), {ptrTy, ptrTy}, false);
+
+      auto *func = getRuntimeFunc("hrd_string_ne_s8", callTy);
+      if (!func) {
+        Error::internal("missing runtime function: hrd_string_ne_s8");
+      }
+
+      auto *lhsAddr = builder.CreateAlloca(strTy, nullptr, "lhs.str.addr");
+      auto *rhsAddr = builder.CreateAlloca(strTy, nullptr, "rhs.str.addr");
+
+      builder.CreateStore(lhs.value, lhsAddr);
+      builder.CreateStore(rhs.value, rhsAddr);
+
+      return {builder.CreateCall(func, {lhsAddr, rhsAddr}, "s8.ne")};
+    }
+
+    if (isFloat(type)) {
+      return {builder.CreateFCmpONE(lhs.value, rhs.value)};
+    }
+
+    return {builder.CreateICmpNE(lhs.value, rhs.value)};
+  }
+  case Operator::LS: {
+    if (isFloat(type)) {
+      return {builder.CreateFCmpOLT(lhs.value, rhs.value)};
+    }
+    if (isUnsigned(type)) {
+      return {builder.CreateICmpULT(lhs.value, rhs.value)};
+    }
+    return {builder.CreateICmpSLT(lhs.value, rhs.value)};
+  }
+  case Operator::LSE: {
+    if (isFloat(type)) {
+      return {builder.CreateFCmpOLE(lhs.value, rhs.value)};
+    }
+    if (isUnsigned(type)) {
+      return {builder.CreateICmpULE(lhs.value, rhs.value)};
+    }
+    return {builder.CreateICmpSLE(lhs.value, rhs.value)};
+  }
+  case Operator::GR: {
+    if (isFloat(type)) {
+      return {builder.CreateFCmpOGT(lhs.value, rhs.value)};
+    }
+    if (isUnsigned(type)) {
+      return {builder.CreateICmpUGT(lhs.value, rhs.value)};
+    }
+    return {builder.CreateICmpSGT(lhs.value, rhs.value)};
+  }
+  case Operator::GRE: {
+    if (isFloat(type)) {
+      return {builder.CreateFCmpOGE(lhs.value, rhs.value)};
+    }
+    if (isUnsigned(type)) {
+      return {builder.CreateICmpUGE(lhs.value, rhs.value)};
+    }
+    return {builder.CreateICmpSGE(lhs.value, rhs.value)};
+  }
 
   case Operator::LSH: {
-    llvm::Value *amount = castTo(rhs, expr->rhs->type, expr->lhs->type);
-    return builder.CreateShl(lhs, amount);
+    llvm::Value *amount = castTo(rhs.value, expr->rhs->type, expr->lhs->type);
+    return {builder.CreateShl(lhs.value, amount)};
   }
 
   case Operator::RSH: {
-    llvm::Value *amount = castTo(rhs, expr->rhs->type, expr->lhs->type);
+    llvm::Value *amount = castTo(rhs.value, expr->rhs->type, expr->lhs->type);
 
-    return isUnsigned(expr->lhs->type) ? builder.CreateLShr(lhs, amount)
-                                       : builder.CreateAShr(lhs, amount);
+    return {isUnsigned(expr->lhs->type)
+                ? builder.CreateLShr(lhs.value, amount)
+                : builder.CreateAShr(lhs.value, amount)};
   }
 
   case Operator::AND:
@@ -198,10 +315,10 @@ llvm::Value *llvmCodegen::lowerBinaryExpr(MIRBinaryExpr *expr,
   case Operator::MINUS:
     Error::internal("in binary but unary detected");
   }
-  Error::internal("in binary but unary detected");
+  Error::internal("unknwon operator type");
 }
 
-llvm::Value *llvmCodegen::lowerLogicalAnd(MIRBinaryExpr *expr,
+LoweredValue llvmCodegen::lowerLogicalAnd(MIRBinaryExpr *expr,
                                           FuncContext &ctx) {
   llvm::Function *func = builder.GetInsertBlock()->getParent();
 
@@ -212,11 +329,11 @@ llvm::Value *llvmCodegen::lowerLogicalAnd(MIRBinaryExpr *expr,
   llvm::BasicBlock *mergeBlock =
       llvm::BasicBlock::Create(context, "land.merge", func);
 
-  llvm::Value *lhs = lowerValue(expr->lhs.get(), ctx);
+  llvm::Value *lhs = lowerValue(expr->lhs.get(), ctx).value;
   builder.CreateCondBr(lhs, rhsBlock, falseBlock);
 
   builder.SetInsertPoint(rhsBlock);
-  llvm::Value *rhs = lowerValue(expr->rhs.get(), ctx);
+  llvm::Value *rhs = lowerValue(expr->rhs.get(), ctx).value;
   builder.CreateBr(mergeBlock);
   rhsBlock = builder.GetInsertBlock();
 
@@ -232,10 +349,10 @@ llvm::Value *llvmCodegen::lowerLogicalAnd(MIRBinaryExpr *expr,
   phi->addIncoming(rhs, rhsBlock);
   phi->addIncoming(falseVal, falseBlock);
 
-  return phi;
+  return {phi};
 }
 
-llvm::Value *llvmCodegen::lowerLogicalOr(MIRBinaryExpr *expr,
+LoweredValue llvmCodegen::lowerLogicalOr(MIRBinaryExpr *expr,
                                          FuncContext &ctx) {
   llvm::Function *func = builder.GetInsertBlock()->getParent();
 
@@ -246,7 +363,7 @@ llvm::Value *llvmCodegen::lowerLogicalOr(MIRBinaryExpr *expr,
   llvm::BasicBlock *mergeBlock =
       llvm::BasicBlock::Create(context, "lor.merge", func);
 
-  llvm::Value *lhs = lowerValue(expr->lhs.get(), ctx);
+  llvm::Value *lhs = lowerValue(expr->lhs.get(), ctx).value;
   builder.CreateCondBr(lhs, trueBlock, rhsBlock);
 
   builder.SetInsertPoint(trueBlock);
@@ -255,7 +372,7 @@ llvm::Value *llvmCodegen::lowerLogicalOr(MIRBinaryExpr *expr,
   trueBlock = builder.GetInsertBlock();
 
   builder.SetInsertPoint(rhsBlock);
-  llvm::Value *rhs = lowerValue(expr->rhs.get(), ctx);
+  llvm::Value *rhs = lowerValue(expr->rhs.get(), ctx).value;
   builder.CreateBr(mergeBlock);
   rhsBlock = builder.GetInsertBlock();
 
@@ -266,147 +383,211 @@ llvm::Value *llvmCodegen::lowerLogicalOr(MIRBinaryExpr *expr,
   phi->addIncoming(trueVal, trueBlock);
   phi->addIncoming(rhs, rhsBlock);
 
-  return phi;
+  return {phi};
 }
 
-llvm::Value *llvmCodegen::lowerLoad(MIRLoad *expr, FuncContext &ctx) {
+LoweredValue llvmCodegen::lowerLoad(MIRLoad *expr, FuncContext &ctx) {
   auto ptr = lowerPlace(expr->place.get(), ctx);
   llvm::Type *valueTy = getType(expr->type);
-  return builder.CreateLoad(valueTy, ptr, "loadtmp");
+  return {builder.CreateLoad(valueTy, ptr, "loadtmp"), ptr,
+          MIRValueCategory::Borrowed};
 }
 
-llvm::Value *llvmCodegen::lowerPayloadExtractExpr(MIRPayloadExtractExpr *expr,
+LoweredValue llvmCodegen::lowerPayloadExtractExpr(MIRPayloadExtractExpr *expr,
                                                   FuncContext &ctx) {
-  // TODO: enum 구현 후 처리
+  auto *variant = expr->symbol;
+
+  if (!variant || !variant->payloadType) {
+    Error::internal("invalid payload extract variant");
+  }
+
+  auto *load = dynamic_cast<MIRLoad *>(expr->enumValue.get());
+  if (!load) {
+    Error::internal("payload extract source must be place load");
+  }
+
+  auto *enumType = expr->enumValue->type;
+
+  if (!enumType || enumType->kind != TypeSymbol::TypeKind::ENUM) {
+    Error::internal("payload extract source is not enum");
+  }
+
+  auto *enumAddr = lowerPlace(load->place.get(), ctx);
+  auto *enumLayoutTy = getLayoutType(enumType);
+
+  auto *payloadSlot =
+      builder.CreateStructGEP(enumLayoutTy, enumAddr, 1, "payload.slot");
+
+  auto *payloadAddr =
+      builder.CreateLoad(builder.getPtrTy(), payloadSlot, "payload.addr");
+
+  auto *payloadTy = getType(variant->payloadType);
+
+  auto *payloadValue =
+      builder.CreateLoad(payloadTy, payloadAddr, "payload.value");
+
+  return {
+      payloadValue, payloadAddr,
+      MIRValueCategory::Borrowed // 네 실제 category 규칙에 맞게
+  };
 }
 
-llvm::Value *llvmCodegen::lowerLiteralExpr(MIRLiteralExpr *expr,
-                                           FuncContext &) {
+LoweredValue llvmCodegen::lowerLiteralExpr(MIRLiteralExpr *expr,
+                                           FuncContext &ctx) {
   auto lit = expr->literal;
   llvm::Type *ty = getType(lit.type);
 
   if (lit.isBool()) {
-    return llvm::ConstantInt::getBool(context, lit.asBool());
+    return {llvm::ConstantInt::getBool(context, lit.asBool())};
   }
 
   if (lit.isInt()) {
-    return llvm::ConstantInt::get(ty, lit.asInt().value);
+    return {llvm::ConstantInt::get(ty, lit.asInt().value)};
   }
 
   if (lit.isFloat()) {
-    return llvm::ConstantFP::get(context, lit.asFloat().value);
+    return {llvm::ConstantFP::get(context, lit.asFloat().value)};
   }
 
   if (lit.isChar()) {
-    return llvm::ConstantInt::get(ty, lit.asChar().codePoint);
+    return {llvm::ConstantInt::get(ty, lit.asChar().codePoint)};
   }
 
   if (lit.isString()) {
-    return lowerStringLiteral(lit.asString(), lit.type);
+    auto value = lowerStringLiteral(lit.asString(), lit.type);
+    ctx.cleanupStack.push_back({value.addr, lit.type});
+    return value;
   }
 
   Error::internal("unknwon literal type");
 }
 
-llvm::Value *llvmCodegen::lowerStringLiteral(const StringPayload &payload,
+LoweredValue llvmCodegen::lowerStringLiteral(const StringPayload &payload,
                                              TypeSymbol *type) {
-  auto *stringTy = getType(type); // %string8 = { ptr, i64 }
-  auto *i64Ty = llvm::Type::getInt64Ty(context);
+  auto *s8Ty = getLayoutType(type);
+  auto *ptrTy = llvm::PointerType::getUnqual(context);
+  auto *i64Ty = builder.getInt64Ty();
+  auto *voidTy = builder.getVoidTy();
 
   std::string bytes;
-  bytes.reserve(payload.codePoints.size() + 1);
+  bytes.reserve(payload.codePoints.size());
 
   for (uint32_t cp : payload.codePoints) {
-    // 지금은 s8만 우선.
     if (cp > 0x7F) {
       Error::internal("non-ascii string literal in s8 lowering");
     }
     bytes.push_back(static_cast<char>(cp));
   }
 
-  auto *dataPtr = builder.CreateGlobalStringPtr(bytes);
+  auto *out = builder.CreateAlloca(s8Ty, nullptr, "s8.lit.out");
+  auto *dataPtr = builder.CreateGlobalString(bytes, "s8lit");
+  auto *len =
+      llvm::ConstantInt::get(i64Ty, static_cast<uint64_t>(bytes.size()));
 
-  llvm::Value *result = llvm::PoisonValue::get(stringTy);
+  auto *fnTy = llvm::FunctionType::get(voidTy, {ptrTy, ptrTy, i64Ty}, false);
 
-  result = builder.CreateInsertValue(result, dataPtr, {0});
-  result = builder.CreateInsertValue(
-      result, llvm::ConstantInt::get(i64Ty, payload.codePoints.size()), {1});
+  auto *fn = getRuntimeFunc("hrd_s8_from_literal", fnTy);
 
-  return result;
+  builder.CreateCall(fn, {out, dataPtr, len});
+
+  return {builder.CreateLoad(s8Ty, out, "s8.literal"), out,
+          MIRValueCategory::OwnedTemp};
 }
 
-llvm::Value *llvmCodegen::lowerUnaryExpr(MIRUnaryExpr *expr, FuncContext &ctx) {
+LoweredValue llvmCodegen::lowerUnaryExpr(MIRUnaryExpr *expr, FuncContext &ctx) {
   auto operand = lowerValue(expr->operrand.get(), ctx);
   switch (expr->op) {
 
   case Operator::L_NOT:
   case Operator::B_NOT:
-    return builder.CreateNot(operand);
+    return {builder.CreateNot(operand.value)};
 
   case Operator::PLUS:
     return operand;
   case Operator::MINUS:
-    return isFloat(expr->type) ? builder.CreateFNeg(operand)
-                               : builder.CreateNeg(operand);
+    return {isFloat(expr->type) ? builder.CreateFNeg(operand.value)
+                                : builder.CreateNeg(operand.value)};
 
   default:
     Error::internal("expect unary but use binary");
   }
 }
 
-llvm::Value *llvmCodegen::lowerCastExpr(MIRCastExpr *expr, FuncContext &ctx) {
+LoweredValue llvmCodegen::lowerCastExpr(MIRCastExpr *expr, FuncContext &ctx) {
   auto operand = lowerValue(expr->operrand.get(), ctx);
-  return castTo(operand, expr->from, expr->to);
+  return {castTo(operand.value, expr->from, expr->to)};
 }
 
-llvm::Value *llvmCodegen::lowerCallExpr(MIRCallExpr *expr, FuncContext &ctx) {
+LoweredValue llvmCodegen::lowerCallExpr(MIRCallExpr *expr, FuncContext &ctx) {
   auto callee = funcs.at(expr->method);
 
   std::vector<llvm::Value *> args;
 
   // self
   if (auto l = dynamic_cast<MIRLoad *>(expr->base.get())) {
-    args.push_back(lowerPlace(l->place.get(), ctx));
+    args.push_back(lowerReceiverPtr(l->place.get(), ctx));
   } else {
     Error::internal("fail to get receiver");
   }
 
   // 일반 인자
+  vector<MIRValue *> values;
   for (auto &arg : expr->args) {
-    args.push_back(lowerValue(arg.get(), ctx));
+    values.push_back(arg.get());
+  }
+  auto out = lowerArgs(args, values, ctx);
+
+  auto call = builder.CreateCall(callee, args);
+
+  for (auto &o : out) {
+    builder.CreateCall(defaultDestroys.at(o.type), {o.addr});
   }
 
-  return builder.CreateCall(callee, args);
+  return {call};
 }
 
-llvm::Value *llvmCodegen::lowerStructInitExpr(MIRStructInitExpr *expr,
+LoweredValue llvmCodegen::lowerStructInitExpr(MIRStructInitExpr *expr,
                                               FuncContext &ctx) {
-  auto *structTy = getType(expr->type); // %Vec2 같은 struct type
+  auto *structTy = getLayoutType(expr->structType); // %Vec2 같은 struct type
 
   // 1. 임시 struct 공간 생성
   llvm::AllocaInst *tmp =
       createEntryAlloca(ctx.func, structTy, "struct.init.tmp");
-
+  builder.CreateStore(llvm::Constant::getNullValue(structTy), tmp);
   // 2. 인자 준비: self ptr + 일반 args
   std::vector<llvm::Value *> args;
   args.push_back(tmp);
-
+  vector<MIRValue *> values;
   for (auto &arg : expr->args) {
-    args.push_back(lowerValue(arg.get(), ctx));
+    values.push_back(arg.get());
   }
+  auto out = lowerArgs(args, values, ctx);
 
+  auto dInit = defaultInits.at(expr->structType);
+  builder.CreateCall(dInit, {tmp});
+  llvm::verifyFunction(*ctx.func, &llvm::errs());
   // 3. init 호출
   if (expr->initMethod != nullptr) {
     auto *initFn = funcs.at(expr->initMethod);
     builder.CreateCall(initFn, args);
-  } else {
-    // 기본 init: init이 정의되지 않은 T()만 허용된 상태라면
-    // 필드 기본값 정책이 없으면 아무것도 안 해도 됨.
-    // 단, 미초기화 읽기 검증은 앞단에서 잡는다는 전제.
+    llvm::verifyFunction(*ctx.func, &llvm::errs());
   }
 
+  llvm::errs() << "struct init: " << expr->structType->name << "\n";
+  llvm::errs() << "tmp type: ";
+  tmp->getType()->print(llvm::errs());
+  llvm::errs() << "\n";
+
+  llvm::errs() << "dInit: " << dInit->getName() << "\n";
+  dInit->getFunctionType()->print(llvm::errs());
+  llvm::errs() << "\n";
+
+  auto load = builder.CreateLoad(structTy, tmp, "struct.init.val");
+  for (auto &o : out) {
+    builder.CreateCall(defaultDestroys.at(o.type), {o.addr});
+  }
   // 4. expression value로 반환
-  return builder.CreateLoad(structTy, tmp, "struct.init.val");
+  return {load};
 }
 
 void llvmCodegen::lowerStructInitTo(MIRStructInitExpr *expr, llvm::Value *dst,
@@ -415,33 +596,117 @@ void llvmCodegen::lowerStructInitTo(MIRStructInitExpr *expr, llvm::Value *dst,
   args.push_back(dst);
 
   for (auto &arg : expr->args) {
-    args.push_back(lowerValue(arg.get(), ctx));
+    args.push_back(lowerValue(arg.get(), ctx).value);
   }
 
   if (expr->initMethod != nullptr) {
     builder.CreateCall(funcs.at(expr->initMethod), args);
   }
 }
-
-llvm::Value *llvmCodegen::lowerVariantExpr(MIRVariantExpr *expr,
+LoweredValue llvmCodegen::lowerVariantExpr(MIRVariantExpr *expr,
                                            FuncContext &ctx) {
-  // TODO: enum 구현후 작성
-}
+  auto *enumType = expr->type;
+  auto *enumLayoutTy = getLayoutType(enumType);
 
-llvm::Value *llvmCodegen::lowerViewExpr(MIRViewExpr *expr, FuncContext &ctx) {}
+  // enum 값 자체는 임시값이므로 스택에 생성
+  auto *enumAddr =
+      createEntryAlloca(ctx.func, enumLayoutTy, "enum.variant.tmp");
 
-llvm::Value *llvmCodegen::lowerSpawnExpr(MIRSpawnExpr *expr, FuncContext &ctx) {
+  // 먼저 전체 enum을 빈 상태로 초기화
+  builder.CreateStore(llvm::Constant::getNullValue(enumLayoutTy), enumAddr);
 
-}
+  // tag
+  auto *tagPtr =
+      builder.CreateStructGEP(enumLayoutTy, enumAddr, 0, "enum.tag.ptr");
 
-llvm::Value *llvmCodegen::lowerRuntime(MIRRuntimeCallExpr *expr,
-                                       FuncContext &ctx) {
-  auto runtime = getOrDeclareRuntimeFunction(expr->symbol);
-  vector<llvm::Value *> args;
-  for (auto &a : expr->args) {
-    args.push_back(lowerValue(a.get(), ctx));
+  builder.CreateStore(builder.getInt32(expr->variant->ordinal), tagPtr);
+
+  // payload slot: ptr
+  auto *payloadPtr =
+      builder.CreateStructGEP(enumLayoutTy, enumAddr, 1, "enum.payload.ptr");
+
+  // unit variant
+  if (expr->payload == nullptr) {
+    builder.CreateStore(llvm::ConstantPointerNull::get(builder.getPtrTy()),
+                        payloadPtr);
+
+    auto *value = builder.CreateLoad(enumLayoutTy, enumAddr, "enum.variant");
+
+    return {
+        value,
+        enumAddr,
+        MIRValueCategory::OwnedTemp,
+    };
   }
-  return builder.CreateCall(runtime, args);
+
+  auto *payloadType = expr->variant->payloadType;
+
+  if (payloadType == nullptr) {
+    Error::internal("enum variant payload expression has no payload type");
+  }
+
+  auto *payloadLlvmType = getType(payloadType);
+
+  // 우변 payload 평가
+  auto payloadValue = lowerValue(expr->payload.get(), ctx);
+
+  /*
+   * enum payload는 enum이 소유한다.
+   *
+   * 따라서 payloadValue.addr가 존재하더라도 그 주소를 enum에 직접 저장하면
+   * 안 된다. 지역 변수나 임시 alloca의 주소일 수 있기 때문이다.
+   *
+   * 항상 별도의 heap 저장공간을 만들고 copy/move한다.
+   */
+  auto *ptrTy = builder.getPtrTy();
+  auto *mallocTy =
+      llvm::FunctionType::get(ptrTy, {builder.getInt64Ty()}, false);
+
+  auto *payloadSize = llvm::ConstantExpr::getSizeOf(payloadLlvmType);
+
+  auto *payloadAddr = builder.CreateCall(getRuntimeFunc("malloc", mallocTy),
+                                         {payloadSize}, "enum.payload");
+
+  // assign()은 string/struct의 기존 값을 먼저 destroy하므로 zero-init 필요
+  builder.CreateStore(llvm::Constant::getNullValue(payloadLlvmType),
+                      payloadAddr);
+
+  /*
+   * Borrowed/Plain이면 copy
+   * OwnedTemp이면 move
+   *
+   * 구분은 assign() 내부에서 payloadValue.category를 보고 처리한다.
+   */
+  assign(payloadAddr, payloadValue, payloadType, ctx);
+
+  // enum이 새 heap payload를 소유
+  builder.CreateStore(payloadAddr, payloadPtr);
+
+  auto *value = builder.CreateLoad(enumLayoutTy, enumAddr, "enum.variant");
+
+  return {
+      value,
+      enumAddr,
+      MIRValueCategory::OwnedTemp,
+  };
+}
+
+LoweredValue llvmCodegen::lowerRuntime(MIRRuntimeCallExpr *expr,
+                                       FuncContext &ctx) {
+  auto *runtime = getOrDeclareRuntimeFunction(expr->symbol);
+
+  std::vector<llvm::Value *> args;
+  vector<MIRValue *> values;
+  for (auto &arg : expr->args) {
+    values.push_back(arg.get());
+  }
+  auto out = lowerArgs(args, values, ctx);
+  auto call = builder.CreateCall(runtime, args);
+  for (auto &o : out) {
+    builder.CreateCall(defaultDestroys.at(o.type), {o.addr});
+  }
+
+  return {call};
 }
 
 llvm::Function *llvmCodegen::getOrDeclareRuntimeFunction(RuntimeSymbol *rt) {
@@ -449,9 +714,15 @@ llvm::Function *llvmCodegen::getOrDeclareRuntimeFunction(RuntimeSymbol *rt) {
     return it->second;
   }
 
+  auto *ptrTy = llvm::PointerType::getUnqual(context);
+
   std::vector<llvm::Type *> paramTypes;
   for (auto *param : rt->params) {
-    paramTypes.push_back(getType(param));
+    if (dynamic_cast<StringType *>(param)) {
+      paramTypes.push_back(ptrTy);
+    } else {
+      paramTypes.push_back(getType(param));
+    }
   }
 
   auto *retType = getType(rt->returnType);

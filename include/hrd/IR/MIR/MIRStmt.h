@@ -47,5 +47,13 @@ struct MIRQuitStmt : MIRStmt {
 
 struct MIRDestroyStmt : MIRStmt {
   unique_ptr<MIRValue> handlePlace = nullptr;
-  MIRDestroyStmt(unique_ptr<MIRValue> h) : handlePlace(std::move(h)) {}
+  TypeSymbol *type = nullptr;
+  MIRDestroyStmt(unique_ptr<MIRValue> h, TypeSymbol *t)
+      : handlePlace(std::move(h)), type(t) {}
+};
+
+struct MIRCleanupStmt : MIRStmt {
+  std::vector<ValueSymbol *> locals;
+
+  MIRCleanupStmt(std::vector<ValueSymbol *> l) : locals(std::move(l)) {}
 };

@@ -3,6 +3,7 @@
 #include "Symbol.h"
 #include "hrd/SemanticAnalyzer/symbol/TypeSymbol.h"
 #include "hrd/SemanticAnalyzer/symbol/ValueSymbol.h"
+#include "hrd/enums/MethodKind.h"
 #include <vector>
 class Scope;
 
@@ -18,8 +19,7 @@ public:
   Expr::State state = Expr::State::RESOLVED;
   Scope *scope = nullptr;
   Scope *selfScope = nullptr;
-
-  bool isInit = false;
+  MethodKind methodKind;
 
   bool isExtern = false;
   bool isFrame = false;

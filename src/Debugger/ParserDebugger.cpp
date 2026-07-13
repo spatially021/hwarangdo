@@ -285,3 +285,11 @@ void ParserDebugger::visit(InitDecl *decl) {
   decl->body->accept(this);
   depth--;
 }
+
+void ParserDebugger::visit(OnDestroyDecl *decl) {
+  cout << ident() << "[funcDecl]onDestroy(";
+  cout << ")\n";
+  depth++;
+  decl->body->accept(this);
+  depth--;
+}

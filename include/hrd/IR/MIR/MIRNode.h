@@ -70,12 +70,14 @@ class MIRFunction {
 public:
   vector<unique_ptr<BasicBlock>> blocks;
   MethodSymbol *symbol = nullptr;
-  TypeSymbol *onwer = nullptr;
+  TypeSymbol *owner = nullptr;
   BlockID entry;
 
   uint32_t nextTemp = 0;
 
-  MIRFunction(MethodSymbol *s, TypeSymbol *o) : symbol(s), onwer(o) {}
+  bool isDefaultInit = false;
+
+  MIRFunction(MethodSymbol *s, TypeSymbol *o) : symbol(s), owner(o) {}
 
   BlockID createBlock() {
     BlockID id = blocks.size();

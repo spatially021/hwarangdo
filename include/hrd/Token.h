@@ -101,6 +101,7 @@ enum class TKind {
   VOID,  // void
   FRAME, // frame
   INIT,
+  ONDESTROY,
 
   OVERRIDE,
   ASYNC,

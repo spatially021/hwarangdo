@@ -842,13 +842,8 @@ void HIRVerifier::checkInitialize(HIRPlaceExpr *place) {
 void HIRVerifier::initialize(HIRPlaceExpr *place) {
   assert(place);
   if (auto arr = dynamic_cast<HIRArrayAccessPlaceExpr *>(place)) {
-    auto load = dynamic_cast<HIRLoadExpr *>(arr->object.get());
-    if (load == nullptr) {
-      Error::diagnostic(
-          arr->object->span,
-          "cannot assign to an element of a temporary array value");
-    }
-    auto &init = getInitState(load->place.get());
+
+    auto &init = getInitState(arr->object.get());
     auto [res, index] = tryGetConstIndex(arr->index.get());
     if (res) {
       auto *arrayType = dynamic_cast<HIRArrayType *>(arr->object->type);
@@ -903,6 +898,10 @@ InitState &HIRVerifier::getInitState(HIRPlaceExpr *place) {
       Error::internal(place->span, "param state not found");
     }
     return it->second;
+  }
+
+  if (auto arr = dynamic_cast<HIRArrayAccessPlaceExpr *>(place)) {
+    return getInitState(arr->object.get());
   }
 
   Error::internal(place->span, "fail to find place");

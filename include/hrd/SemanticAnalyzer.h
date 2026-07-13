@@ -22,6 +22,7 @@ public:
 
   void build();
   void link();
+  void addLog();
   void prepareRuntime();
   void addRuntime(std::string namespaceName, std::string name,
                   std::string llvmName, TypeSymbol *returnType,

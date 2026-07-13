@@ -208,7 +208,7 @@ unique_ptr<HIRExpr> HIRBuilder::lowerSpawn(SpawnExpr *expr) {
   HIRTypeDecl *decl = it->second;
 
   if (expr->resolvedInit != nullptr) {
-    auto [result, method] = lookupMethod(decl, expr->resolvedInit);
+    auto [result, method] = lookupInit(decl, expr->resolvedInit);
     if (result) {
       init = method;
     } else {
@@ -306,8 +306,17 @@ unique_ptr<HIRExpr> HIRBuilder::lowerInitCall(CallExpr *expr) {
   }
   vector<unique_ptr<HIRExpr>> args;
 
+  auto it = program->typeCache.find(expr->resolvedType);
+
+  if (it == program->typeCache.end()) {
+    Error::internal(expr->span,
+                    "fail to find return type : " + expr->resolvedType->name);
+  }
+
+  auto rType = it->second;
+
   return make_unique<HIRStructInitExpr>(expr->span, nullptr, std::move(args),
-                                        program->voidType, defaultInit, true);
+                                        rType, defaultInit, true);
 }
 
 unique_ptr<HIRExpr> HIRBuilder::lowerLiteral(LiteralExpr *expr) {
@@ -333,7 +342,8 @@ unique_ptr<HIRExpr> HIRBuilder::lowerRuntime(CallExpr *expr) {
 
   vector<unique_ptr<HIRExpr>> args;
   for (auto &a : expr->arguments) {
-    args.push_back(lowerExpr(a.get()));
+
+    args.push_back(lowerValue(a.get()));
   }
   return make_unique<HIRRuntimeCall>(expr->span, *runtime, std::move(args), ty);
 }

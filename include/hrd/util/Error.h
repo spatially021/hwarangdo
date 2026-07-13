@@ -18,4 +18,6 @@ public:
   [[noreturn]] static void internal(const SourceSpan &span, str message);
   [[noreturn]] static void fatal(ErrorCategory category,
                                  const std::string &message);
+  static void warn(SourceSpan span, str message);
+  static void warn(Token &token, str message);
 };

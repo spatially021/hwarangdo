@@ -20,7 +20,14 @@ public:
 
   Scope *parent = nullptr;
 
-  enum class ScopeKind { FUNC, BLOCK, FIELD, BUILTIN, INIT } scopeKind;
+  enum class ScopeKind {
+    FUNC,
+    BLOCK,
+    FIELD,
+    BUILTIN,
+    INIT,
+    ONDESTROY
+  } scopeKind;
 
   vector<std::unique_ptr<Scope>> children;
 
@@ -31,6 +38,9 @@ public:
   unordered_map<string, unique_ptr<ValueSymbol>> value;
   unordered_map<string, vector<MethodSymbol *>> methodMap;
   vector<MethodSymbol *> inits;
+
+  unique_ptr<MethodSymbol> onDestroy = nullptr;
+
   int id = 0;
   string name = "";
 };

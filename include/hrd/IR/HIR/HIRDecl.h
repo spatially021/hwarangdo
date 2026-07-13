@@ -10,6 +10,7 @@
 #include "hrd/SemanticAnalyzer/symbol/MethodSymbol.h"
 #include "hrd/SemanticAnalyzer/symbol/TypeSymbol.h"
 #include "hrd/SemanticAnalyzer/symbol/ValueSymbol.h"
+#include "hrd/enums/MethodKind.h"
 #include <memory>
 #include <string>
 #include <unordered_map>
@@ -44,6 +45,7 @@ struct HIRTypeDecl : HIRDecl {
   std::vector<std::unique_ptr<HIRMethodDecl>> methods;
   std::unordered_map<MethodSymbol *, HIRMethodDecl *> methodMap;
   std::unordered_map<MethodSymbol *, HIRMethodDecl *> initMap;
+  HIRMethodDecl *onDestroy = nullptr;
 
   std::unordered_map<HIRField *, Expr *> defaultInit;
   std::unique_ptr<HIRBlockStmt> defaultInitBlock = nullptr;
@@ -71,7 +73,7 @@ struct HIRMethodDecl : HIRDecl {
   std::vector<std::unique_ptr<HIRParam>> params;
   unordered_map<ValueSymbol *, HIRParam *> paramMap;
 
-  bool isInit = false;
+  MethodKind methodKind;
   bool isStatic = false;
   bool isAsync = false;
 

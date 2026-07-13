@@ -260,3 +260,10 @@ public:
   }
   void accept(ASTVisitor *visitor) override { visitor->visit(this); }
 };
+
+class OnDestroyDecl : public FuncDecl {
+public:
+  OnDestroyDecl(SourceSpan t, StmtPtr b)
+      : FuncDecl(t, "onDestroy", vector<shared_ptr<Param>>(), nullopt, b) {}
+  void accept(ASTVisitor *visitor) override { visitor->visit(this); }
+};

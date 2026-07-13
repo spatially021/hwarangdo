@@ -39,17 +39,24 @@ unique_ptr<MIRArrayAccessPlace>
 MIRBuilder::lowerArray(HIRArrayAccessPlaceExpr *expr) {
   unique_ptr<MIRPlace> base = lowerPlace(expr->object.get());
   unique_ptr<MIRValue> index = lowerExpr(expr->index.get());
-  return make_unique<MIRArrayAccessPlace>(std::move(base), std::move(index));
+  return make_unique<MIRArrayAccessPlace>(std::move(base), std::move(index),
+                                          base->symbol,
+                                          expr->object->type->typeSymbol);
 }
 
 unique_ptr<MIRFieldPlace> MIRBuilder::lowerField(HIRFieldPlaceExpr *expr) {
+  auto receiverPlace = lowerReceiverToPlace(expr->receiver.get());
 
   return make_unique<MIRFieldPlace>(expr->field->symbol,
-                                    lowerReceiverToPlace(expr->receiver.get()));
+                                    std::move(receiverPlace),
+                                    expr->receiver->type->typeSymbol);
 }
 
 unique_ptr<MIRPlace> MIRBuilder::lowerReceiverToPlace(HIRExpr *receiver) {
   if (dynamic_cast<HIRSelfExpr *>(receiver)) {
+    if (currentFunc->symbol == nullptr) {
+      return make_unique<MIRParamPlace>(nullptr);
+    }
     return make_unique<MIRParamPlace>(currentFunc->symbol->selfReceiver);
   }
 

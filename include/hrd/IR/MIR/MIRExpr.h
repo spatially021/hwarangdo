@@ -6,13 +6,23 @@
 #include "hrd/SemanticAnalyzer/symbol/TypeSymbol.h"
 #include "hrd/SemanticAnalyzer/symbol/ValueSymbol.h"
 #include "hrd/enums/Operator.h"
-#include "hrd/util/Error.h"
 #include <memory>
 #include <utility>
 #include <vector>
+enum class MIRValueCategory {
+  Plain,
+  Borrowed,
+  OwnedTemp,
+};
+
 struct MIRValue {
   TypeSymbol *type = nullptr;
-  MIRValue(TypeSymbol *t) : type(t) {}
+  MIRValueCategory valueCategory = MIRValueCategory::Plain;
+  MIRValue(TypeSymbol *t) : type(t) {
+    if (dynamic_cast<StringType *>(type)) {
+      valueCategory = MIRValueCategory::Borrowed;
+    }
+  }
   virtual ~MIRValue() = default;
   virtual unique_ptr<MIRValue> clone() const = 0;
 };
@@ -43,19 +53,25 @@ struct MIRParamPlace final : MIRPlace {
 struct MIRArrayAccessPlace final : MIRPlace {
   unique_ptr<MIRPlace> base = nullptr;
   unique_ptr<MIRValue> index = nullptr;
-  explicit MIRArrayAccessPlace(unique_ptr<MIRPlace> b, unique_ptr<MIRValue> i)
-      : MIRPlace(nullptr), base(std::move(b)), index(std::move(i)) {}
+
+  TypeSymbol *ownType = nullptr; // 인덱싱 대상 배열 타입
+
+  explicit MIRArrayAccessPlace(unique_ptr<MIRPlace> b, unique_ptr<MIRValue> i,
+                               ValueSymbol *s, TypeSymbol *own)
+      : MIRPlace(s), base(std::move(b)), index(std::move(i)), ownType(own) {}
+
   unique_ptr<MIRPlace> clone() const override {
-    return make_unique<MIRArrayAccessPlace>(base->clone(), index->clone());
+    return make_unique<MIRArrayAccessPlace>(base->clone(), index->clone(),
+                                            symbol, ownType);
   }
 };
-
 struct MIRFieldPlace final : MIRPlace {
   unique_ptr<MIRPlace> base = nullptr;
-  MIRFieldPlace(ValueSymbol *s, unique_ptr<MIRPlace> b)
-      : MIRPlace(s), base(std::move(b)) {}
+  TypeSymbol *ownType = nullptr;
+  MIRFieldPlace(ValueSymbol *s, unique_ptr<MIRPlace> b, TypeSymbol *o)
+      : MIRPlace(s), base(std::move(b)), ownType(o) {}
   unique_ptr<MIRPlace> clone() const override {
-    return make_unique<MIRFieldPlace>(symbol, base->clone());
+    return make_unique<MIRFieldPlace>(symbol, base->clone(), ownType);
   }
 };
 
@@ -195,12 +211,7 @@ struct MIRVariantExpr : MIRValue {
   EnumVariantSymbol *variant = nullptr;
   unique_ptr<MIRValue> payload = nullptr;
   MIRVariantExpr(EnumVariantSymbol *v, unique_ptr<MIRValue> p, TypeSymbol *t)
-      : MIRValue(t), variant(v), payload(std::move(p)) {
-    if ((payload && !variant->isPayload) ||
-        (payload == nullptr && variant->isPayload)) {
-      Error::internal("illegal variant use");
-    }
-  }
+      : MIRValue(t), variant(v), payload(std::move(p)) {}
   unique_ptr<MIRValue> clone() const override {
     if (payload) {
       return make_unique<MIRVariantExpr>(variant, payload->clone(), type);

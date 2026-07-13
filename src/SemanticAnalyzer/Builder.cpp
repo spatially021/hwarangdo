@@ -5,8 +5,10 @@
 #include "hrd/SemanticAnalyzer/Scope.h"
 #include "hrd/SemanticAnalyzer/symbol/MethodSymbol.h"
 #include "hrd/SemanticAnalyzer/symbol/ValueSymbol.h"
+#include "hrd/enums/MethodKind.h"
 #include "hrd/util/Error.h"
 #include "hrd/util/Guard.h"
+#include <cstdint>
 #include <memory>
 #include <utility>
 
@@ -329,7 +331,7 @@ void Builder::visit(EnumDecl *decl) {
 
   TypeContextGuard _(currentType, raw);
 
-  int ordinal = 0;
+  uint32_t ordinal = 0;
   for (auto a : decl->variants) {
     auto v = make_unique<EnumVariantSymbol>();
     v->name = a->name;
@@ -518,6 +520,7 @@ void Builder::visit(FuncDecl *decl) {
   raw->isFrame = decl->isFrame;
   raw->isOverride = decl->isOverride;
   raw->scope->scopeKind = Scope::ScopeKind::FUNC;
+  raw->methodKind = MethodKind::Normal;
 
   for (auto &a : decl->params) {
     a->accept(this);
@@ -628,7 +631,7 @@ void Builder::visit(InitDecl *decl) {
   symbol->name = decl->name;
   symbol->decl = decl;
   symbol->owner = currentType;
-  symbol->isInit = true;
+  symbol->methodKind = MethodKind::Init;
   symbol->returnType = table->getBuilt("void");
   auto raw = symbol.get();
 
@@ -678,6 +681,29 @@ void Builder::visit(InitDecl *decl) {
   decl->body->accept(this);
 }
 
+void Builder::visit(OnDestroyDecl *decl) {
+  auto symbol = make_unique<MethodSymbol>();
+
+  symbol->name = decl->name;
+  symbol->decl = decl;
+  symbol->owner = currentType;
+  symbol->methodKind = MethodKind::OnDestroy;
+  symbol->returnType = table->getBuilt("void");
+  auto raw = symbol.get();
+
+  if (!table->addOnDestroy(std::move(symbol))) {
+    Error::diagnostic(decl->span, "duplicated onDestroy method");
+  }
+
+  decl->methodSymbol = raw;
+
+  ScopeGuard _(*table);
+
+  raw->scope = table->getCurrent();
+  table->getCurrent()->scopeKind = Scope::ScopeKind::ONDESTROY;
+
+  decl->body->accept(this);
+}
 bool Builder::canInnerDecl(Decl *decl) {
   switch (decl->kind) {
 

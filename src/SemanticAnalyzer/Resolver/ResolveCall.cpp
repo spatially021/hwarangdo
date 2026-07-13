@@ -366,15 +366,16 @@ void Resolver::visit(CallExpr *expr) {
   // 1. receiver 없는 호출
   if (expr->receiver == nullptr) {
 
+    if (table->isType(expr->methodName)) {
+      expr->callType = CallExpr::CallType::INIT_CALL;
+      resolveInit(expr);
+      return;
+    }
+
     auto it = currentType->memberScope->methodMap.find(expr->methodName);
     if (it != currentType->memberScope->methodMap.end()) {
       expr->callType = CallExpr::CallType::FUNC_CALL;
       resolveCall(expr, currentType->memberScope, true);
-      return;
-    }
-    if (table->isType(expr->methodName)) {
-      expr->callType = CallExpr::CallType::INIT_CALL;
-      resolveInit(expr);
       return;
     }
 

@@ -344,6 +344,14 @@ bool SymbolTable::addInit(unique_ptr<MethodSymbol> initMethod) {
   return true;
 }
 
+bool SymbolTable::addOnDestroy(unique_ptr<MethodSymbol> onDestroy) {
+  if (current->onDestroy != nullptr) {
+    return false;
+  }
+  current->onDestroy = std::move(onDestroy);
+  return true;
+}
+
 ArrayTypeSymbol *SymbolTable::arrayTypeGetOrCreate(TypeSymbol *base,
                                                    llvm::APInt size) {
   auto key = ArrayTypeKey({base, size});

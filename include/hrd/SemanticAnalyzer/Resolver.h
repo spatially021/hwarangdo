@@ -17,9 +17,8 @@
 
 class SymbolTable;
 
-enum class CastingFailKind {
+enum class CastingResultKind {
   None,
-
   // 값 범위 문제
   Overflow,  // 값 범위 초과
   Underflow, // 음수 overflow / 너무 작은 값 (선택)
@@ -96,22 +95,24 @@ private:
   bool isAssignable(TypeSymbol *from, TypeSymbol *to);
   bool isBinaryOperatalbe(Operator op, TypeSymbol *left, TypeSymbol *right);
   bool isCmpable(TypeSymbol *left, TypeSymbol *right);
-  TypeSymbol *binaryResult(Operator op, TypeSymbol *left, TypeSymbol *right);
+  pair<TypeSymbol *, CastingResultKind>
+  binaryResult(Operator op, TypeSymbol *left, TypeSymbol *right);
   bool isCastable(TypeSymbol *from, TypeSymbol *to);
-  TypeSymbol *binaryCasting(TypeSymbol *from, TypeSymbol *to);
+  pair<TypeSymbol *, CastingResultKind> binaryCasting(TypeSymbol *from,
+                                                      TypeSymbol *to);
   [[noreturn]]
   void unmatchSymbol(Symbol *symbol);
   vector<TypeSymbol *> getPromotionCandidates(TypeSymbol *left,
                                               TypeSymbol *right);
 
-  pair<bool, CastingFailKind> canImplicitlyConvert(TypeSymbol *from,
-                                                   TypeSymbol *to);
-  pair<bool, CastingFailKind> canImplicitlyLiteralConvert(LiteralExpr *from,
-                                                          TypeSymbol *to);
-  pair<TypeSymbol *, CastingFailKind> implicitCasting(Expr *from,
-                                                      TypeSymbol *to);
+  pair<bool, CastingResultKind> canImplicitlyConvert(TypeSymbol *from,
+                                                     TypeSymbol *to);
+  pair<bool, CastingResultKind> canImplicitlyLiteralConvert(LiteralExpr *from,
+                                                            TypeSymbol *to);
+  pair<TypeSymbol *, CastingResultKind> implicitCasting(Expr *from,
+                                                        TypeSymbol *to);
 
-  void castFail(CastingFailKind kind, SourceSpan &span);
+  void castFail(CastingResultKind kind, SourceSpan &span);
 
   void inferencePrim(TypeNode *decl, TypeSymbol *expr);
   void convertLit(LiteralExpr *lit, TypeNode *type);
@@ -216,6 +217,8 @@ private:
 
   pair<bool, MethodSymbol *> lookupMethod(str name, Scope *scope,
                                           vector<TypeSymbol *> args);
+  pair<bool, MethodSymbol *> lookupInit(Scope *scope,
+                                        vector<TypeSymbol *> args);
 
 private:
   MethodSymbol *resolveMethodOverload(SourceSpan span,

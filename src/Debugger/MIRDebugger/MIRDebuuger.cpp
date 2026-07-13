@@ -1,6 +1,7 @@
 #include "hrd/Debugger/MIRDebugger/MIRDebuuger.h"
 #include "hrd/Debugger/DebuggerUtil.h"
 #include "hrd/IR/MIR/MIRProgram.h"
+#include "hrd/IR/MIR/MIRStmt.h"
 #include "magic_enum/magic_enum.hpp"
 #include <iostream>
 
@@ -23,8 +24,8 @@ void MIRDebugger::debug() {
 void MIRDebugger::debugFunction(MIRFunction *func) {
   cout << ident() << "function ";
 
-  if (func->onwer != nullptr)
-    cout << func->onwer->name << ".";
+  if (func->owner != nullptr)
+    cout << func->owner->name << ".";
 
   if (func->symbol != nullptr)
     cout << func->symbol->name;
@@ -225,6 +226,16 @@ void MIRDebugger::debugStmt(MIRStmt *stmt) {
     depth++;
     debugValue(s->handlePlace.get());
     depth--;
+    depth--;
+    return;
+  }
+
+  if (auto c = dynamic_cast<MIRCleanupStmt *>(stmt)) {
+    cout << ident() << "cleanup\n";
+    depth++;
+    for (auto &v : c->locals) {
+      cout << ident() << v->name << "\n";
+    }
     depth--;
     return;
   }

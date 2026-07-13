@@ -5,6 +5,7 @@
 #include "hrd/IR/HIR/HIRProgram.h"
 #include "hrd/IR/HIR/HIRStmt.h"
 #include "hrd/IR/HIR/HIRType.h"
+#include "hrd/IR/IRScope.h"
 #include "hrd/IR/MIR/MIRExpr.h"
 #include "hrd/IR/MIR/MIRNode.h"
 #include "hrd/IR/MIR/MIRProgram.h"
@@ -17,11 +18,24 @@
 struct LoopContext {
   BlockID continueTarget = 0;
   BlockID breakTarget = 0;
+  IRScope *breakScope;
+  IRScope *continueScope;
 };
 
 struct MatchContext {
   ValueSymbol *result = nullptr;
   BlockID join;
+};
+
+struct SwitchData {
+  BlockID cond;
+  BlockID defaultTarget;
+  BlockID cleanup;
+  BlockID join;
+  IRScope &scope;
+  HIRValueExpr *condExpr = nullptr;
+  vector<unique_ptr<HIRCase>> &cases;
+  TypeSymbol *type = nullptr;
 };
 
 class MIRBuilder {
@@ -60,9 +74,11 @@ public:
 
 private:
   MIRFunction *currentFunc = nullptr;
+  IRScope *currentScope = nullptr;
   BlockID currentBlock = 0;
   vector<LoopContext> loops;
   vector<MatchContext> matches;
+  vector<unique_ptr<IRScope>> scopes;
   void emit(unique_ptr<MIRStmt> inst);
 
 private:
@@ -114,4 +130,11 @@ private:
   unique_ptr<MIRArrayAccessPlace> lowerArray(HIRArrayAccessPlaceExpr *expr);
   unique_ptr<MIRFieldPlace> lowerField(HIRFieldPlaceExpr *expr);
   unique_ptr<MIRPlace> lowerReceiverToPlace(HIRExpr *receiver);
+
+  IRScope *enterScope();
+  void exitScope();
+  void emitCleanup(IRScope *scope);
+  void emitCleanupUntil(IRScope *toExclusive);
+
+  void makeSwitch(SwitchData &data);
 };

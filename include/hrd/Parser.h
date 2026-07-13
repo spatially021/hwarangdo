@@ -108,6 +108,7 @@ private:
   Decl::Ptr varDecl(DeclPrefix prefix);
   Decl::Ptr handleDecl(DeclPrefix prefix);
   Decl::Ptr initDecl(DeclPrefix prefix);
+  Decl::Ptr onDestroyDecl(DeclPrefix prefix);
 
   // 유틸리티
   bool match(std::initializer_list<TKind> kinds);

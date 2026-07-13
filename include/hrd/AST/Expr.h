@@ -208,7 +208,6 @@ class ArrayAccessExpr : public Expr {
 public:
   Expr::Ptr object;
   Expr::Ptr index;
-
   ArrayAccessExpr(SourceSpan t, Expr::Ptr o, Expr::Ptr i)
       : Expr(NKind::ARRAY_ACCESS_EXPR, t), object(std::move(o)),
         index(std::move(i)) {}

@@ -87,6 +87,7 @@ public:
 
   Result add(unique_ptr<Symbol> symbol);
   bool addInit(unique_ptr<MethodSymbol> initMethod);
+  bool addOnDestroy(unique_ptr<MethodSymbol> onDestroy);
 
   void enter();
   void enter(Scope *scope);

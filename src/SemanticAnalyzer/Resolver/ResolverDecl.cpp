@@ -275,3 +275,16 @@ void Resolver::visit(InitDecl *decl) {
   ScopeGuard _(*table, decl->methodSymbol->scope);
   decl->body->accept(this);
 }
+
+void Resolver::visit(OnDestroyDecl *decl) {
+  auto symbol = decl->methodSymbol;
+  for (auto r : symbol->returns) {
+    if (r->returnType != table->getBuilt("void")) {
+      Error::diagnostic(r->span, "in init cannot declare a return type");
+    }
+  }
+
+  currentMethod = decl->methodSymbol;
+  ScopeGuard _(*table, decl->methodSymbol->scope);
+  decl->body->accept(this);
+}

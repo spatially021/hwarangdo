@@ -74,14 +74,19 @@ void Resolver::visit(BinaryExpr *expr) {
         binaryCasting(expr->left->resolvedType, expr->right->resolvedType);
     auto temp = binaryResult(expr->op, expr->left->resolvedType,
                              expr->right->resolvedType);
-    if (!temp) {
+    if (!temp.first) {
       Error::internal(expr->span, "fail to get binaryResult");
     }
-    if (op == nullptr) {
+    if (op.first == nullptr) {
       Error::internal("fail to get operrand Type");
     }
-    expr->resolvedType = temp;
-    expr->operrandType = op;
+    if (temp.second == CastingResultKind::PrecisionLoss) {
+      Error::warn(
+          expr->span,
+          "implicit conversion from int:i32 to float:f32 may lose precision");
+    }
+    expr->resolvedType = temp.first;
+    expr->operrandType = op.first;
   } else {
     Error::diagnostic(expr->span, "leftExpr and rightExpr cannot operate. [ " +
                                       expr->left->resolvedType->name + " " +
@@ -343,7 +348,7 @@ void Resolver::visit(SpawnExpr *expr) {
     args.push_back(a->resolvedType);
   }
   auto [result, method] =
-      lookupMethod("init", expr->spawnType->resolved->memberScope, args);
+      lookupInit(expr->spawnType->resolved->memberScope, args);
 
   if (!args.empty()) {
     if (!result) {

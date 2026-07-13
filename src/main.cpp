@@ -57,6 +57,15 @@ bool logLexer = false, logParser = false, logBuilder = false,
 
 void tester() {}
 
+bool hasClangXX() {
+#ifdef _WIN32
+  int result = std::system("where clang++ > nul 2> nul");
+#else
+  int result = std::system("command -v clang++ > /dev/null 2>&1");
+#endif
+  return result == 0;
+}
+
 // --------------------------------------------------
 // 유틸
 // --------------------------------------------------
@@ -297,6 +306,13 @@ int main(int argc, char *argv[]) {
     return 1;
   }
 
+  if (!hasClangXX()) {
+    std::cerr << "link failed: clang++ not found\n";
+    std::cerr
+        << "please install clang++ and make sure it is available in PATH\n";
+    return -1;
+  }
+
   if (projectInput.sources.empty()) {
     std::cerr << "로드된 소스가 없습니다." << std::endl;
     return 1;
@@ -505,6 +521,15 @@ int main(int argc, char *argv[]) {
 
     codegen.llvmModule->print(out, nullptr);
     out.flush();
+    if (llvm::verifyModule(*codegen.llvmModule, &llvm::errs())) {
+      throw std::runtime_error("invalid llvm module");
+    }
+
+#if HGM_DEBUG
+    llvm::outs() << "\n===== LLVM IR =====\n";
+    codegen.llvmModule->print(llvm::outs(), nullptr);
+    llvm::outs().flush();
+#endif
 
   } catch (std::runtime_error &e) {
 #if HGM_DEBUG
@@ -514,17 +539,31 @@ int main(int argc, char *argv[]) {
     return -1;
   }
 
-  if (llvm::verifyModule(*codegen.llvmModule, &llvm::errs())) {
-    throw std::runtime_error("invalid llvm module");
-  }
+  int result = -1;
 
-  int result = std::system("clang++ out.ll runtime/hrd_runtime.cpp "
-                           "-I./include "
-                           "-o hello");
+#if HGM_DEBUG
+
+  result = std::system("clang++ out.ll "
+                       "build/debug-asan/libhrd_runtime.a "
+                       "-fsanitize=address,undefined "
+                       "-I./include "
+                       "-o hello");
+
+#else
+
+  result = std::system("clang++ out.ll "
+                       "build/release/libhrd_runtime.a "
+                       "-I./include "
+                       "-O2 "
+                       "-o hello");
+
+#endif
+
   if (result != 0) {
     std::cerr << "link failed\n";
     return -1;
   }
+
   cout << "end compile\n";
   return 0;
 }

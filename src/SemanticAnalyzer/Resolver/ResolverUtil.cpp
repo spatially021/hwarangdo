@@ -41,11 +41,18 @@ bool Resolver::isBinaryOperatalbe(Operator op, TypeSymbol *left,
   case Operator::RSH:
     return table->isInt(left) && table->isInt(right);
 
+  case Operator::ADD: {
+    if (table->isString(left) && table->isString(right)) {
+      return true;
+    }
+    return table->isNumberic(left) && table->isNumberic(right);
+  }
+
   case Operator::LS:
   case Operator::LSE:
   case Operator::GR:
   case Operator::GRE:
-  case Operator::ADD:
+
   case Operator::SUB:
   case Operator::MUL:
   case Operator::DIV:
@@ -75,6 +82,11 @@ bool Resolver::isBinaryOperatalbe(Operator op, TypeSymbol *left,
 
 bool Resolver::isCmpable(TypeSymbol *left, TypeSymbol *right) {
 
+  if (left->kind == TypeSymbol::TypeKind::CLASS ||
+      right->kind == TypeSymbol::TypeKind::CLASS) {
+    return false;
+  }
+
   if (table->isNumberic(left) && table->isNumberic(right))
     return true;
 
@@ -88,8 +100,8 @@ bool Resolver::isCmpable(TypeSymbol *left, TypeSymbol *right) {
   return left == right;
 }
 
-TypeSymbol *Resolver::binaryResult(Operator op, TypeSymbol *left,
-                                   TypeSymbol *right) {
+pair<TypeSymbol *, CastingResultKind>
+Resolver::binaryResult(Operator op, TypeSymbol *left, TypeSymbol *right) {
   assert(left != nullptr);
   assert(right != nullptr);
 
@@ -104,11 +116,12 @@ TypeSymbol *Resolver::binaryResult(Operator op, TypeSymbol *left,
   case Operator::MUL:
   case Operator::DIV:
   case Operator::REM:
-  case Operator::POW:
-    if (auto temp = binaryCasting(left, right)) {
+  case Operator::POW: {
+    if (auto temp = binaryCasting(left, right); temp.first) {
       return temp;
     }
     Error::internal("fail to binary casting");
+  }
 
   case Operator::LS:
   case Operator::LSE:
@@ -118,7 +131,7 @@ TypeSymbol *Resolver::binaryResult(Operator op, TypeSymbol *left,
   case Operator::OR:
   case Operator::EQ:
   case Operator::NT:
-    return table->getBuilt("bool");
+    return {table->getBuilt("bool"), CastingResultKind::None};
 
   case Operator::L_NOT:
   case Operator::B_NOT:
@@ -127,7 +140,7 @@ TypeSymbol *Resolver::binaryResult(Operator op, TypeSymbol *left,
     Error::internal("Unmatched operator Type");
     break;
   }
-  return nullptr;
+  return {nullptr, CastingResultKind::Unmatched};
 }
 
 [[noreturn]]
@@ -138,23 +151,30 @@ void Resolver::unmatchSymbol(Symbol *symbol) {
 bool Resolver::isCastable(TypeSymbol *from, TypeSymbol *to) {
   return from == to;
 }
-TypeSymbol *Resolver::binaryCasting(TypeSymbol *left, TypeSymbol *right) {
+pair<TypeSymbol *, CastingResultKind>
+Resolver::binaryCasting(TypeSymbol *left, TypeSymbol *right) {
 
-  if (left == right)
-    return left;
+  if (left == right) {
+    return {left, CastingResultKind::None};
+  }
 
   if ((left->kind != TypeSymbol::TypeKind::PRIMITIVE ||
        right->kind != TypeSymbol::TypeKind::PRIMITIVE)) {
-    return nullptr;
+    return {nullptr, CastingResultKind::Unmatched};
   }
 
   vector<TypeSymbol *> candidates = getPromotionCandidates(left, right);
   for (auto *T : candidates) {
-    if (canImplicitlyConvert(left, T).first &&
-        canImplicitlyConvert(right, T).first)
-      return T;
+    auto l = canImplicitlyConvert(left, T);
+    auto r = canImplicitlyConvert(right, T);
+    if (l.first && r.first) {
+      if (l.second == CastingResultKind::PrecisionLoss) {
+        return {T, l.second};
+      }
+      return {T, r.second};
+    }
   }
-  return nullptr;
+  return {nullptr, CastingResultKind::Unmatched};
 }
 
 vector<TypeSymbol *> Resolver::getPromotionCandidates(TypeSymbol *left,
@@ -195,11 +215,23 @@ vector<TypeSymbol *> Resolver::getPromotionCandidates(TypeSymbol *left,
     return result;
   }
 
+  if (table->isString(l) && table->isString(r)) {
+    auto bigger = (static_cast<StringType *>(l)->bitWidth >=
+                   static_cast<StringType *>(r)->bitWidth)
+                      ? left
+                      : right;
+    auto smaller = (bigger == left) ? right : left;
+    result.push_back(bigger);
+    result.push_back(smaller);
+
+    return result;
+  }
+
   return result;
 }
 
-pair<bool, CastingFailKind> Resolver::canImplicitlyConvert(TypeSymbol *from,
-                                                           TypeSymbol *to) {
+pair<bool, CastingResultKind> Resolver::canImplicitlyConvert(TypeSymbol *from,
+                                                             TypeSymbol *to) {
 
   if (!from) {
     Error::internal("from is nullptr");
@@ -209,13 +241,13 @@ pair<bool, CastingFailKind> Resolver::canImplicitlyConvert(TypeSymbol *from,
   }
   for (auto p = from; p != nullptr; p = p->base) {
     if (p == to) {
-      return {true, CastingFailKind::None};
+      return {true, CastingResultKind::None};
     }
   }
 
   if (from->kind != TypeSymbol::TypeKind::PRIMITIVE ||
       to->kind != TypeSymbol::TypeKind::PRIMITIVE) {
-    return {true, CastingFailKind::Unmatched};
+    return {false, CastingResultKind::Unmatched};
   }
 
   auto f = static_cast<PrimtiveType *>(from);
@@ -226,23 +258,23 @@ pair<bool, CastingFailKind> Resolver::canImplicitlyConvert(TypeSymbol *from,
     auto ti = static_cast<IntType *>(t);
 
     if (fi->isSigned == ti->isSigned)
-      return {ti->bitWidth >= fi->bitWidth, CastingFailKind::Overflow};
+      return {ti->bitWidth >= fi->bitWidth, CastingResultKind::Overflow};
 
     // signed → unsigned : 금지
     if (fi->isSigned && !ti->isSigned)
-      return {false, CastingFailKind::SignToUnsign};
+      return {false, CastingResultKind::SignToUnsign};
 
     // unsigned → signed
     if (!fi->isSigned && ti->isSigned)
-      return {ti->bitWidth >= fi->bitWidth, CastingFailKind::Overflow};
+      return {ti->bitWidth >= fi->bitWidth, CastingResultKind::Overflow};
 
-    return {ti->bitWidth >= fi->bitWidth, CastingFailKind::Overflow};
+    return {ti->bitWidth >= fi->bitWidth, CastingResultKind::Overflow};
   }
 
   if (table->isFloat(f) && table->isFloat(t)) {
     return {static_cast<FloatType *>(t)->bitWidth >=
                 static_cast<FloatType *>(f)->bitWidth,
-            CastingFailKind::Overflow};
+            CastingResultKind::Overflow};
   }
 
   if (table->isInt(f) && table->isFloat(t)) {
@@ -250,10 +282,18 @@ pair<bool, CastingFailKind> Resolver::canImplicitlyConvert(TypeSymbol *from,
     auto fi = static_cast<IntType *>(f);
     auto tf = static_cast<FloatType *>(t);
 
-    return {fi->bitWidth <= tf->precious, CastingFailKind::Overflow};
+    if (fi->bitWidth == tf->bitWidth) {
+      return {true, CastingResultKind::PrecisionLoss};
+    }
+
+    if (fi->bitWidth <= tf->precious) {
+      return {true, CastingResultKind::None};
+    }
+
+    return {false, CastingResultKind::Overflow};
   }
 
-  return {false, CastingFailKind::Unmatched};
+  return {false, CastingResultKind::Unmatched};
 }
 
 const static llvm::fltSemantics &getFloatSemantics(FloatType *type) {
@@ -276,17 +316,17 @@ const static llvm::fltSemantics &getFloatSemantics(FloatType *type) {
   }
 }
 
-pair<bool, CastingFailKind>
+pair<bool, CastingResultKind>
 Resolver::canImplicitlyLiteralConvert(LiteralExpr *from, TypeSymbol *to) {
   assert(from);
   assert(to);
 
   if (from->resolvedType == to) {
-    return {true, CastingFailKind::None};
+    return {true, CastingResultKind::None};
   }
 
   if (to->kind != TypeSymbol::TypeKind::PRIMITIVE) {
-    return {false, CastingFailKind::Unmatched};
+    return {false, CastingResultKind::Unmatched};
   }
 
   auto target = static_cast<PrimtiveType *>(to);
@@ -294,7 +334,7 @@ Resolver::canImplicitlyLiteralConvert(LiteralExpr *from, TypeSymbol *to) {
   switch (from->token.kind) {
   case TKind::LIT_INT: {
     if (!table->isInt(target) && !table->isFloat(target)) {
-      return {false, CastingFailKind::InvalidCategory};
+      return {false, CastingResultKind::InvalidCategory};
     }
 
     const auto &value = from->resolvedLit.asInt().value;
@@ -302,14 +342,15 @@ Resolver::canImplicitlyLiteralConvert(LiteralExpr *from, TypeSymbol *to) {
     if (table->isInt(target)) {
       auto ti = static_cast<IntType *>(target);
       if (ti->isSigned) {
-        return {value.isSignedIntN(ti->bitWidth), CastingFailKind::Overflow};
+        return {value.isSignedIntN(ti->bitWidth), CastingResultKind::Overflow};
       }
 
       if (value.isNegative()) {
-        return {false, CastingFailKind::NegativeToUnsigned};
+        return {false, CastingResultKind::NegativeToUnsigned};
       }
 
-      return {value.getActiveBits() <= ti->bitWidth, CastingFailKind::Overflow};
+      return {value.getActiveBits() <= ti->bitWidth,
+              CastingResultKind::Overflow};
     }
 
     if (table->isFloat(target)) {
@@ -318,15 +359,15 @@ Resolver::canImplicitlyLiteralConvert(LiteralExpr *from, TypeSymbol *to) {
       // 정수 리터럴 -> float은 "정확히 표현 가능"할 때만 허용
       // 보수적으로는 필요한 signed bits가 float precision 이하인지 검사
       return {value.getSignificantBits() <= tf->precious,
-              CastingFailKind::PrecisionLoss};
+              CastingResultKind::PrecisionLoss};
     }
 
-    return {false, CastingFailKind::Unmatched};
+    return {false, CastingResultKind::Unmatched};
   }
 
   case TKind::LIT_FLOAT: {
     if (!table->isFloat(target)) {
-      return {false, CastingFailKind::Unmatched};
+      return {false, CastingResultKind::Unmatched};
     }
 
     auto tf = static_cast<FloatType *>(target);
@@ -340,12 +381,12 @@ Resolver::canImplicitlyLiteralConvert(LiteralExpr *from, TypeSymbol *to) {
     converted.convert(getFloatSemantics(tf), llvm::APFloat::rmNearestTiesToEven,
                       &losesInfo);
 
-    return {!losesInfo, CastingFailKind::FractionLoss};
+    return {!losesInfo, CastingResultKind::FractionLoss};
   }
 
   case TKind::LIT_CHARACTER: {
     if (!table->isChar(target)) {
-      return {false, CastingFailKind::Unmatched};
+      return {false, CastingResultKind::Unmatched};
     }
 
     auto tc = static_cast<CharType *>(target);
@@ -353,19 +394,19 @@ Resolver::canImplicitlyLiteralConvert(LiteralExpr *from, TypeSymbol *to) {
 
     switch (tc->bitWidth) {
     case 8:
-      return {codePoint <= 0x7F, CastingFailKind::Overflow};
+      return {codePoint <= 0x7F, CastingResultKind::Overflow};
     case 16:
-      return {codePoint <= 0xFFFF, CastingFailKind::Overflow};
+      return {codePoint <= 0xFFFF, CastingResultKind::Overflow};
     case 32:
-      return {codePoint <= 0x10FFFF, CastingFailKind::Overflow};
+      return {codePoint <= 0x10FFFF, CastingResultKind::Overflow};
     default:
-      return {false, CastingFailKind::Overflow};
+      return {false, CastingResultKind::Overflow};
     }
   }
 
   case TKind::LIT_STRING: {
     if (!table->isString(target)) {
-      return {false, CastingFailKind::Unmatched};
+      return {false, CastingResultKind::Unmatched};
     }
 
     auto ts = static_cast<StringType *>(target);
@@ -374,34 +415,34 @@ Resolver::canImplicitlyLiteralConvert(LiteralExpr *from, TypeSymbol *to) {
       switch (ts->bitWidth) {
       case 8:
         if (cp > 0x7F)
-          return {false, CastingFailKind::Overflow};
+          return {false, CastingResultKind::Overflow};
         break;
       case 16:
         if (cp > 0xFFFF)
-          return {false, CastingFailKind::Overflow};
+          return {false, CastingResultKind::Overflow};
         break;
       case 32:
         if (cp > 0x10FFFF)
-          return {false, CastingFailKind::Overflow};
+          return {false, CastingResultKind::Overflow};
         break;
       default:
-        return {false, CastingFailKind::Overflow};
+        return {false, CastingResultKind::Overflow};
       }
     }
 
-    return {true, CastingFailKind::None};
+    return {true, CastingResultKind::None};
   }
 
   case TKind::LIT_BOOL:
-    return {to == table->getBool(), CastingFailKind::Unmatched};
+    return {to == table->getBool(), CastingResultKind::Unmatched};
 
   default:
-    return {false, CastingFailKind::NotImplemented};
+    return {false, CastingResultKind::NotImplemented};
   }
 }
 
-pair<TypeSymbol *, CastingFailKind> Resolver::implicitCasting(Expr *from,
-                                                              TypeSymbol *to) {
+pair<TypeSymbol *, CastingResultKind>
+Resolver::implicitCasting(Expr *from, TypeSymbol *to) {
   if (auto lit = dynamic_cast<LiteralExpr *>(from)) {
     auto [result, kind] = canImplicitlyLiteralConvert(lit, to);
     if (result) {
@@ -436,6 +477,32 @@ pair<bool, MethodSymbol *> Resolver::lookupMethod(str name, Scope *scope,
                                                   vector<TypeSymbol *> args) {
 
   auto &bucket = scope->methodMap[name];
+  if (bucket.empty() && args.empty()) {
+    return {true, nullptr};
+  }
+  for (auto &m : bucket) {
+    if (m->params.size() != args.size()) {
+      continue;
+    }
+    bool flag = true;
+    for (unsigned int i = 0; i < args.size(); ++i) {
+      if (m->params[i]->typeSymbol != args[i]) {
+        flag = false;
+        break;
+      }
+    }
+    if (flag) {
+      return {true, m};
+    }
+  }
+
+  return {false, nullptr};
+}
+
+pair<bool, MethodSymbol *> Resolver::lookupInit(Scope *scope,
+                                                vector<TypeSymbol *> args) {
+
+  auto &bucket = scope->inits;
   if (bucket.empty() && args.empty()) {
     return {true, nullptr};
   }
@@ -571,62 +638,62 @@ void Resolver::inferencePrim(TypeNode *decl, TypeSymbol *init) {
   Error::diagnostic(decl->span, "unmatched type");
 }
 
-void Resolver::castFail(CastingFailKind kind, SourceSpan &span) {
+void Resolver::castFail(CastingResultKind kind, SourceSpan &span) {
   switch (kind) {
 
-  case CastingFailKind::None:
+  case CastingResultKind::None:
     Error::diagnostic(span, "unknown kind of cast fail");
     break;
 
-  case CastingFailKind::Overflow:
+  case CastingResultKind::Overflow:
     Error::diagnostic(span, "overflow value");
     break;
 
-  case CastingFailKind::Underflow:
+  case CastingResultKind::Underflow:
     Error::diagnostic(span, "underfloat value");
     break;
 
-  case CastingFailKind::SignToUnsign:
+  case CastingResultKind::SignToUnsign:
     Error::diagnostic(span, "casting sign to unsign");
     break;
 
-  case CastingFailKind::NegativeToUnsigned:
+  case CastingResultKind::NegativeToUnsigned:
     Error::diagnostic(span, "casting negative to unsign");
     break;
 
-  case CastingFailKind::PrecisionLoss:
+  case CastingResultKind::PrecisionLoss:
     Error::diagnostic(span, "pecicison loss occured");
     break;
 
-  case CastingFailKind::FractionLoss:
+  case CastingResultKind::FractionLoss:
     Error::diagnostic(span, "fraction loss occured");
     break;
 
-  case CastingFailKind::Unmatched:
+  case CastingResultKind::Unmatched:
     Error::diagnostic(span, "unmatched type");
     break;
 
-  case CastingFailKind::InvalidCategory:
+  case CastingResultKind::InvalidCategory:
     Error::diagnostic(span, "invaild type");
     break;
 
-  case CastingFailKind::ExplicitRequired:
+  case CastingResultKind::ExplicitRequired:
     Error::internal(span, "need explict cast");
     break;
 
-  case CastingFailKind::Narrowing:
+  case CastingResultKind::Narrowing:
     Error::diagnostic(span, "unsafe narrowing occur");
     break;
 
-  case CastingFailKind::NaN:
+  case CastingResultKind::NaN:
     Error::diagnostic(span, "not a number");
     break;
 
-  case CastingFailKind::Infinity:
+  case CastingResultKind::Infinity:
     Error::diagnostic(span, "infinity value");
     break;
 
-  case CastingFailKind::NotImplemented:
+  case CastingResultKind::NotImplemented:
     Error::diagnostic(span, "unknown kind of cast fail");
     break;
   }

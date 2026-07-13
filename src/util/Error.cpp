@@ -1,4 +1,5 @@
 #include "hrd/util/Error.h"
+#include "hrd/SourceSpan.h"
 #include "hrd/Token.h"
 #include "hrd/util/Printor.h"
 #include <iostream>
@@ -82,4 +83,12 @@ void Error::fatal(ErrorCategory category, const std::string &message) {
   std::cerr << "] " << message << "\n";
 
   throwError(message);
+}
+
+void Error::warn(Token &token, str message) { warn(token.span, message); }
+
+void Error::warn(SourceSpan span, str message) {
+  std::cerr << "warning: " << message << "\n";
+  std::cerr << " --> " << span.path << ":" << span.lineStart << ":"
+            << span.colStart << "\n";
 }

@@ -358,3 +358,8 @@ void Linker::visit(InitDecl *decl) {
   }
   decl->body->accept(this);
 }
+
+void Linker::visit(OnDestroyDecl *decl) {
+  ScopeGuard _(*table, decl->methodSymbol->scope);
+  decl->body->accept(this);
+}

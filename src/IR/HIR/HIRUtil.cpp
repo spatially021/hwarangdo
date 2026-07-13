@@ -141,19 +141,32 @@ void HIRBuilder::bindMethod(FuncDecl *decl) {
 
   HIRMethodDecl *method = nullptr;
 
-  if (decl->methodSymbol->isInit) {
-    auto iIt = type->initMap.find(decl->methodSymbol);
-    if (iIt == type->initMap.end()) {
-      Error::internal(decl->span, "fail to find init method");
-    }
-    method = iIt->second;
+  switch (decl->methodSymbol->methodKind) {
 
-  } else {
+  case MethodKind::Normal: {
     auto mIT = type->methodMap.find(decl->methodSymbol);
     if (mIT == type->methodMap.end()) {
       Error::internal(decl->span, "fail to find method");
     }
     method = mIT->second;
+    break;
+  }
+  case MethodKind::Init: {
+    auto iIt = type->initMap.find(decl->methodSymbol);
+    if (iIt == type->initMap.end()) {
+      Error::internal(decl->span, "fail to find init method");
+    }
+    method = iIt->second;
+    break;
+  }
+
+  case MethodKind::OnDestroy: {
+    method = type->onDestroy;
+    break;
+  }
+  }
+  if (method == nullptr) {
+    Error::internal(decl->span, "fail to get method");
   }
 
   MethodGuard _(currentMethod, method);
@@ -217,6 +230,13 @@ pair<bool, HIRMethodDecl *> HIRBuilder::lookupMethod(HIRTypeDecl *type,
                                                      MethodSymbol *symbol) {
   auto it = type->methodMap.find(symbol);
   bool b = it != type->methodMap.end();
+  return {b, b ? it->second : nullptr};
+}
+
+pair<bool, HIRMethodDecl *> HIRBuilder::lookupInit(HIRTypeDecl *type,
+                                                   MethodSymbol *symbol) {
+  auto it = type->initMap.find(symbol);
+  bool b = it != type->initMap.end();
   return {b, b ? it->second : nullptr};
 }
 

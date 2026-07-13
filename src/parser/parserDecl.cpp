@@ -478,3 +478,33 @@ Ptr Parser::initDecl(DeclPrefix prefix) {
   return make_shared<InitDecl>(makeSpan(t, end), params, stmt,
                                prefix.isOverride);
 }
+
+Ptr Parser::onDestroyDecl(DeclPrefix prefix) {
+  Token t = prefix.startToken;
+
+  notVar(prefix);
+
+  advance(); // onDestroy 처리
+  consume(TKind::LEFT_PAREN, "expected '(' after 'onDestroy'");
+
+  consume(TKind::RIGHT_PAREN, "onDestroy not allowed parameter");
+
+  if (check(TKind::SEMICOLON)) {
+    Error::diagnostic(t, "onDestroy methods cannot be called directly");
+  }
+  if (contexts.back() == DeclContext::TOPLEVEL)
+    Error::diagnostic(prefix.startToken,
+                      "onDestroy declarations are not allowed at top level");
+
+  if (contexts.back() == DeclContext::BLOCK)
+    Error::diagnostic(prefix.startToken,
+                      "onDestroy declarations are not allowed in block scopes");
+  if (prefix.modi != AModifier::PUBLIC) {
+    Error::diagnostic(t, "onDestroy methods must be public");
+  }
+  consume(TKind::LEFT_BRACE, "expected '{' before onDestroy body");
+  ContextGuard _(contexts, DeclContext::BLOCK);
+  Stmt::Ptr stmt = blockStmt();
+  auto end = previous();
+  return make_shared<OnDestroyDecl>(makeSpan(t, end), stmt);
+}

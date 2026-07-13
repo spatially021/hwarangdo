@@ -108,8 +108,8 @@ void MIRGraphvizDebugger::writeEdges(ostream &out, BasicBlock *block) {
 string MIRGraphvizDebugger::functionName(MIRFunction *func) {
   string name;
 
-  if (func->onwer != nullptr)
-    name += func->onwer->name + ".";
+  if (func->owner != nullptr)
+    name += func->owner->name + ".";
 
   if (func->symbol != nullptr)
     name += func->symbol->name;

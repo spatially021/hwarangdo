@@ -179,11 +179,18 @@ HIRBuilder::lowerArrayAccess(ArrayAccessExpr *expr) {
 
   // Expr -> hirValueExpr
   // nullptr아님을 보장
-  auto name = dynamic_cast<NameExpr *>(expr->object.get());
-  if (name == nullptr) {
-    Error::internal(expr->span, "array's object is not place");
+  ;
+  unique_ptr<HIRPlaceExpr> object = nullptr;
+  if (auto name = dynamic_cast<NameExpr *>(expr->object.get())) {
+    object = lowerPlace(name);
+  } else if (auto arr = dynamic_cast<ArrayAccessExpr *>(expr->object.get())) {
+    object = lowerArrayAccess(arr);
   }
-  unique_ptr<HIRPlaceExpr> object = lowerPlace(name);
+
+  if (object == nullptr) {
+    Error::internal(expr->span, "illegal array's base kind");
+  }
+
   unique_ptr<HIRValueExpr> index = lowerValue(expr->index.get());
 
   // TypeSymbol -> hirType

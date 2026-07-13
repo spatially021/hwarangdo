@@ -25,8 +25,19 @@ void SemanticAnalyzer::addRuntime(std::string ns, std::string name,
   runtimes.push_back(std::move(runtime));
   overloads.push_back(raw);
 }
-
-void SemanticAnalyzer::prepareRuntime() {
+void SemanticAnalyzer::addLog() {
   addRuntime("log", "info", "hrd_log_info_s8", symbolTable.getType("void"),
              {symbolTable.getBuilt("s8")});
+  addRuntime("log", "info", "hrd_log_info_i32", symbolTable.getType("void"),
+             {symbolTable.getBuilt("i32")});
+  addRuntime("log", "info", "hrd_log_info_u32", symbolTable.getType("void"),
+             {symbolTable.getBuilt("u32")});
+  addRuntime("log", "info", "hrd_log_info_f32", symbolTable.getType("void"),
+             {symbolTable.getBuilt("f32")});
+  addRuntime("log", "info", "hrd_log_info_bool", symbolTable.getType("void"),
+             {symbolTable.getBuilt("bool")});
+  addRuntime("log", "info", "hrd_log_info_c8", symbolTable.getType("void"),
+             {symbolTable.getBuilt("c8")});
 }
+
+void SemanticAnalyzer::prepareRuntime() { addLog(); }

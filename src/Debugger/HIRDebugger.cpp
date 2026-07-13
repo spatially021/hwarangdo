@@ -3,6 +3,7 @@
 #include "hrd/IR/HIR/HIRDecl.h"
 #include "hrd/IR/HIR/HIRProgram.h"
 #include "hrd/IR/HIR/HIRSymbol.h"
+#include "hrd/enums/MethodKind.h"
 #include "magic_enum/magic_enum.hpp"
 #include <iostream>
 #include <type_traits>
@@ -51,10 +52,22 @@ void HIRDebugger::debugMethod(HIRMethodDecl *method) {
     cout << "static ";
   if (method->isAsync)
     cout << "async ";
-  if (method->isInit)
-    cout << "init ";
-  else
+
+  switch (method->methodKind) {
+
+  case MethodKind::Normal: {
     cout << "method ";
+    break;
+  }
+  case MethodKind::Init: {
+    cout << "init ";
+    break;
+  }
+  case MethodKind::OnDestroy: {
+    cout << "onDestroy ";
+    break;
+  }
+  }
 
   cout << method->name << "(";
 
@@ -75,7 +88,7 @@ void HIRDebugger::debugMethod(HIRMethodDecl *method) {
 
   cout << ")";
 
-  if (!method->isInit) {
+  if (method->methodKind == MethodKind::Normal) {
     cout << " -> ";
     if (method->returnType != nullptr)
       cout << method->returnType->name;

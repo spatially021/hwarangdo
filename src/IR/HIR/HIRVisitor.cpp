@@ -53,7 +53,7 @@ void HIRBuilder::visit(NameExpr *expr) {
     if (place == nullptr) {
       Error::internal(expr->span, "failed to lower name expr as place");
     }
-    exprResult = std::move(place);
+    exprResult = make_unique<HIRLoadExpr>(expr->span, std::move(place));
     return;
   }
 
@@ -328,6 +328,7 @@ void HIRBuilder::visit(VarDecl *decl) {
   }
 }
 void HIRBuilder::visit(InitDecl *decl) { bindMethod(decl); }
+void HIRBuilder::visit(OnDestroyDecl *decl) { bindMethod(decl); }
 
 void HIRBuilder::visit(TypeNode *) {}
 void HIRBuilder::visit(ASTNode *node) {

@@ -39,7 +39,6 @@ unique_ptr<MIRValue> MIRBuilder::lowerExpr(HIRExpr *expr) {
     auto call = expect<HIRMethodCallExpr>(expr, HIRNodeKind::MethodCallExpr);
     return lowerCall(call);
   }
-
   case HIRNodeKind::RuntimeCallExpr: {
     auto runtime = expect<HIRRuntimeCall>(expr, HIRNodeKind::RuntimeCallExpr);
     return lowerRuntime(runtime);
@@ -81,7 +80,7 @@ unique_ptr<MIRValue> MIRBuilder::lowerExpr(HIRExpr *expr) {
   }
   }
 
-  Error::internal("ilegal hir kind");
+  Error::internal("illegal hir kind");
 }
 unique_ptr<MIRValue> MIRBuilder::lowerTernary(HIRTernaryExpr *expr) {
   auto temp = makeTemp(expr->type->typeSymbol);
@@ -120,87 +119,62 @@ unique_ptr<MIRValue> MIRBuilder::lowerTernary(HIRTernaryExpr *expr) {
 
 unique_ptr<MIRValue> MIRBuilder::lowerMatch(HIRMatchExpr *expr) {
   BlockID entry = currentBlock;
+  IRScope switchScope(currentScope, currentScope->depth + 1);
+
+  auto *outerScope = currentScope;
+  currentScope = &switchScope;
+
   BlockID cond = makeBlock();
   BlockID defaultTarget = makeBlock();
+  BlockID cleanup = makeBlock();
   BlockID join = makeBlock();
-  vector<MIRCase> cases;
 
-  bool hasDefault = false;
+  currentBlock = entry;
 
-  auto temp = makeTemp(expr->type->typeSymbol);
-  emit(make_unique<MIRLocalDeclStmt>(temp->typeSymbol, temp, nullptr));
+  auto result = makeTemp(expr->type->typeSymbol);
+  outerScope->locals.push_back(result);
+  emit(make_unique<MIRLocalDeclStmt>(result->typeSymbol, result, nullptr));
   getBlock(entry)->terminator = GotoTerminator(cond);
 
-  MatchContext m = {temp, join};
+  MatchContext m = {result, cleanup};
   matches.push_back(m);
+  currentBlock = cond;
+  SwitchData data = {
+      cond,        defaultTarget,    cleanup,     join,
+      switchScope, expr->cond.get(), expr->cases, expr->cond->type->typeSymbol};
 
-  unique_ptr<MIRValue> condExpr = lowerExpr(expr->cond.get());
-  auto tempCond = makeTemp(expr->cond->type->typeSymbol);
+  makeSwitch(data);
 
-  emit(make_unique<MIRLocalDeclStmt>(tempCond->typeSymbol, tempCond,
-                                     std::move(condExpr)));
-
-  for (auto &c : expr->cases) {
-    assert(c->defaultKind != HIRDefaultKind::Default);
-    BlockID id;
-    if (c->defaultKind == HIRDefaultKind::WildCard) {
-      id = defaultTarget;
-      hasDefault = true;
-    } else {
-      id = makeBlock();
-    }
-    currentBlock = id;
-    for (auto &v : c->selectors) {
-      auto s = &v->selector;
-      if (auto lit = std::get_if<HIRLiteralCase>(s)) {
-        cases.push_back(MIRCase(lit->expr->resolvedLit, id));
-        continue;
-      }
-      if (auto unit = std::get_if<HIRUnitCase>(s)) {
-        cases.push_back(MIRCase(unit->variant->symbol, id));
-        continue;
-      }
-      if (auto payload = std::get_if<HIRPayloadCase>(s)) {
-
-        emit(make_unique<MIRLocalDeclStmt>(
-            payload->binding->type->typeSymbol, payload->binding->symbol,
-            make_unique<MIRPayloadExtractExpr>(
-                payload->variant->symbol,
-                make_unique<MIRLoad>(make_unique<MIRLocalPlace>(tempCond),
-                                     expr->type->typeSymbol),
-                expr->type->typeSymbol)));
-        cases.push_back(MIRCase(payload->variant->symbol, id));
-      }
-    }
-    lowerBlock(c->body.get());
-    if (!hasTerminator(currentBlock)) {
-      getBlock(currentBlock)->terminator = GotoTerminator(join);
-    }
+  if (!hasTerminator(cleanup)) {
+    getBlock(cleanup)->terminator = GotoTerminator(join);
   }
 
-  if (hasDefault && !hasTerminator(defaultTarget)) {
-    getBlock(defaultTarget)->terminator = GotoTerminator(join);
-  }
-
-  getBlock(cond)->terminator = SwitchTerminator(
-      make_unique<MIRLoad>(make_unique<MIRLocalPlace>(tempCond),
-                           expr->type->typeSymbol),
-      std::move(cases), hasDefault ? defaultTarget : join);
+  currentScope = outerScope;
   currentBlock = join;
-
   matches.pop_back();
 
-  return make_unique<MIRLoad>(make_unique<MIRLocalPlace>(temp),
-                              expr->type->typeSymbol);
+  auto load = make_unique<MIRLoad>(make_unique<MIRLocalPlace>(result),
+                                   expr->type->typeSymbol);
+  load->valueCategory = MIRValueCategory::OwnedTemp;
+  return load;
 }
 
 unique_ptr<MIRValue> MIRBuilder::lowerLiteral(HIRLiteralExpr *expr) {
-  return make_unique<MIRLiteralExpr>(expr->resolvedLit, expr->type->typeSymbol);
+  auto temp =
+      make_unique<MIRLiteralExpr>(expr->resolvedLit, expr->type->typeSymbol);
+  if (table->isString(expr->type->typeSymbol)) {
+    temp->valueCategory = MIRValueCategory::Borrowed;
+  }
+  return temp;
 }
 
 unique_ptr<MIRValue> MIRBuilder::lowerLoad(HIRLoadExpr *expr) {
-  return make_unique<MIRLoad>(lowerPlace(expr->place.get()),
-                              expr->type->typeSymbol);
+  auto temp = make_unique<MIRLoad>(lowerPlace(expr->place.get()),
+                                   expr->type->typeSymbol);
+  if (table->isString(expr->type->typeSymbol)) {
+    temp->valueCategory = MIRValueCategory::Borrowed;
+  }
+  return temp;
 }
 
 unique_ptr<MIRValue> MIRBuilder::lowerUnary(HIRUnaryExpr *expr) {
@@ -209,9 +183,13 @@ unique_ptr<MIRValue> MIRBuilder::lowerUnary(HIRUnaryExpr *expr) {
 }
 
 unique_ptr<MIRValue> MIRBuilder::lowerBinary(HIRBinaryExpr *expr) {
-  return make_unique<MIRBinaryExpr>(lowerExpr(expr->left.get()),
-                                    lowerExpr(expr->right.get()), expr->op,
-                                    expr->type->typeSymbol, expr->operand);
+  auto temp = make_unique<MIRBinaryExpr>(lowerExpr(expr->left.get()),
+                                         lowerExpr(expr->right.get()), expr->op,
+                                         expr->type->typeSymbol, expr->operand);
+  if (table->isString(expr->type->typeSymbol)) {
+    temp->valueCategory = MIRValueCategory::OwnedTemp;
+  }
+  return temp;
 }
 
 unique_ptr<MIRValue> MIRBuilder::lowerCast(HIRCastExpr *expr) {

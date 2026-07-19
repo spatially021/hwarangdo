@@ -1168,12 +1168,10 @@ for (<변수 선언>; <시작값>..<끝값> [by <증감값>]) body
 1. `return` 문은 다음 두 형태를 허용한다.
     - `return;`
     - `return expr;`
-2. `return expr;`은 `func` 함수의 반환 타입 추론 근거가 된다.
 3. 하나의 함수 내 여러 `return expr;`이 존재할 경우, 모든 `expr`의 타입은 동일해야 한다.
-4. `return;`은 func 함수의 반환 타입을 void로 추론할 수 있다.
 5. 명시적 반환 타입 함수는 (`void` 제외) 반드시 모든 경로에서 `return expr;`을 포함해야 한다.
-6. `void` 반환 함수 및 `func` 함수는 `return` 생략을 허용한다.
-7. func 함수와 반환값이 있는 함수 모두 return; 과 return expr;를 혼용하여 사용할 수 없다.
+6. `void` 반환 함수는 `return` 생략을 허용한다.
+7. 모든 함수는 return; 과 return expr;를 혼용하여 사용할 수 없다.
 8. init메서드 내부에서는 return 문을 사용할 수 없다.
 
 ## 8.8 break / continue
@@ -1326,7 +1324,7 @@ world.quit();
 ...
 }
 ```
-타입에는 value 객체의 타입과 enum타입, 그리고 추론 타입인 func이 위치할 수 있다.
+타입에는 value 객체의 타입과 enum타입이 위치할 수 있다.
 observer는 반환타입이 될 수 없으며 handle<T>는 가능하다.
 
 ### 9.1 전역 함수
@@ -1346,7 +1344,6 @@ observer는 반환타입이 될 수 없으며 handle<T>는 가능하다.
 ### 9.4 반환 규칙
 함수의 반환은 선언시 정의되는 타입을 따른다.
 모든 반환값은 함수의 반환 타입에 대해 암묵적 형변환이 가능한 타입이여야 한다.
-`func`으로 선언된 함수는 내부 return 의 반환 값을 통해 반환 타입이 결정되며 return이 없거나 return;형태라면 void로 취급한다.
 
 ### 9.5 오버로딩 규칙
 가장 정확히 일치하는 오버로드가 선택된다.
@@ -1476,14 +1473,13 @@ impl <TypeIdentifier> : <trait1>, <trait2> ...{
 
 ```
 impl Vec2 {
-    func sum() {
+    int sum() {
         return x + y;
     }
 }
 
 ```
 
-- `impl` 내부의 `func`는 전역 함수가 아니다.
 - 메서드는 **암묵적인 self 문맥**을 가진다.
 
 ### 12.1 self 문맥

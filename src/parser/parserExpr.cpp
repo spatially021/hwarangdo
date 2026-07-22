@@ -4,6 +4,7 @@
 #include "hrd/SourceSpan.h"
 #include "hrd/Token.h"
 #include "hrd/util/Error.h"
+#include "hrd/util/diagnostic/Diagnostic.h"
 #include <memory>
 #include <string>
 
@@ -15,8 +16,14 @@ Ptr Parser::assignment() { // 대입 연산 처리
   if (isAssign()) {
     Token op = advance();
     Ptr right = ternary();
-    if (!isAssginable(left))
-      Error::diagnostic(left->span, "expression is not assignable");
+    if (!isAssginable(left)) {
+      auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_P033);
+      dia.labels = {
+          {previous().span, "cannot assign to this expression", true},
+      };
+      engine.emit(dia);
+      throw runtime_error("");
+    }
     return make_shared<AssignExpr>(makeSpan(left->span, right->span), left, op,
                                    right);
   }
@@ -28,7 +35,8 @@ Ptr Parser::ternary() { // 삼항 연산 처리
   if (check(TKind::QUESTION)) {
     advance(); //?처리
     Ptr then = assignment();
-    consume(TKind::COLON, "expected ':' after conditional expression");
+    consume(TKind::COLON, DiagnosticCode::HRD_P051,
+            "expected ':' after conditional expression");
     Ptr else_ = assignment();
     return make_shared<TernaryExpr>(makeSpan(left->span, else_->span), left,
                                     then, else_);
@@ -183,7 +191,8 @@ Ptr Parser::postfix() {
             expr->kind == NKind::BUILTIN_NAME_EXPR) {
           advance(); // spawn 처리
           TypeNode::Ptr type = parseType();
-          consume(TKind::LEFT_PAREN, "expected '(' after type name");
+          consume(TKind::LEFT_PAREN, DiagnosticCode::HRD_P046,
+                  "expected '(' after type name");
           std::vector<Expr::Ptr> args;
           if (!check(TKind::RIGHT_PAREN)) {
             do {
@@ -191,35 +200,42 @@ Ptr Parser::postfix() {
             } while (match({TKind::COMMA}));
           }
 
-          consume(TKind::RIGHT_PAREN, "expected ')' after argument list");
+          consume(TKind::RIGHT_PAREN, DiagnosticCode::HRD_P047,
+                  "expected ')' to close argument list");
           auto end = previous();
           return make_shared<SpawnExpr>(makeSpan(expr->span, end.span), expr,
                                         type, args);
         } else if (check(TKind::IDENTIFIER) && peek().text == "view") {
           advance(); // view 처리
-          consume(TKind::LEFT_PAREN, "expected '(' after 'view'");
+          consume(TKind::LEFT_PAREN, DiagnosticCode::HRD_P046,
+                  "expected '(' after 'view'");
 
           Ptr target = expression();
 
-          consume(TKind::RIGHT_PAREN, "expected ')' after view argument");
+          consume(TKind::RIGHT_PAREN, DiagnosticCode::HRD_P047,
+                  "expected ')' to close view argument");
 
           auto end = previous();
           return make_shared<ViewExpr>(makeSpan(expr->span, end.span), expr,
                                        target);
         } else if (check(TKind::IDENTIFIER) && peek().text == "destroy") {
           advance(); // destroy 처리
-          consume(TKind::LEFT_PAREN, "expected '(' after 'destroy'");
+          consume(TKind::LEFT_PAREN, DiagnosticCode::HRD_P046,
+                  "expected '(' after 'destroy'");
 
           Ptr target = expression();
 
-          consume(TKind::RIGHT_PAREN, "expected ')' after destroy argument");
+          consume(TKind::RIGHT_PAREN, DiagnosticCode::HRD_P047,
+                  "expected ')' to close destroy argument");
           auto end = previous();
           return make_shared<DestroyExpr>(makeSpan(expr->span, end.span), expr,
                                           target);
         } else if (check(TKind::IDENTIFIER) && peek().text == "quit") {
           advance(); // quit 처리
-          consume(TKind::LEFT_PAREN, "expected '(' after 'quit'");
-          consume(TKind::RIGHT_PAREN, "expected ')' after quit argument");
+          consume(TKind::LEFT_PAREN, DiagnosticCode::HRD_P046,
+                  "expected '(' after 'quit'");
+          consume(TKind::RIGHT_PAREN, DiagnosticCode::HRD_P047,
+                  "expected ')' to close quit argument");
           auto end = previous();
           return make_shared<QuitExpr>(makeSpan(expr->span, end.span));
         }
@@ -230,8 +246,8 @@ Ptr Parser::postfix() {
         }
       }
 
-      Token member =
-          consume(TKind::IDENTIFIER, "expected member name after '.'");
+      Token member = consume(TKind::IDENTIFIER, DiagnosticCode::HRD_P054,
+                             "expected member name after '.'");
       auto end = previous();
       expr = make_shared<MemberExpr>(makeSpan(expr->span, end.span), expr,
                                      member.text);
@@ -244,7 +260,8 @@ Ptr Parser::postfix() {
         } while (match({TKind::COMMA}));
       }
 
-      consume(TKind::RIGHT_PAREN, "expected ')' after argument list");
+      consume(TKind::RIGHT_PAREN, DiagnosticCode::HRD_P047,
+              "expected ')' to close argument list");
       auto end = previous();
       if (expr->kind == NKind::MEMBER_EXPR) {
         auto member = static_pointer_cast<MemberExpr>(expr);
@@ -255,13 +272,20 @@ Ptr Parser::postfix() {
         expr = make_shared<CallExpr>(makeSpan(expr->span, end.span), nullptr,
                                      static_pointer_cast<NameExpr>(expr)->name,
                                      args);
-      } else
-        Error::diagnostic(t, "expression is not callable");
+      } else {
+        auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_P034);
+        dia.labels = {
+            {previous().span, "cannot call this expression", true},
+        };
+        engine.emit(dia);
+        throw runtime_error("");
+      }
 
     } else if (check(TKind::LEFT_BRACKET)) {
       Token t = advance(); //[처리
       Expr::Ptr index = ternary();
-      consume(TKind::RIGHT_BRACKET, "expected ']' after array index");
+      consume(TKind::RIGHT_BRACKET, DiagnosticCode::HRD_P053,
+              "expected ']' after array index");
       auto end = previous();
       expr = make_shared<ArrayAccessExpr>(makeSpan(expr->span, end.span), expr,
                                           index);
@@ -288,7 +312,8 @@ Ptr Parser::primary() {
   if (check(TKind::LEFT_PAREN)) {
     advance();
     Expr::Ptr expr = expression();
-    consume(TKind::RIGHT_PAREN, "expected ')' after expression");
+    consume(TKind::RIGHT_PAREN, DiagnosticCode::HRD_P047,
+            "expected ')' after expression");
     return expr;
   }
   if (check(TKind::SUPER))
@@ -314,13 +339,16 @@ Ptr Parser::primary() {
 
   if (check(TKind::MATCH)) {
     advance(); // match처리
-    consume(TKind::LEFT_PAREN, "expected '(' after 'match'");
+    consume(TKind::LEFT_PAREN, DiagnosticCode::HRD_P046,
+            "expected '(' after 'match'");
 
     Ptr value = expression();
 
-    consume(TKind::RIGHT_PAREN, "expected ')' after match expression");
+    consume(TKind::RIGHT_PAREN, DiagnosticCode::HRD_P047,
+            "expected ')' to close match expression");
 
-    consume(TKind::LEFT_BRACE, "expected '{' before match body");
+    consume(TKind::LEFT_BRACE, DiagnosticCode::HRD_P043,
+            "expected '{' begin match body");
 
     vector<shared_ptr<Case>> cases;
 
@@ -338,8 +366,14 @@ Ptr Parser::primary() {
 
     auto end = previous();
 
-    consume(TKind::RIGHT_BRACE, "expected '}' after match body");
+    consume(TKind::RIGHT_BRACE, DiagnosticCode::HRD_P040,
+            "expected '}' after match body");
     return make_shared<MatchExpr>(makeSpan(t.span, end.span), value, cases);
   }
-  Error::diagnostic(peek(), "expected expression, got '" + peek().text + "'");
+  auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_P035);
+  dia.labels = {
+      {previous().span, "expected expression here", true},
+  };
+  engine.emit(dia);
+  throw runtime_error("");
 }

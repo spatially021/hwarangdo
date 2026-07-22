@@ -288,10 +288,13 @@ void Linker::visit(TraitDecl *decl) {
 }
 
 void Linker::visit(FuncDecl *decl) {
-  if (decl->returnType.has_value()) {
-    decl->returnType->get()->accept(this);
-    decl->methodSymbol->returnType = decl->returnType->get()->resolved;
+
+  if (decl->returnType == nullptr) {
+    Error::internal(decl->span, "return ast node is nullptr");
   }
+
+  decl->returnType->accept(this);
+  decl->methodSymbol->returnType = decl->returnType->resolved;
 
   ScopeGuard _(*table, decl->methodSymbol->scope);
   for (auto &p : decl->params) {

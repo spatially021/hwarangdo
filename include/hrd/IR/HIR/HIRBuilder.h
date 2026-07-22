@@ -14,6 +14,7 @@
 #include "hrd/SemanticAnalyzer/symbol/MethodSymbol.h"
 #include "hrd/SemanticAnalyzer/symbol/TypeSymbol.h"
 #include "hrd/SemanticAnalyzer/symbol/ValueSymbol.h"
+#include "hrd/compiler/CompilerContexts.h"
 #include "hrd/util/Error.h"
 #include <cassert>
 #include <memory>
@@ -21,7 +22,7 @@
 
 class HIRBuilder : public ASTVisitor {
 public:
-  explicit HIRBuilder(SymbolTable *table, HIRProgram *program, HIRSource *s);
+  explicit HIRBuilder(HIRContext &context, HIRSource *s);
 
   void build();
 
@@ -42,7 +43,7 @@ private:
   int nextMethodId = 0;
   int nextVariantId = 0;
 
-  SymbolTable *table;
+  SymbolTable &table;
 
 private:
   void emit(unique_ptr<HIRStmt> stmt);

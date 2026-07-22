@@ -95,32 +95,18 @@ void Resolver::visit(FuncDecl *decl) {
 
   decl->body->accept(this);
 
-  if (decl->returnType.has_value()) {
-    auto rt = decl->returnType.value().get();
-    rt->accept(this);
-    auto type = rt->resolved;
-    if (symbol->returns.empty() && table->getType("void") != type) {
-      Error::diagnostic(decl->span, "non-void method must have return");
-    }
-    for (auto r : symbol->returns) {
-      if (!isAssignable(type, r->returnType)) {
-        Error::diagnostic(r->span, "unmatched return type");
-      }
-    }
-    symbol->returnType = rt->resolved;
-  } else {
-    if (symbol->returns.empty()) {
-      symbol->returnType = table->getType("void");
-    } else {
-      auto rt = symbol->returns[0]->returnType;
-      for (auto r : symbol->returns) {
-        if (!isAssignable(rt, r->returnType)) {
-          Error::diagnostic(r->span, "unmatched return type");
-        }
-      }
-      symbol->returnType = rt;
+  auto rt = decl->returnType.get();
+  rt->accept(this);
+  auto type = rt->resolved;
+  if (symbol->returns.empty() && table->getType("void") != type) {
+    Error::diagnostic(decl->span, "non-void method must have return");
+  }
+  for (auto r : symbol->returns) {
+    if (!isAssignable(type, r->returnType)) {
+      Error::diagnostic(r->span, "unmatched return type");
     }
   }
+  symbol->returnType = rt->resolved;
 
   currentMethod = prev;
 

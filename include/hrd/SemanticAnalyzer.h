@@ -3,9 +3,10 @@
 #include "AST/Program.h"
 #include "SemanticAnalyzer/Resolver.h"
 #include "SemanticAnalyzer/SymbolTable.h"
-#include "SemanticAnalyzer/symbol/RuntimeSymbol.h"
 #include "SemanticAnalyzer/symbol/Symbol.h"
 #include "SemanticAnalyzer/symbol/TypeSymbol.h"
+#include "hrd/compiler/CompilerContexts.h"
+#include "hrd/util/diagnostic/DiagnosticEngine.h"
 
 enum class LayoutState {
   Unvisited,
@@ -16,9 +17,9 @@ enum class LayoutState {
 class SemanticAnalyzer {
 public:
   Program *program;
-  SemanticAnalyzer(Program *p);
-  SymbolTable symbolTable;
-  vector<unique_ptr<RuntimeSymbol>> runtimes;
+  SemanticAnalyzer(SemanContext &context);
+  SymbolTable &symbolTable;
+  DiagnosticEngine &engine;
 
   void build();
   void link();

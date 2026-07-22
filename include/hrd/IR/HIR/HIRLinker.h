@@ -6,6 +6,7 @@
 #include "hrd/IR/HIR/HIRProgram.h"
 #include "hrd/SemanticAnalyzer/SymbolTable.h"
 #include "hrd/SourceSpan.h"
+#include "hrd/compiler/CompilerContexts.h"
 #include <memory>
 class HIRLinker {
 public:
@@ -13,9 +14,9 @@ public:
   SourceFile *source = nullptr;
   unique_ptr<HIRSource> hirSource;
   HIRMethodDecl *currentMethod = nullptr;
-  SymbolTable *table;
-  HIRLinker(HIRProgram *p, SourceFile *s, SymbolTable *t)
-      : program(p), source(s), table(t) {
+  SymbolTable &table;
+  HIRLinker(HIRContext &ctx, SourceFile *s)
+      : program(ctx.program), source(s), table(ctx.table) {
     SourceSpan span;
     span.path = s->path;
     span.lineStart = 0;

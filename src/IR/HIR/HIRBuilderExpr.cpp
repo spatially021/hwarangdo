@@ -250,7 +250,7 @@ unique_ptr<HIRExpr> HIRBuilder::lowerView(ViewExpr *expr) {
 unique_ptr<HIRExpr> HIRBuilder::lowerInitCall(CallExpr *expr) {
   assert(expr);
   HIRBlockStmt *defaultInit = nullptr;
-  auto type = table->getType(expr->methodName);
+  auto type = table.getType(expr->methodName);
   if (type == nullptr) {
     Error::internal(expr->span, "fail to get typeSymbol");
   }

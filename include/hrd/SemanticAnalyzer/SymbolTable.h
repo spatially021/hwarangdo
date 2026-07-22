@@ -77,6 +77,7 @@ public:
   unique_ptr<Scope> rootScope;
   vector<unique_ptr<GenericSymbol>> genericInsStorage;
   unordered_map<GenericInsKey, GenericSymbol *, GenericInsHash> genericInsSMap;
+  vector<unique_ptr<RuntimeSymbol>> runtimes;
 
   vector<unique_ptr<ArrayTypeSymbol>> arrayTypeStorage;
   unordered_map<ArrayTypeKey, ArrayTypeSymbol *, ArrayTypeHash> arrayTypeMap;

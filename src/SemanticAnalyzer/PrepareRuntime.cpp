@@ -22,7 +22,7 @@ void SemanticAnalyzer::addRuntime(std::string ns, std::string name,
 
   auto &overloads = nsIt->second.functions[runtime->name];
 
-  runtimes.push_back(std::move(runtime));
+  symbolTable.runtimes.push_back(std::move(runtime));
   overloads.push_back(raw);
 }
 void SemanticAnalyzer::addLog() {

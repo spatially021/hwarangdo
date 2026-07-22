@@ -64,6 +64,7 @@ Thumbs.db
 *.dylib
 *.exe
 *.out
+*.ll
 
 # =========================
 # Coverage
@@ -80,3 +81,5 @@ Thumbs.db
 
 asan.log
 dump/
+release/
+CHECKLIST.md

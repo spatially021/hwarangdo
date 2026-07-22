@@ -4,7 +4,7 @@ void llvmCodegen::buildMethods() {
   for (auto &m : program->functions) {
 
     if (m->isDefaultInit) {
-      auto *voidTy = getType(table->getType("void"));
+      auto *voidTy = getType(table.getType("void"));
       auto *selfTy = llvm::PointerType::get(context, 0);
 
       auto *fnType = llvm::FunctionType::get(voidTy, {selfTy}, false);

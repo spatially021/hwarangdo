@@ -1,4 +1,4 @@
-#include "runtimes/hrd_runtime.h"
+#include "hrd_runtime.h"
 
 static HrdWorld *world = nullptr;
 
@@ -71,8 +71,6 @@ extern "C" void *hrd_world_view_raw(HrdHandle handle) {
   uint32_t index = hrd_handle_index(handle);
   uint32_t generation = hrd_handle_generation(handle);
 
-  std::fprintf(stderr, "view handle: index=%u gen=%u\n", index, generation);
-
   if (index >= world->entities.size()) {
     hrd_runtime_panic("invalid handle index");
   }
@@ -89,7 +87,6 @@ extern "C" void *hrd_world_view_raw(HrdHandle handle) {
 extern "C" void hrd_world_destroy_entity_raw(HrdHandle handle) {
   uint32_t index = hrd_handle_index(handle);
   uint32_t generation = hrd_handle_generation(handle);
-  std::fprintf(stderr, "destroy handle: index=%u gen=%u\n", index, generation);
   auto &slot = world->entities[index];
   if (!slot.alive || slot.generation != generation) {
     hrd_runtime_panic("destroy invalid handle");

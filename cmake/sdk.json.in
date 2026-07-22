@@ -1,0 +1,12 @@
+{
+  "sdkVersion": "@PROJECT_VERSION@",
+  "compilerVersion": "@PROJECT_VERSION@",
+  "runtimeVersion": "@PROJECT_VERSION@",
+  "llvmVersion": "@LLVM_PACKAGE_VERSION@",
+  "target": "@HGM_TARGET_NAME@",
+  "runtimeLibrary": "@HGM_RUNTIME_LIBRARY_NAME@",
+  "paths": {
+    "runtime": "@HGM_INSTALL_TARGET_DIR@",
+    "include": "@HGM_INSTALL_INCLUDE_DIR@"
+  }
+}

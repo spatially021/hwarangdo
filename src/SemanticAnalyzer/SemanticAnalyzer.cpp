@@ -4,15 +4,18 @@
 #include "hrd/SemanticAnalyzer/Linker.h"
 #include "hrd/SemanticAnalyzer/SymbolTable.h"
 #include "hrd/SemanticAnalyzer/symbol/TypeSymbol.h"
+#include "hrd/compiler/CompilerContexts.h"
 
 #include <stdexcept>
 
-SemanticAnalyzer::SemanticAnalyzer(Program *p) : program(p) {}
+SemanticAnalyzer::SemanticAnalyzer(SemanContext &context)
+    : program(context.program), symbolTable(context.table),
+      engine(context.engine) {}
 
 void SemanticAnalyzer::build() {
-  Builder builder(&symbolTable);
+  BuilderContext context = {symbolTable, engine};
+  Builder builder(context);
   for (auto &s : program->sources) {
-
     try {
       for (auto &a : s->decls) {
         a->accept(&builder);

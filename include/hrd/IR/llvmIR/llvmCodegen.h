@@ -9,6 +9,7 @@
 #include "hrd/SemanticAnalyzer/symbol/RuntimeSymbol.h"
 #include "hrd/SemanticAnalyzer/symbol/TypeSymbol.h"
 #include "hrd/SemanticAnalyzer/symbol/ValueSymbol.h"
+#include "hrd/compiler/CompilerContexts.h"
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/Module.h"
 #include <llvm/IR/BasicBlock.h>
@@ -55,7 +56,7 @@ class llvmCodegen {
 public:
   llvm::LLVMContext context;
   MIRProgram *program = nullptr;
-  SymbolTable *table = nullptr;
+  SymbolTable &table;
   std::unique_ptr<llvm::Module> llvmModule;
   llvm::IRBuilder<> builder;
 
@@ -67,7 +68,7 @@ public:
   unordered_map<TypeSymbol *, llvm::Function *> defaultInits;
   unordered_map<TypeSymbol *, llvm::Function *> defaultDestroys;
 
-  llvmCodegen(MIRProgram *program, SymbolTable *table);
+  llvmCodegen(CodegenContext &context);
   void generate();
 
 private:

@@ -1,15 +1,17 @@
 #include "hrd/Lexer.h"
 #include "hrd/AST/TokenStream.h"
 #include "hrd/Token.h"
+#include "hrd/compiler/CompilerContexts.h"
 #include "hrd/util/Error.h"
+#include "hrd/util/diagnostic/Diagnostic.h"
 #include <cctype>
-#include <string>
+#include <stdexcept>
 #include <sys/types.h>
 #include <vector>
 
 using namespace std;
 
-Lexer::Lexer(InputSource in) : input(in) {}
+Lexer::Lexer(LexerContext &ctx) : input(ctx.source), engine(ctx.engine) {}
 
 TokenStream Lexer::lexing() {
 
@@ -55,7 +57,7 @@ void Lexer::skipWS() {
 
 bool Lexer::isIdentFirst(char c) {
   // check this character can place first letter of identifer
-  return c == '_' || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z');
+  return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z');
 }
 
 bool Lexer::isIdentRest(char c) {
@@ -319,9 +321,16 @@ Token Lexer::scan() {
     }
     if (peek() == '\0') {
       get();
-      Error::diagnostic({path, tempL, tempC, line, col},
-                        "unterminated string literal");
+      auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_L001);
+      dia.labels = {
+          {{path, tempL, tempC, line, col}, "missing closing '\"'", true},
+      };
+      engine.emit(dia);
+      // Error::diagnostic({path, tempL, tempC, line, col},
+      //                   "unterminated string literal");
+      throw runtime_error("");
     }
+
     get(); // closing "
     return {TKind::LIT_STRING, str, {path, tempL, tempC, line, col}};
   }
@@ -334,16 +343,28 @@ Token Lexer::scan() {
     if (val == '\\') { // escape
       char esc = get();
       if (!isEscapeChar(esc)) {
-        Error::diagnostic({path, tempL, tempC, line, col},
-                          "invalid escape sequence in character literal");
+        auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_L002);
+        dia.labels = {
+            {{path, tempL, tempC, line, col}, "invalid escape sequence", true},
+        };
+        engine.emit(dia);
+        throw runtime_error("");
+        // Error::diagnostic({path, tempL, tempC, line, col},
+        //                   "invalid escape sequence in character literal");
       }
       ch = string("\\") + esc;
     } else {
       ch = string(1, val);
     }
     if (peek() != '\'') {
-      Error::diagnostic({path, tempL, tempC, line, col},
-                        "unterminated character literal");
+      auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_L003);
+      dia.labels = {
+          {{path, tempL, tempC, line, col}, "missing closing '\''", true},
+      };
+      engine.emit(dia);
+      throw runtime_error("");
+      // Error::diagnostic({path, tempL, tempC, line, col},
+      //                   "unterminated character literal");
     }
     get(); // closing '
     return {TKind::LIT_CHARACTER, ch, {path, tempL, tempC, line, col}};
@@ -385,8 +406,14 @@ Token Lexer::scan() {
   }
 
   // 알 수 없는 토큰
-  Error::diagnostic({path, tempL, tempC, line, col},
-                    "unexpected character '" + string(1, c) + "'");
+  auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_L004);
+  dia.labels = {
+      {{path, tempL, tempC, line, col}, "character is not recognized", true},
+  };
+  engine.emit(dia);
+  throw runtime_error("");
+  // Error::diagnostic({path, tempL, tempC, line, col},
+  //                   "unexpected character '" + string(1, c) + "'");
 }
 
 bool Lexer::isEscapeChar(char c) {

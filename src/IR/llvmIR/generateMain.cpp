@@ -3,11 +3,11 @@
 MethodSymbol *llvmCodegen::getMainMethod(const string &name) {
 
   if (name == "update") {
-    return table->main->update;
+    return table.main->update;
   }
 
   if (name == "init") {
-    return table->main->init;
+    return table.main->init;
   }
 
   Error::internal("Main method not found: " + name);

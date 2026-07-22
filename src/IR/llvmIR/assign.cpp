@@ -198,7 +198,7 @@ void llvmCodegen::lowerStringCopyAssign(llvm::Value *dst, llvm::Value *srcPtr) {
 }
 
 void llvmCodegen::lowerStringMoveAssign(llvm::Value *dst, llvm::Value *srcPtr) {
-  auto *s8Ty = getType(table->getBuilt("s8"));
+  auto *s8Ty = getType(table.getBuilt("s8"));
 
   auto *v = builder.CreateLoad(s8Ty, srcPtr);
   builder.CreateStore(v, dst);

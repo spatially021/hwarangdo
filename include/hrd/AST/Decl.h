@@ -108,17 +108,16 @@ public:
 // 의미 분석 이후 methodSymbol과 impl 정보가 연결된다.
 class FuncDecl : public Decl {
 public:
-  vector<shared_ptr<Param>> params;   // 이름 포함된 파라미터
-  optional<TypeNode::Ptr> returnType; // 반환 타입 (void면 BuiltinTypeNode void)
+  vector<shared_ptr<Param>> params; // 이름 포함된 파라미터
+  TypeNode::Ptr returnType;         // 반환 타입 (void면 BuiltinTypeNode void)
   StmtPtr body;
   bool isExtern = false; // 외부 함수 여부 (DLL/FFI 등)
   bool isFrame = false;
   bool isOverride = false;
 
   FuncDecl(SourceSpan t, const string &n, vector<shared_ptr<Param>> p,
-           optional<TypeNode::Ptr> ret, StmtPtr b,
-           AModifier modi = AModifier::PUBLIC, bool e = false, bool f = false,
-           bool o = false)
+           TypeNode::Ptr ret, StmtPtr b, AModifier modi = AModifier::PUBLIC,
+           bool e = false, bool f = false, bool o = false)
       : Decl(NKind::FUNC_DECL, t, n, modi), params(std::move(p)),
         returnType(std::move(ret)), body(std::move(b)), isExtern(e), isFrame(f),
         isOverride(o) {
@@ -255,7 +254,7 @@ public:
 class InitDecl : public FuncDecl {
 public:
   InitDecl(SourceSpan t, vector<shared_ptr<Param>> p, StmtPtr b, bool o = false)
-      : FuncDecl(t, "init", p, nullopt, b) {
+      : FuncDecl(t, "init", p, nullptr, b) {
     isOverride = o;
   }
   void accept(ASTVisitor *visitor) override { visitor->visit(this); }
@@ -264,6 +263,6 @@ public:
 class OnDestroyDecl : public FuncDecl {
 public:
   OnDestroyDecl(SourceSpan t, StmtPtr b)
-      : FuncDecl(t, "onDestroy", vector<shared_ptr<Param>>(), nullopt, b) {}
+      : FuncDecl(t, "onDestroy", vector<shared_ptr<Param>>(), nullptr, b) {}
   void accept(ASTVisitor *visitor) override { visitor->visit(this); }
 };

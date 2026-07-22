@@ -5,6 +5,7 @@
 #include "hrd/SemanticAnalyzer/Scope.h"
 #include "hrd/SemanticAnalyzer/symbol/MethodSymbol.h"
 #include "hrd/SemanticAnalyzer/symbol/ValueSymbol.h"
+#include "hrd/compiler/CompilerContexts.h"
 #include "hrd/enums/MethodKind.h"
 #include "hrd/util/Error.h"
 #include "hrd/util/Guard.h"
@@ -12,7 +13,7 @@
 #include <memory>
 #include <utility>
 
-Builder::Builder(SymbolTable *symbol) : table(symbol) {
+Builder::Builder(BuilderContext &ctx) : table(ctx.table), engine(ctx.engine) {
   topLevel = make_unique<TypeSymbol>();
   topLevel->name = "<top-level>";
   currentType = topLevel.get();
@@ -86,9 +87,9 @@ void Builder::visit(CaseValueExpr *expr) {
   }
 }
 void Builder::visit(MatchExpr *expr) {
-  ScopeGuard _(*table);
-  table->getCurrent()->scopeKind = Scope::ScopeKind::BLOCK;
-  expr->blockScope = table->getCurrent();
+  ScopeGuard _(table);
+  table.getCurrent()->scopeKind = Scope::ScopeKind::BLOCK;
+  expr->blockScope = table.getCurrent();
   for (auto &c : expr->cases) {
     c->accept(this);
   }
@@ -96,9 +97,9 @@ void Builder::visit(MatchExpr *expr) {
 // Statement Builder::visitor methods
 void Builder::visit(ExprStmt *stmt) { stmt->expr->accept(this); }
 void Builder::visit(BlockStmt *stmt) {
-  ScopeGuard _(*table);
-  stmt->blockScope = table->getCurrent();
-  table->getCurrent()->scopeKind = Scope::ScopeKind::BLOCK;
+  ScopeGuard _(table);
+  stmt->blockScope = table.getCurrent();
+  table.getCurrent()->scopeKind = Scope::ScopeKind::BLOCK;
   for (auto &s : stmt->statements) {
     s->accept(this);
   }
@@ -109,19 +110,19 @@ void Builder::visit(IfStmt *stmt) {
     stmt->elseBranch->accept(this);
 }
 void Builder::visit(ForStmt *stmt) {
-  ScopeGuard _(*table);
-  stmt->blockScope = table->getCurrent();
+  ScopeGuard _(table);
+  stmt->blockScope = table.getCurrent();
   stmt->initializer->accept(this);
-  table->getCurrent()->scopeKind = Scope::ScopeKind::BLOCK;
+  table.getCurrent()->scopeKind = Scope::ScopeKind::BLOCK;
   stmt->body->accept(this);
 }
 
 void Builder::visit(WhileStmt *stmt) { stmt->body->accept(this); }
 
 void Builder::visit(SwitchStmt *stmt) {
-  ScopeGuard _(*table);
-  table->getCurrent()->scopeKind = Scope::ScopeKind::BLOCK;
-  stmt->blockScope = table->getCurrent();
+  ScopeGuard _(table);
+  table.getCurrent()->scopeKind = Scope::ScopeKind::BLOCK;
+  stmt->blockScope = table.getCurrent();
 
   for (auto &c : stmt->clauses) {
     c->accept(this);
@@ -150,16 +151,24 @@ void Builder::buildMain(ClassDecl *decl) {
 
   auto raw = symbol.get();
 
-  auto result = table->add(std::move(symbol));
+  auto result = table.add(std::move(symbol));
 
   if (!result.success) {
     switch (result.errorType) {
-    case SymbolTable::Result::DUPLICATED:
-      Error::diagnostic(decl->span, "duplicate declaration of 'Main'");
-      break;
+    case SymbolTable::Result::DUPLICATED: {
+      auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S001);
+      dia.labels = {
+          {decl->span, "duplicate 'Main' class declared here", true},
+          {table.main->decl->span, "previous 'Main' class declared here",
+           false},
+      };
+      dia.notes = {{"only one 'Main' class may be declared in a program"}};
+      engine.emit(dia);
+      throw runtime_error("");
+    } break;
 
     case SymbolTable::Result::RESERVED:
-      Error::diagnostic(decl->span, "reserved identifier '" + decl->name + "'");
+      Error::internal(decl->span, "unreachable");
       break;
 
     case SymbolTable::Result::UNKNOWN_SYMBOL:
@@ -171,13 +180,13 @@ void Builder::buildMain(ClassDecl *decl) {
     }
   }
   decl->symbol = raw;
-  table->main = raw;
+  table.main = raw;
 
   TypeContextGuard _(currentType, raw);
-  ScopeGuard __(*table);
+  ScopeGuard __(table);
 
-  raw->memberScope = table->getCurrent();
-  table->getCurrent()->scopeKind = Scope::ScopeKind::FIELD;
+  raw->memberScope = table.getCurrent();
+  table.getCurrent()->scopeKind = Scope::ScopeKind::FIELD;
   for (auto &a : decl->fields) {
     a->accept(this);
     raw->fields.push_back(a->symbol);
@@ -203,7 +212,7 @@ void Builder::visit(ClassDecl *decl) {
   symbol->baseName = decl->baseClass;
   auto raw = symbol.get();
 
-  auto result = table->add(std::move(symbol));
+  auto result = table.add(std::move(symbol));
 
   if (!result.success) {
     switch (result.errorType) {
@@ -228,9 +237,9 @@ void Builder::visit(ClassDecl *decl) {
   decl->symbol = raw;
 
   TypeContextGuard _(currentType, raw);
-  ScopeGuard __(*table);
-  table->getCurrent()->scopeKind = Scope::ScopeKind::FIELD;
-  raw->memberScope = table->getCurrent();
+  ScopeGuard __(table);
+  table.getCurrent()->scopeKind = Scope::ScopeKind::FIELD;
+  raw->memberScope = table.getCurrent();
   for (auto &a : decl->fields) {
     a->accept(this);
     raw->fields.push_back(a->symbol);
@@ -258,7 +267,7 @@ void Builder::visit(StructDecl *decl) {
 
   auto raw = symbol.get();
 
-  auto result = table->add(std::move(symbol));
+  auto result = table.add(std::move(symbol));
 
   if (!result.success) {
     switch (result.errorType) {
@@ -283,9 +292,9 @@ void Builder::visit(StructDecl *decl) {
   decl->symbol = raw;
 
   TypeContextGuard _(currentType, raw);
-  ScopeGuard __(*table);
-  table->getCurrent()->scopeKind = Scope::ScopeKind::FIELD;
-  raw->memberScope = table->getCurrent();
+  ScopeGuard __(table);
+  table.getCurrent()->scopeKind = Scope::ScopeKind::FIELD;
+  raw->memberScope = table.getCurrent();
   for (auto &a : decl->fields) {
     a->accept(this);
     raw->fields.push_back(a->symbol);
@@ -305,7 +314,7 @@ void Builder::visit(EnumDecl *decl) {
 
   auto raw = symbol.get();
 
-  auto result = table->add(std::move(symbol));
+  auto result = table.add(std::move(symbol));
 
   if (!result.success) {
     switch (result.errorType) {
@@ -355,17 +364,17 @@ void Builder::visit(ImplDecl *decl) {
 
   auto raw = symbol.get();
 
-  ScopeGuard _(*table);
+  ScopeGuard _(table);
   TypeContextGuard __(currentType, raw);
-  table->getCurrent()->scopeKind = Scope::ScopeKind::FIELD;
-  symbol->memberScope = table->getCurrent();
+  table.getCurrent()->scopeKind = Scope::ScopeKind::FIELD;
+  symbol->memberScope = table.getCurrent();
   for (auto &a : decl->LinkedImplMethods) {
     a->accept(this);
     a->methodSymbol->owner = nullptr;
   }
 
-  table->impls.push_back(std::move(symbol));
-  table->implMap.emplace(decl, raw);
+  table.impls.push_back(std::move(symbol));
+  table.implMap.emplace(decl, raw);
 }
 
 void Builder::visit(TraitDecl *decl) {
@@ -375,7 +384,7 @@ void Builder::visit(TraitDecl *decl) {
   symbol->kind = TypeSymbol::TypeKind::TRAIT;
   auto raw = symbol.get();
 
-  auto result = table->add(std::move(symbol));
+  auto result = table.add(std::move(symbol));
 
   if (!result.success) {
     switch (result.errorType) {
@@ -400,9 +409,9 @@ void Builder::visit(TraitDecl *decl) {
   decl->symbol = raw;
 
   TypeContextGuard _(currentType, raw);
-  ScopeGuard __(*table);
-  table->getCurrent()->scopeKind = Scope::ScopeKind::FIELD;
-  raw->memberScope = table->getCurrent();
+  ScopeGuard __(table);
+  table.getCurrent()->scopeKind = Scope::ScopeKind::FIELD;
+  raw->memberScope = table.getCurrent();
   for (auto &a : decl->traitSigs) {
     if (a == nullptr)
       Error::internal("traitSig is nullptr");
@@ -419,7 +428,7 @@ void Builder::visit(TraitSig *sig) {
   symbol->owner = currentType;
   auto raw = symbol.get();
 
-  auto result = table->add(std::move(symbol));
+  auto result = table.add(std::move(symbol));
 
   if (!result.success) {
     switch (result.errorType) {
@@ -440,8 +449,8 @@ void Builder::visit(TraitSig *sig) {
       break;
     }
   }
-  ScopeGuard _(*table);
-  table->getCurrent()->scopeKind = Scope::ScopeKind::FUNC;
+  ScopeGuard _(table);
+  table.getCurrent()->scopeKind = Scope::ScopeKind::FUNC;
   for (auto &a : sig->params) {
     auto s = make_unique<ValueSymbol>();
     s->name = a->name;
@@ -450,7 +459,7 @@ void Builder::visit(TraitSig *sig) {
     s->nameSpan = a->span;
     auto r = s.get();
 
-    auto re = table->add(std::move(s));
+    auto re = table.add(std::move(s));
 
     if (!re.success) {
       switch (re.errorType) {
@@ -490,7 +499,7 @@ void Builder::visit(FuncDecl *decl) {
   symbol->modifier = decl->aModifier;
   auto raw = symbol.get();
 
-  auto result = table->add(std::move(symbol));
+  auto result = table.add(std::move(symbol));
 
   if (!result.success) {
     switch (result.errorType) {
@@ -513,9 +522,9 @@ void Builder::visit(FuncDecl *decl) {
   }
   decl->methodSymbol = raw;
 
-  ScopeGuard _(*table);
+  ScopeGuard _(table);
 
-  raw->scope = table->getCurrent();
+  raw->scope = table.getCurrent();
   raw->isExtern = decl->isExtern;
   raw->isFrame = decl->isFrame;
   raw->isOverride = decl->isOverride;
@@ -539,7 +548,7 @@ void Builder::visit(VarDecl *decl) {
   symbol->nameSpan = decl->span;
   auto raw = symbol.get();
 
-  auto result = table->add(std::move(symbol));
+  auto result = table.add(std::move(symbol));
 
   if (decl->isRoot) {
     if (!result.success) {
@@ -601,7 +610,7 @@ void Builder::visit(Param *a) {
   s->node = a;
   s->nameSpan = a->span;
   auto r = s.get();
-  auto re = table->add(std::move(s));
+  auto re = table.add(std::move(s));
 
   if (!re.success) {
     switch (re.errorType) {
@@ -632,17 +641,17 @@ void Builder::visit(InitDecl *decl) {
   symbol->decl = decl;
   symbol->owner = currentType;
   symbol->methodKind = MethodKind::Init;
-  symbol->returnType = table->getBuilt("void");
+  symbol->returnType = table.getBuilt("void");
   auto raw = symbol.get();
 
-  table->addInit(std::move(symbol));
+  table.addInit(std::move(symbol));
 
   decl->methodSymbol = raw;
 
-  ScopeGuard _(*table);
+  ScopeGuard _(table);
 
-  raw->scope = table->getCurrent();
-  table->getCurrent()->scopeKind = Scope::ScopeKind::INIT;
+  raw->scope = table.getCurrent();
+  table.getCurrent()->scopeKind = Scope::ScopeKind::INIT;
   raw->isOverride = decl->isOverride;
 
   for (auto &a : decl->params) {
@@ -651,7 +660,7 @@ void Builder::visit(InitDecl *decl) {
     s->kind = ValueSymbol::Kind::PARAM;
     s->node = a.get();
     auto r = s.get();
-    auto re = table->add(std::move(s));
+    auto re = table.add(std::move(s));
 
     if (!re.success) {
       switch (re.errorType) {
@@ -688,19 +697,19 @@ void Builder::visit(OnDestroyDecl *decl) {
   symbol->decl = decl;
   symbol->owner = currentType;
   symbol->methodKind = MethodKind::OnDestroy;
-  symbol->returnType = table->getBuilt("void");
+  symbol->returnType = table.getBuilt("void");
   auto raw = symbol.get();
 
-  if (!table->addOnDestroy(std::move(symbol))) {
+  if (!table.addOnDestroy(std::move(symbol))) {
     Error::diagnostic(decl->span, "duplicated onDestroy method");
   }
 
   decl->methodSymbol = raw;
 
-  ScopeGuard _(*table);
+  ScopeGuard _(table);
 
-  raw->scope = table->getCurrent();
-  table->getCurrent()->scopeKind = Scope::ScopeKind::ONDESTROY;
+  raw->scope = table.getCurrent();
+  table.getCurrent()->scopeKind = Scope::ScopeKind::ONDESTROY;
 
   decl->body->accept(this);
 }

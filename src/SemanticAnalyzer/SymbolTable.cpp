@@ -60,10 +60,10 @@ SymbolTable::SymbolTable() {
   symbol->kind = TypeSymbol::TypeKind::VOID;
   add(std::move(symbol));
 
-  symbol = make_unique<TypeSymbol>();
-  symbol->name = "func";
-  symbol->kind = TypeSymbol::TypeKind::FUNC;
-  add(std::move(symbol));
+  // symbol = make_unique<TypeSymbol>();
+  // symbol->name = "func";
+  // symbol->kind = TypeSymbol::TypeKind::FUNC;
+  // add(std::move(symbol));
 
   symbol = make_unique<HandleSymbol>();
   symbol->name = "Handle";

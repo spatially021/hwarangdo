@@ -97,7 +97,7 @@ enum class TKind {
   CONTINUE,
   RETURN,
 
-  FUNC,
+  // FUNC,
   VOID,  // void
   FRAME, // frame
   INIT,

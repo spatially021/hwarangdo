@@ -3,6 +3,7 @@
 #include "hrd/Parser.h"
 #include "hrd/Token.h"
 #include "hrd/util/Error.h"
+#include "hrd/util/diagnostic/Diagnostic.h"
 #include <iterator>
 #include <memory>
 #include <stdexcept>
@@ -10,10 +11,18 @@
 bool Parser::isAtEnd() const {
   return current >= tokens.size() || peek().kind == TKind::END;
 }
-const Token &Parser::consume(TKind kind, const string &message) {
+
+const Token &Parser::consume(TKind kind, DiagnosticCode code,
+                             const string &message) {
   if (check(kind))
     return advance();
-  Error::diagnostic(peek(), message);
+  auto dia = engine.makeDiagnostic(code);
+  dia.labels = {
+      {peek().span, message, true},
+  };
+  engine.emit(dia);
+  throw runtime_error("");
+  // Error::diagnostic(peek(), message);
 }
 
 bool Parser::match(std::initializer_list<TKind> kinds) {
@@ -101,9 +110,15 @@ bool Parser::isTypeToken(TKind k) const {
 
 bool Parser::isType() const {
   if (isAccessModifier()) {
-    if (isTypeToken(following().kind))
+    if (isTypeToken(following().kind)) {
       return true;
-    Error::diagnostic(following(), "expected type name after access modifier");
+    }
+    auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_P026);
+    dia.labels = {
+        {peek().span, "expected type name here", true},
+    };
+    engine.emit(dia);
+    throw runtime_error("");
   }
   return isTypeToken(peek().kind);
 }
@@ -117,16 +132,21 @@ bool Parser::isInit() const {
 
 bool Parser::isFunc() const {
   if (isAccessModifier()) {
-    if (isTypeToken(following().kind) || following().kind == TKind::VOID ||
-        following().kind == TKind::FUNC) {
+    if (isTypeToken(following().kind) || following().kind == TKind::VOID
+        /* following().kind == TKind::FUNC */) {
       return following(2).kind == TKind::IDENTIFIER &&
              following(3).kind == TKind::LEFT_PAREN;
     }
-    Error::diagnostic(following(), "expected type name after access modifier");
+    auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_P026);
+    dia.labels = {
+        {peek().span, "expected type name here", true},
+    };
+    engine.emit(dia);
+    throw runtime_error("");
   }
 
-  if (isTypeToken(peek().kind) || peek().kind == TKind::VOID ||
-      peek().kind == TKind::FUNC) {
+  if (isTypeToken(peek().kind) || peek().kind == TKind::VOID /* ||
+      peek().kind == TKind::FUNC */) {
     return following().kind == TKind::IDENTIFIER &&
            following(2).kind == TKind::LEFT_PAREN;
   }
@@ -167,12 +187,13 @@ TypeNode::Ptr Parser::typeNodeConvertor(Token ty, Token size) {
     case TKind::VOID:
       node = make_shared<BuiltinTypeNode>(ty, BuiltinTypeNode::Category::Void);
       break;
-    case TKind::FUNC:
-      node = make_shared<BuiltinTypeNode>(ty, BuiltinTypeNode::Category::FUNC);
-      break;
+      // case TKind::FUNC:
+      //   node = make_shared<BuiltinTypeNode>(ty,
+      //   BuiltinTypeNode::Category::FUNC); break;
 
-    default:
-      Error::diagnostic(ty, "unexpected type name '" + ty.text + "'");
+    default: {
+      Error::internal(ty, "unexpect type kind");
+    }
     }
   }
   return node;
@@ -203,45 +224,78 @@ TypeNode::Ptr Parser::parseType() {
   Token size = {};
 
   if (check(TKind::COLON)) {
-    if (ty.kind == TKind::IDENTIFIER)
-      Error::diagnostic(peek(), "':' is only allowed on built-in types");
+    if (ty.kind == TKind::IDENTIFIER) {
+      auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_P027);
+      dia.labels = {
+          {peek().span, "invalid use of ':'", true},
+      };
+      engine.emit(dia);
+      throw runtime_error("");
+    }
 
     advance(); // :
-    size = consume(TKind::SIZE, "expected type width specifier");
+    size = consume(TKind::SIZE, DiagnosticCode::HRD_P057,
+                   "expected type width specifier after ':'");
     assert(size.text != "");
 
     switch (ty.kind) {
     case TKind::INT:
-      if (!(size.text[0] == 'i' || size.text[0] == 'u'))
-        Error::diagnostic(size,
-                          "type width specifier does not match built-in type");
+      if (!(size.text[0] == 'i' || size.text[0] == 'u')) {
+        auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_P028);
+        dia.labels = {
+            {peek().span, "this type does not support the specified width",
+             true},
+        };
+        engine.emit(dia);
+        throw runtime_error("");
+      }
       break;
     case TKind::FLOAT:
-      if (size.text[0] != 'f')
-        Error::diagnostic(size,
-                          "type width specifier does not match built-in type");
+      if (size.text[0] != 'f') {
+        auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_P028);
+        dia.labels = {
+            {peek().span, "this type does not support the specified width",
+             true},
+        };
+        engine.emit(dia);
+        throw runtime_error("");
+      }
+
       break;
     case TKind::FIXED:
       break;
     case TKind::CHAR:
-      if (size.text[0] != 'c')
-        Error::diagnostic(size,
-                          "type width specifier does not match built-in type");
+      if (size.text[0] != 'c') {
+        auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_P028);
+        dia.labels = {
+            {peek().span, "this type does not support the specified width",
+             true},
+        };
+        engine.emit(dia);
+        throw runtime_error("");
+      }
       break;
     case TKind::STRING:
-      if (size.text[0] != 's')
-        Error::diagnostic(size,
-                          "type width specifier does not match built-in type");
+      if (size.text[0] != 's') {
+        auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_P028);
+        dia.labels = {
+            {peek().span, "this type does not support the specified width",
+             true},
+        };
+        engine.emit(dia);
+        throw runtime_error("");
+      }
       break;
     default:
-      Error::diagnostic(ty, "unexpected type name '" + ty.text + "'");
+      Error::internal(size.span, "unreachable parseType");
     }
   }
   std::vector<std::pair<Token, Expr::Ptr>> dims;
   while (check(TKind::LEFT_BRACKET)) {
     Token bracket = advance();
     Expr::Ptr sizeExpr = expression();
-    consume(TKind::RIGHT_BRACKET, "expected ']' after array size");
+    consume(TKind::RIGHT_BRACKET, DiagnosticCode::HRD_P053,
+            "expected ']' after array size");
     dims.push_back({bracket, std::move(sizeExpr)});
   }
 
@@ -256,29 +310,53 @@ TypeNode::Ptr Parser::parseType() {
 
 void Parser::notFunc(DeclPrefix prefix) {
   if (prefix.isFrame) {
-    Error::diagnostic(previous(),
-                      "'frame' is only allowed on function declarations");
+    auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_P029);
+    dia.labels = {
+        {previous().span, "'frame' is only allowed on function declarations",
+         true},
+    };
+    engine.emit(dia);
+    throw runtime_error("");
   }
 
   if (prefix.isOverride) {
-    Error::diagnostic(previous(),
-                      "'override' is only allowed on function declarations");
+    auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_P030);
+    dia.labels = {
+        {previous().span, "'override' is only allowed on function declarations",
+         true},
+    };
+    engine.emit(dia);
+    throw runtime_error("");
   }
 
   if (prefix.isAsync) {
-    Error::diagnostic(previous(),
-                      "'async' is only allowed on function declarations");
+    auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_P031);
+    dia.labels = {
+        {previous().span, "'async' is only allowed on function declarations",
+         true},
+    };
+    engine.emit(dia);
+    throw runtime_error("");
   }
 }
 
 void Parser::notVar(DeclPrefix prefix) {
-  if (prefix.isConst)
-    Error::diagnostic(previous(),
-                      "'const' is only allowed on variable declarations");
+  if (prefix.isConst) {
+    auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_P015);
+    dia.labels = {
+        {previous().span, "'const' is not allowed on this declaration", true},
+    };
+    engine.emit(dia);
+    throw runtime_error("");
+  }
 
   if (prefix.isRoot) {
-    Error::diagnostic(previous(),
-                      "'root' is only allowed on variable declarations");
+    auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_P016);
+    dia.labels = {
+        {previous().span, "'root' is not allowed on this declaration", true},
+    };
+    engine.emit(dia);
+    throw runtime_error("");
   }
 }
 
@@ -287,13 +365,23 @@ Expr::Ptr Parser::parseCaseValue() {
   Expr::Ptr arg = nullptr;
   if (auto call = dynamic_cast<CallExpr *>(value.get())) {
     if (call->arguments.empty()) {
-      Error::diagnostic(call->span,
-                        "payload case selectors must bind one variable");
+      auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_P032);
+      dia.labels = {
+          {previous().span,
+           "payload case selector must bind exactly one variable", true},
+      };
+      engine.emit(dia);
+      throw runtime_error("");
     }
 
     if (call->arguments.size() != 1) {
-      Error::diagnostic(
-          call->span, "payload case selectors must bind exactly one variable");
+      auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_P032);
+      dia.labels = {
+          {previous().span,
+           "payload case selector must bind exactly one variable", true},
+      };
+      engine.emit(dia);
+      throw runtime_error("");
     }
     arg = call->arguments[0];
   }

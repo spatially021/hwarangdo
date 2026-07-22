@@ -7,7 +7,7 @@
 #include <llvm/IR/Type.h>
 
 void llvmCodegen::buildTypes() {
-  for (auto &t : table->types) {
+  for (auto &t : table.types) {
 
     if (auto p = dynamic_cast<PrimtiveType *>(t)) {
       types.emplace(t, buildPrimitiveType(p));
@@ -75,19 +75,19 @@ void llvmCodegen::buildTypes() {
     }
   }
 
-  for (auto &t : table->types) {
+  for (auto &t : table.types) {
     if (auto arr = dynamic_cast<ArrayTypeSymbol *>(t)) {
       buildArrayType(arr);
     }
   }
 
-  for (auto &t : table->types) {
+  for (auto &t : table.types) {
     if (auto arr = dynamic_cast<ArrayTypeSymbol *>(t)) {
       declareArrayDestroy(arr);
     }
   }
 
-  for (auto &t : table->types) {
+  for (auto &t : table.types) {
 
     if (dynamic_cast<PrimtiveType *>(t)) {
       continue;
@@ -189,7 +189,7 @@ void llvmCodegen::buildTypes() {
     }
   }
 
-  for (auto &t : table->types) {
+  for (auto &t : table.types) {
     if (auto arr = dynamic_cast<ArrayTypeSymbol *>(t)) {
       emitArrayDestroy(arr);
     }

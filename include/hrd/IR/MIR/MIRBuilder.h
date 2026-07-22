@@ -12,6 +12,7 @@
 #include "hrd/SemanticAnalyzer/SymbolTable.h"
 #include "hrd/SemanticAnalyzer/symbol/TypeSymbol.h"
 #include "hrd/SemanticAnalyzer/symbol/ValueSymbol.h"
+#include "hrd/compiler/CompilerContexts.h"
 #include "magic_enum/magic_enum.hpp"
 #include <memory>
 
@@ -65,10 +66,10 @@ class MIRBuilder {
 public:
   HIRProgram *HirProgram = nullptr;
   MIRProgram *program = nullptr;
-  SymbolTable *table = nullptr;
+  SymbolTable &table;
 
-  MIRBuilder(HIRProgram *hp, MIRProgram *mp, SymbolTable *ta)
-      : HirProgram(hp), program(mp), table(ta) {}
+  MIRBuilder(MIRContext &ctx)
+      : HirProgram(ctx.hirProgram), program(ctx.mirProgram), table(ctx.table) {}
 
   void build();
 

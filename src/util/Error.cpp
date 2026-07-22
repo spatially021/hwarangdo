@@ -1,7 +1,6 @@
 #include "hrd/util/Error.h"
 #include "hrd/SourceSpan.h"
 #include "hrd/Token.h"
-#include "hrd/util/Printor.h"
 #include <iostream>
 #include <sstream>
 #include <stdexcept>
@@ -14,44 +13,31 @@
 
 [[noreturn]]
 inline void throwError(const std::string &msg) {
-#if HGM_DEBUG
-  Printor::printStackTrace();
-#endif
   throw std::runtime_error(msg);
 }
-
-[[noreturn]]
-void Error::diagnostic(const Token &token, const std::string &message) {
+[[noreturn]] void Error::diagnostic(const Token &token,
+                                    const std::string &message) {
   diagnostic(token.span, message);
 }
-
-[[noreturn]]
-void Error::diagnostic(const SourceSpan &span, const std::string &message) {
+[[noreturn]] void Error::diagnostic(const SourceSpan &span,
+                                    const std::string &message) {
   std::ostringstream oss;
-
   oss << span.path << ":" << span.lineStart << ":" << span.colStart
       << ": error: " << message;
-
   throwError(oss.str());
 }
-
-[[noreturn]]
-void Error::internal(const std::string &message) {
+[[noreturn]] void Error::internal(const std::string &message) {
   std::cerr << "[internal compiler error]\n";
   std::cerr << message << "\n";
-
   throwError(message);
 }
-[[noreturn]]
-void Error::internal(const Token &token, const std::string &message) {
+[[noreturn]] void Error::internal(const Token &token,
+                                  const std::string &message) {
   internal(token.span, message);
 }
-
 [[noreturn]] void Error::internal(const SourceSpan &span, str message) {
   std::ostringstream oss;
-
   oss << "[internal compiler error]\n" << span.path << " ";
-
   if (span.lineStart == span.lineEnd) {
     if (span.colStart == span.colEnd) {
       // point
@@ -61,34 +47,17 @@ void Error::internal(const Token &token, const std::string &message) {
       oss << span.lineStart << ":" << span.colStart << "-" << span.colEnd;
     }
   } else {
-    // multi-line range
+    // multi - line range
     oss << span.lineStart << ":" << span.colStart << " - " << span.lineEnd
         << ":" << span.colEnd;
   }
-
   oss << ": " << message;
-
   throwError(oss.str());
 }
 
-[[noreturn]]
-void Error::fatal(ErrorCategory category, const std::string &message) {
-  std::cerr << "[fatal";
-
-  if (category == ErrorCategory::Sanitizer)
-    std::cerr << ":asan";
-  else if (category == ErrorCategory::Internal)
-    std::cerr << ":internal";
-
-  std::cerr << "] " << message << "\n";
-
-  throwError(message);
-}
-
 void Error::warn(Token &token, str message) { warn(token.span, message); }
-
 void Error::warn(SourceSpan span, str message) {
   std::cerr << "warning: " << message << "\n";
-  std::cerr << " --> " << span.path << ":" << span.lineStart << ":"
-            << span.colStart << "\n";
+  std::cerr << " -->               " << span.path << " : " << span.lineStart
+            << " : " << span.colStart << "\n";
 }

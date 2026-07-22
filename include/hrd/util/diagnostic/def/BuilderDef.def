@@ -1,0 +1,11 @@
+//============================================================
+// HRD_S001
+//
+// Trigger:
+//   More than one 'Main' class is declared in the program.
+//============================================================
+
+DIAG(HRD_S001,
+     Error,
+     "duplicate 'Main' class declaration",
+     "HRD-S001")

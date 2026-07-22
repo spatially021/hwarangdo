@@ -31,7 +31,7 @@ ValueSymbol *MIRBuilder::makeTemp(TypeSymbol *type) {
   symbol->name =
       "$tmp" + currentFunc->symbol->name + to_string(currentFunc->nextTemp++);
   auto raw = symbol.get();
-  table->addTemp(std::move(symbol));
+  table.addTemp(std::move(symbol));
   return raw;
 }
 

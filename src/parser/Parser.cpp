@@ -3,12 +3,14 @@
 #include "hrd/AST/DeclContext.h"
 #include "hrd/AST/TokenStream.h"
 #include "hrd/Token.h"
+#include "hrd/compiler/CompilerContexts.h"
 #include "hrd/util/Error.h"
 #include <memory>
 
 using ptr = shared_ptr<ASTNode>;
 
-Parser::Parser(const TokenStream &t) : tokens(t.tokens) {}
+Parser::Parser(ParserContext &ctx)
+    : tokens(ctx.tokenStream.tokens), engine(ctx.engine) {}
 
 vector<Decl::Ptr> Parser::parse() {
 
@@ -28,12 +30,29 @@ Decl::Ptr Parser::declaration(DeclContext context) {
 
   ContextGuard _{contexts, context};
 
-  if (isAccessModifier()) {
+  bool checkAceess = false;
+
+  while (isAccessModifier()) {
+    if (checkAceess) {
+      auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_P008);
+      dia.labels = {
+          {peek().span, "an access modifier was already specified", true},
+      };
+      engine.emit(dia);
+      throw runtime_error("");
+    }
     if (context != DeclContext::CLASSBODY) {
-      Error::diagnostic(peek(), "access modifier only allowed field variable");
+      auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_P001);
+      dia.labels = {
+          {peek().span, "only fields may have an access modifier", true},
+      };
+      engine.emit(dia);
+      throw runtime_error("");
     }
     prefix.modi = AModifierConvertor(advance());
+    checkAceess = true;
   }
+
   while (check({
       TKind::CONST,
       TKind::ROOT,
@@ -44,7 +63,12 @@ Decl::Ptr Parser::declaration(DeclContext context) {
     if (check(TKind::CONST)) {
       advance();
       if (prefix.isConst) {
-        Error::diagnostic(peek(), "duplicate 'const' modifier");
+        auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_P002);
+        dia.labels = {
+            {peek().span, "'const' modifier is already specified", true},
+        };
+        engine.emit(dia);
+        throw runtime_error("");
       }
 
       prefix.isConst = true;
@@ -52,7 +76,12 @@ Decl::Ptr Parser::declaration(DeclContext context) {
     if (check(TKind::ROOT)) {
       advance();
       if (prefix.isRoot) {
-        Error::diagnostic(peek(), "duplicate 'root' modifier");
+        auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_P003);
+        dia.labels = {
+            {peek().span, "'root' modifier is already specified", true},
+        };
+        engine.emit(dia);
+        throw runtime_error("");
       }
 
       prefix.isRoot = true;
@@ -60,28 +89,43 @@ Decl::Ptr Parser::declaration(DeclContext context) {
     if (check(TKind::FRAME)) {
       advance();
       if (prefix.isFrame) {
-        Error::diagnostic(peek(), "duplicate 'frame' modifier");
+        auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_P004);
+        dia.labels = {
+            {peek().span, "'frame' modifier is already specified", true},
+        };
+        engine.emit(dia);
+        throw runtime_error("");
       }
       prefix.isFrame = true;
     }
     if (check(TKind::OVERRIDE)) {
       advance();
       if (prefix.isOverride) {
-        Error::diagnostic(peek(), "duplicate 'override' modifier");
+        auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_P005);
+        dia.labels = {
+            {peek().span, "'override' modifier is already specified", true},
+        };
+        engine.emit(dia);
+        throw runtime_error("");
       }
       prefix.isOverride = true;
     }
     if (check(TKind::ASYNC)) {
       advance();
       if (prefix.isAsync) {
-        Error::diagnostic(peek(), "duplicated 'async' modifier");
+        auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_P006);
+        dia.labels = {
+            {peek().span, "'async' modifier is already specified", true},
+        };
+        engine.emit(dia);
+        throw runtime_error("");
       }
       prefix.isAsync = true;
     }
   }
-  if (check(TKind::FUNC)) {
-    return functionDecl(prefix, true);
-  }
+  // if (check(TKind::FUNC)) {
+  //   return functionDecl(prefix, true);
+  // }
 
   if (check(TKind::VOID)) {
     return functionDecl(prefix);
@@ -128,7 +172,12 @@ Decl::Ptr Parser::declaration(DeclContext context) {
     return enumDecl(prefix);
   }
 
-  Error::diagnostic(peek(), "only declarations are allowed at top level");
+  auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_P007);
+  dia.labels = {
+      {peek().span, "expected a declaration here", true},
+  };
+  engine.emit(dia);
+  throw runtime_error("");
 }
 
 Stmt::Ptr Parser::statement() {
@@ -184,8 +233,8 @@ Stmt::Ptr Parser::statement() {
   case TKind::TRY:
     return tryStmt();
 
-  case TKind::ONEXIT:
-    return onexitStmt();
+    // case TKind::ONEXIT:
+    //   return onexitStmt();
 
   case TKind::THROW:
     return throwStmt();

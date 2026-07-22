@@ -269,7 +269,7 @@ void HIRBuilder::visit(EnumDecl *) {
   // linker 2-pass에서 처리
 }
 void HIRBuilder::visit(ImplDecl *decl) {
-  auto typeSymbol = table->getType(decl->target);
+  auto typeSymbol = table.getType(decl->target);
   if (typeSymbol == nullptr) {
     Error::internal(decl->span, "fail to find impl target symbol");
   }

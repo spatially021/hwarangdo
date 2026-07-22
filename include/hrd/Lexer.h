@@ -2,14 +2,15 @@
 #include "AST/TokenStream.h"
 #include "Inputs.h"
 #include "Token.h"
+#include "hrd/compiler/CompilerContexts.h"
+#include "hrd/util/diagnostic/DiagnosticEngine.h"
 #include <string>
 #include <unordered_map>
-#include <vector>
 
 using namespace std;
 
 struct Lexer {
-  explicit Lexer(InputSource inputs);
+  explicit Lexer(LexerContext &context);
   Token next();
   vector<Token> tokenized;
 
@@ -25,6 +26,7 @@ protected:
   bool isIdentRest(char c);
   bool isNumber(char c);
   InputSource input;
+  DiagnosticEngine &engine;
   size_t i = 0;
   int line, col;
   string src;
@@ -49,7 +51,7 @@ protected:
       {"break", TKind::BREAK},
       {"continue", TKind::CONTINUE},
       {"return", TKind::RETURN},
-      {"func", TKind::FUNC},
+      // {"func", TKind::FUNC},
       {"void", TKind::VOID},
       {"class", TKind::CLASS},
       {"struct", TKind::STRUCT},

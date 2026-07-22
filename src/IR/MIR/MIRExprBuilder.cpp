@@ -162,7 +162,7 @@ unique_ptr<MIRValue> MIRBuilder::lowerMatch(HIRMatchExpr *expr) {
 unique_ptr<MIRValue> MIRBuilder::lowerLiteral(HIRLiteralExpr *expr) {
   auto temp =
       make_unique<MIRLiteralExpr>(expr->resolvedLit, expr->type->typeSymbol);
-  if (table->isString(expr->type->typeSymbol)) {
+  if (table.isString(expr->type->typeSymbol)) {
     temp->valueCategory = MIRValueCategory::Borrowed;
   }
   return temp;
@@ -171,7 +171,7 @@ unique_ptr<MIRValue> MIRBuilder::lowerLiteral(HIRLiteralExpr *expr) {
 unique_ptr<MIRValue> MIRBuilder::lowerLoad(HIRLoadExpr *expr) {
   auto temp = make_unique<MIRLoad>(lowerPlace(expr->place.get()),
                                    expr->type->typeSymbol);
-  if (table->isString(expr->type->typeSymbol)) {
+  if (table.isString(expr->type->typeSymbol)) {
     temp->valueCategory = MIRValueCategory::Borrowed;
   }
   return temp;
@@ -186,7 +186,7 @@ unique_ptr<MIRValue> MIRBuilder::lowerBinary(HIRBinaryExpr *expr) {
   auto temp = make_unique<MIRBinaryExpr>(lowerExpr(expr->left.get()),
                                          lowerExpr(expr->right.get()), expr->op,
                                          expr->type->typeSymbol, expr->operand);
-  if (table->isString(expr->type->typeSymbol)) {
+  if (table.isString(expr->type->typeSymbol)) {
     temp->valueCategory = MIRValueCategory::OwnedTemp;
   }
   return temp;

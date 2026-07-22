@@ -5,9 +5,11 @@
 #include "AST/DeclContext.h"
 #include "AST/Expr.h"
 #include "AST/Stmt.h"
-#include "AST/TokenStream.h"
 #include "Token.h"
 #include "enums/AccessModifier.h"
+#include "hrd/compiler/CompilerContexts.h"
+#include "hrd/util/diagnostic/Diagnostic.h"
+#include "hrd/util/diagnostic/DiagnosticEngine.h"
 #include <cassert>
 #include <cstddef>
 #include <memory>
@@ -49,13 +51,14 @@ struct DeclPrefix {
 
 class Parser {
 public:
-  explicit Parser(const TokenStream &tokens);
+  explicit Parser(ParserContext &context);
   vector<Stmt::Ptr> statements;
   vector<Decl::Ptr> parse();
   vector<DeclContext> contexts;
 
 private:
   const std::vector<Token> &tokens;
+  DiagnosticEngine &engine;
   size_t current = 0;
 
   // 문장 단위
@@ -119,7 +122,8 @@ private:
   const Token &previous() const;
   const Token &following(size_t step = 1) const;
   bool isAtEnd() const;
-  const Token &consume(TKind kind, const std::string &message);
+  const Token &consume(TKind kind, DiagnosticCode code,
+                       const std::string &message);
   bool isFunc() const;
   bool isInit() const;
   bool isType() const;

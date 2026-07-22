@@ -33,7 +33,7 @@ unique_ptr<HIRSource> HIRLinker::link() {
       }
     }
     if (auto *i = dynamic_cast<ImplDecl *>(d.get())) {
-      auto symbol = table->getType(i->target);
+      auto symbol = table.getType(i->target);
       auto it = program->typeDeclMap.find(symbol);
       if (it == program->typeDeclMap.end()) {
         Error::internal(i->span, "fail to find impl target type");

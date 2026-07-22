@@ -4,13 +4,14 @@
 #include "hrd/IR/HIR/HIRExpr.h"
 #include "hrd/IR/HIR/HIRProgram.h"
 #include "hrd/IR/HIR/HIRStmt.h"
+#include "hrd/compiler/CompilerContexts.h"
 #include "hrd/util/Error.h"
 
 #include <cassert>
 #include <utility>
 
-HIRBuilder::HIRBuilder(SymbolTable *t, HIRProgram *p, HIRSource *s)
-    : program(p), source(s), table(t) {}
+HIRBuilder::HIRBuilder(HIRContext &ctx, HIRSource *s)
+    : program(ctx.program), source(s), table(ctx.table) {}
 
 void HIRBuilder::build() {
   for (auto &d : source->source->decls) {

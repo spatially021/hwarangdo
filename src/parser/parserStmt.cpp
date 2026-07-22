@@ -5,6 +5,7 @@
 #include "hrd/SourceSpan.h"
 #include "hrd/Token.h"
 #include "hrd/util/Error.h"
+#include "hrd/util/diagnostic/Diagnostic.h"
 #include <memory>
 #include <optional>
 
@@ -14,7 +15,8 @@ using namespace std;
 Ptr Parser::expressionStmt() {
   Token t = peek();
   Expr::Ptr expr = expression();
-  consume(TKind::SEMICOLON, "expected ';' after expression statement");
+  consume(TKind::SEMICOLON, DiagnosticCode::HRD_P044,
+          "expected ';' after expression");
   return make_shared<ExprStmt>(makeSpan(t.span, expr->span), expr);
 }
 
@@ -27,11 +29,13 @@ Ptr Parser::declStmt() {
 Ptr Parser::ifStmt() {
   Token t = peek();
   advance(); // if처리
-  consume(TKind::LEFT_PAREN, "expected '(' after 'if'");
+  consume(TKind::LEFT_PAREN, DiagnosticCode::HRD_P046,
+          "expected '(' after 'if'");
 
   Expr::Ptr condition = expression();
 
-  consume(TKind::RIGHT_PAREN, "expected ')' after condition");
+  consume(TKind::RIGHT_PAREN, DiagnosticCode::HRD_P047,
+          "expected ')' to close condition");
 
   Ptr thenBranch = bodyStmt();
   Ptr elseBranch = nullptr;
@@ -52,8 +56,9 @@ Ptr Parser::blockStmt() {
     s.push_back(statement());
   }
 
-  consume(TKind::RIGHT_BRACE, "expected '}' at end of block");
-  auto end = previous();
+  consume(TKind::RIGHT_BRACE, DiagnosticCode::HRD_P040,
+          "expected '}' at end of block");
+  auto end = peek();
   return make_shared<BlockStmt>(makeSpan(t, end), s);
 }
 
@@ -69,7 +74,8 @@ Ptr Parser::bodyStmt() {
 Ptr Parser::forStmt() {
   Token t = peek();
   advance(); // for 처리
-  consume(TKind::LEFT_PAREN, "expected '(' after 'for'");
+  consume(TKind::LEFT_PAREN, DiagnosticCode::HRD_P046,
+          "expected '(' after 'for'");
 
   Ptr init = declStmt();
   auto decl = dynamic_pointer_cast<DeclStmt>(init);
@@ -82,19 +88,25 @@ Ptr Parser::forStmt() {
   }
 
   if (var->init != nullptr) {
-    Error::diagnostic(
-        t, "for-loop variable declarations cannot have initializers");
+    auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_P036);
+    dia.labels = {
+        {peek().span, "initializer is not allowed here", true},
+    };
+    engine.emit(dia);
+    throw runtime_error("");
   }
 
   Expr::Ptr from = expression();
-  consume(TKind::DOUBLE_DOT, "expected '..' in range expression");
+  consume(TKind::DOUBLE_DOT, DiagnosticCode::HRD_P055,
+          "expected '..' between range bounds");
   Expr::Ptr to = expression();
   Expr::Ptr step = nullptr;
   if (check(TKind::BY)) {
     advance(); // advance by
     step = expression();
   }
-  consume(TKind::RIGHT_PAREN, "expected ')' after for statement");
+  consume(TKind::RIGHT_PAREN, DiagnosticCode::HRD_P047,
+          "expected ')' to close condition");
   shared_ptr<Range> range =
       make_shared<Range>(makeSpan(from->span, to->span), from, to, step);
   Ptr body = bodyStmt();
@@ -104,11 +116,13 @@ Ptr Parser::forStmt() {
 Ptr Parser::whileStmt() {
   Token t = peek();
   advance(); // while처리
-  consume(TKind::LEFT_PAREN, "expected '(' after 'while'");
+  consume(TKind::LEFT_PAREN, DiagnosticCode::HRD_P046,
+          "expected '(' after 'while'");
 
   Expr::Ptr conditon = expression();
 
-  consume(TKind::RIGHT_PAREN, "expected ')' after condition");
+  consume(TKind::RIGHT_PAREN, DiagnosticCode::HRD_P047,
+          "expected ')' to close condition");
   Ptr body = bodyStmt();
   return make_shared<WhileStmt>(makeSpan(t.span, body->span), conditon, body);
 }
@@ -116,12 +130,15 @@ Ptr Parser::whileStmt() {
 Ptr Parser::switchStmt() {
   Token t = peek();
   advance(); // switch처리
-  consume(TKind::LEFT_PAREN, "expected '(' after 'switch'");
+  consume(TKind::LEFT_PAREN, DiagnosticCode::HRD_P046,
+          "expected '(' after 'switch'");
 
   Expr::Ptr value = expression();
 
-  consume(TKind::RIGHT_PAREN, "expected ')' after switch expression");
-  consume(TKind::LEFT_BRACE, "expected '{' before switch body");
+  consume(TKind::RIGHT_PAREN, DiagnosticCode::HRD_P047,
+          "expected ')' to close condition");
+  consume(TKind::LEFT_BRACE, DiagnosticCode::HRD_P043,
+          "expected '{' begin switch body");
 
   vector<shared_ptr<Case>> cases;
 
@@ -130,8 +147,9 @@ Ptr Parser::switchStmt() {
     cases.push_back(c);
   }
 
-  consume(TKind::RIGHT_BRACE, "expected '}' after switch body");
-  auto end = previous();
+  consume(TKind::RIGHT_BRACE, DiagnosticCode::HRD_P040,
+          "expected '}' after switch body");
+  auto end = peek();
   return make_shared<SwitchStmt>(makeSpan(t, end), value, cases);
 }
 
@@ -148,42 +166,66 @@ shared_ptr<Case> Parser::caseStmt(bool isSwtich) {
       }
       values.push_back(temp);
       if (check(TKind::COMMA)) {
-        if (check(TKind::EQAUL_AGNLEBUCKET, 1))
-          Error::diagnostic(following(), "expected case selector after ','");
-        else
+        if (check(TKind::EQAUL_AGNLEBUCKET, 1)) {
+          auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_P037);
+          dia.labels = {
+              {peek().span, "expected case selector after ','", true},
+          };
+          engine.emit(dia);
+          throw runtime_error("");
+        } else
           advance(); //,처리
       }
     }
-    consume(TKind::EQAUL_AGNLEBUCKET, "expected '=>' after case selector");
+    consume(TKind::EQAUL_AGNLEBUCKET, DiagnosticCode::HRD_P056,
+            "expected '=>' after case selector");
     Ptr body;
     if (check(TKind::LEFT_BRACE)) {
       body = bodyStmt();
-    } else
-      Error::diagnostic(peek(), "expected '{' after '=>'");
+    } else {
+      consume(TKind::LEFT_BRACE, DiagnosticCode::HRD_P043,
+              "expect '{' begin case body");
+    }
+    // Error::diagnostic(peek(), "expected '{' after '=>'");
 
-    auto end = previous();
+    auto end = peek();
     return make_shared<Case>(makeSpan(tok, end), values, body);
   } else if (check(TKind::DEFAULT)) {
     if (!isSwtich) {
       Error::diagnostic(tok, "'default' is not allowed in match expressions");
     }
     advance(); // default 처리
-    consume(TKind::EQAUL_AGNLEBUCKET, "expected '=>' after 'default'");
+    consume(TKind::EQAUL_AGNLEBUCKET, DiagnosticCode::HRD_P056,
+            "expected '=>' after default");
     vector<Expr::Ptr> values;
     Ptr body;
     if (check(TKind::LEFT_BRACE))
       body = bodyStmt();
-    else
-      Error::diagnostic(peek(), "expected '{' after '=>'");
+    else {
+      consume(TKind::LEFT_BRACE, DiagnosticCode::HRD_P043,
+              "expect '{' begin case body");
+    }
+
     return make_shared<Case>(makeSpan(tok.span, body->span), values, body,
                              true);
   } else {
     if (isSwtich) {
-      Error::diagnostic(peek(), "only 'case' and 'default' declarations are "
-                                "allowed in switch bodies");
+      auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_P038);
+      dia.labels = {
+          {peek().span,
+           "only 'case' and 'default' declarations are allowed here", true},
+      };
+      engine.emit(dia);
+      throw runtime_error("");
     } else {
-      Error::diagnostic(peek(), "only 'case' declarations and wildcard "
-                                "selectors are allowed in match expressions");
+      auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_P038);
+      dia.labels = {
+          {peek().span,
+           "only 'case' declarations and wildcard selectors are allowed here",
+           true},
+      };
+      engine.emit(dia);
+      throw runtime_error("");
     }
   }
 }
@@ -196,8 +238,9 @@ Ptr Parser::returnStmt() {
     expr = nullptr;
   else
     expr = expression();
-  consume(TKind::SEMICOLON, "expected ';' after return statement");
-  auto end = previous();
+  consume(TKind::SEMICOLON, DiagnosticCode::HRD_P044,
+          "expected ';' after return statement");
+  auto end = peek();
   return make_shared<ReturnStmt>(makeSpan(t, end), expr);
 }
 
@@ -205,8 +248,9 @@ Ptr Parser::valueTransferStmt() {
   Token t = peek();
   advance(); //<<처리
   Expr::Ptr expr = expression();
-  consume(TKind::SEMICOLON, "expected ';' after value transfer statement");
-  auto end = previous();
+  consume(TKind::SEMICOLON, DiagnosticCode::HRD_P044,
+          "expected ';' after value trasfer statement");
+  auto end = peek();
   return make_shared<ValueTransferStmt>(makeSpan(t, end), expr);
 }
 
@@ -217,37 +261,38 @@ Ptr Parser::tryStmt() {
   vector<shared_ptr<CatchClause>> catches;
   while (check(TKind::CATCH))
     catches.push_back(dynamic_pointer_cast<CatchClause>(catchStmt()));
-  auto end = previous();
+  auto end = peek();
   return make_shared<TryCatchStmt>(makeSpan(t, end), body, catches);
 }
 
 Ptr Parser::catchStmt() {
   Token t = peek();
   advance(); // catch 처리
-  consume(TKind::LEFT_BRACE, "expected '(' after 'catch'");
+  consume(TKind::LEFT_PAREN, DiagnosticCode::HRD_P046,
+          "expected '(' after 'catch'");
 
-  Token errorType = consume(TKind::IDENTIFIER, "expected error type after '('");
+  auto type = parseType();
   optional<string> name = nullopt;
   if (!check(TKind::RIGHT_BRACE))
-    name =
-        consume(TKind::IDENTIFIER, "expected error identifier after error type")
-            .text;
+    name = consume(TKind::IDENTIFIER, DiagnosticCode::HRD_P045,
+                   "expected error variable name after type")
+               .text;
 
-  consume(TKind::RIGHT_BRACE, "expected ')' after catch parameter");
+  consume(TKind::RIGHT_PAREN, DiagnosticCode::HRD_P047,
+          "expected ')' to close arugment list");
   Ptr body = bodyStmt();
 
-  TypeNode::Ptr type = typeNodeConvertor(errorType);
-  auto end = previous();
+  auto end = peek();
   return make_shared<CatchClause>(makeSpan(t, end), type, name, body);
 }
 
-Ptr Parser::onexitStmt() {
-  Token t = peek();
-  advance(); // onexit 처리
-  consume(TKind::LEFT_BRACE, "expected '{' after 'onexit'");
-  Ptr body = blockStmt();
-  return make_shared<OnexitStmt>(makeSpan(t.span, body->span), body);
-}
+// Ptr Parser::onexitStmt() {
+//   Token t = peek();
+//   advance(); // onexit 처리
+//   consume(TKind::LEFT_BRACE, "expected '{' after 'onexit'");
+//   Ptr body = blockStmt();
+//   return make_shared<OnexitStmt>(makeSpan(t.span, body->span), body);
+// }
 
 Ptr Parser::throwStmt() {
   Token t = peek();

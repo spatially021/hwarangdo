@@ -114,7 +114,7 @@ LoweredValue llvmCodegen::lowerBinaryExpr(MIRBinaryExpr *expr,
                  isFloat(expr->type);
 
   LoweredValue rhs = {
-      usePowi ? castTo(rawRhs.value, expr->rhs->type, table->getBuilt("i32"))
+      usePowi ? castTo(rawRhs.value, expr->rhs->type, table.getBuilt("i32"))
               : castTo(rawRhs.value, expr->rhs->type, type),
       rawRhs.addr, rawRhs.category};
   switch (expr->op) {

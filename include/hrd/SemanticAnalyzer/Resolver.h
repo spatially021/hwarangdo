@@ -4,6 +4,7 @@
 #include "hrd/AST/ASTNode.h"
 #include "hrd/AST/Expr.h"
 #include "hrd/AST/Visitor.h"
+#include "hrd/Recover/ResolverRecover.h"
 #include "hrd/SemanticAnalyzer/ResolvedLit.h"
 #include "hrd/SemanticAnalyzer/Scope.h"
 #include "hrd/SemanticAnalyzer/symbol/MethodSymbol.h"
@@ -11,7 +12,9 @@
 #include "hrd/SemanticAnalyzer/symbol/TypeSymbol.h"
 #include "hrd/SemanticAnalyzer/symbol/ValueSymbol.h"
 #include "hrd/SourceSpan.h"
+#include "hrd/compiler/CompilerContexts.h"
 #include "hrd/util/Error.h"
+#include "hrd/util/diagnostic/DiagnosticEngine.h"
 #include <cassert>
 #include <cstddef>
 
@@ -57,13 +60,15 @@ class Resolver : public ASTVisitor {
   using str = string const &;
 
 public:
-  SymbolTable *table = nullptr;
+  SymbolTable &table;
   TypeSymbol *currentType = nullptr;
   MethodSymbol *currentMethod = nullptr;
   ASTNode *currentSwitch = nullptr;
   Case *currentCase = nullptr;
+  DiagnosticEngine &engine;
+  ResolverRecover recover;
 
-  Resolver(SymbolTable *table);
+  Resolver(ResolverContext &context);
 #define AST_NODE(T) void visit(T *node) override;
 #include "../AST/ASTNodeList.def"
 #undef AST_NODE
@@ -199,8 +204,8 @@ private:
 
   inline bool isLit(Expr::Ptr expr) {
     auto t = expr->resolvedType;
-    return table->isInt(t) || table->isFloat(t) || table->isBool(t) ||
-           table->isFixed(t) || table->isString(t) || table->isChar(t);
+    return table.isInt(t) || table.isFloat(t) || table.isBool(t) ||
+           table.isFixed(t) || table.isString(t) || table.isChar(t);
   }
 
   ValueSymbol *lookupEnumVariant(TypeSymbol *enumType, const string &name,

@@ -1,17 +1,19 @@
 #include "hrd/Lexer.h"
 #include "hrd/AST/TokenStream.h"
+#include "hrd/Recover/LexerRecover.h"
 #include "hrd/Token.h"
 #include "hrd/compiler/CompilerContexts.h"
 #include "hrd/util/Error.h"
 #include "hrd/util/diagnostic/Diagnostic.h"
 #include <cctype>
-#include <stdexcept>
 #include <sys/types.h>
+#include <utility>
 #include <vector>
 
 using namespace std;
 
-Lexer::Lexer(LexerContext &ctx) : input(ctx.source), engine(ctx.engine) {}
+Lexer::Lexer(LexerContext &ctx)
+    : recover(*this), input(ctx.source), engine(ctx.engine) {}
 
 TokenStream Lexer::lexing() {
 
@@ -27,7 +29,7 @@ TokenStream Lexer::lexing() {
     if (t.kind != TKind::EMPTY)
       tokenized.push_back(t);
   }
-  return {path, tokenized};
+  return {path, tokenized, {}};
 }
 
 char Lexer::get() {
@@ -326,9 +328,7 @@ Token Lexer::scan() {
           {{path, tempL, tempC, line, col}, "missing closing '\"'", true},
       };
       engine.emit(dia);
-      // Error::diagnostic({path, tempL, tempC, line, col},
-      //                   "unterminated string literal");
-      throw runtime_error("");
+      recover.recover();
     }
 
     get(); // closing "
@@ -339,8 +339,9 @@ Token Lexer::scan() {
   if (c == '\'') {
     string ch;
     get(); // opening '
-    char val = get();
+    char val = peek();
     if (val == '\\') { // escape
+      get();           // \처리
       char esc = get();
       if (!isEscapeChar(esc)) {
         auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_L002);
@@ -348,13 +349,12 @@ Token Lexer::scan() {
             {{path, tempL, tempC, line, col}, "invalid escape sequence", true},
         };
         engine.emit(dia);
-        throw runtime_error("");
-        // Error::diagnostic({path, tempL, tempC, line, col},
-        //                   "invalid escape sequence in character literal");
+        recover.recover();
       }
       ch = string("\\") + esc;
     } else {
-      ch = string(1, val);
+      auto scalar = consumeUtf8Scalar();
+      ch = std::move(scalar.bytes);
     }
     if (peek() != '\'') {
       auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_L003);
@@ -362,9 +362,7 @@ Token Lexer::scan() {
           {{path, tempL, tempC, line, col}, "missing closing '\''", true},
       };
       engine.emit(dia);
-      throw runtime_error("");
-      // Error::diagnostic({path, tempL, tempC, line, col},
-      //                   "unterminated character literal");
+      recover.recover();
     }
     get(); // closing '
     return {TKind::LIT_CHARACTER, ch, {path, tempL, tempC, line, col}};
@@ -383,10 +381,41 @@ Token Lexer::scan() {
       if (peek(1) == '.') {
         return {TKind::LIT_INT, str, {path, tempL, tempC, line, col}};
       }
+
       str.push_back(get());
       isReal = true;
+      if (!isNumber(peek())) {
+        auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_L006);
+        dia.labels = {{{path, tempL, tempC, line, col},
+                       "expected digit after decimal point",
+                       true}};
+        engine.emit(dia);
+        recover.recover();
+      }
+
       while (isNumber(peek()))
         str.push_back(get());
+    }
+
+    if (peek() == 'e' || peek() == 'E') {
+      str.push_back(get());
+
+      if (peek() == '+' || peek() == '-')
+        str.push_back(get());
+
+      if (!isNumber(peek())) {
+        auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_L006);
+        dia.labels = {{{path, tempL, tempC, line, col},
+                       "expected digit in exponent",
+                       true}};
+        engine.emit(dia);
+        recover.recover();
+      }
+
+      while (isNumber(peek()))
+        str.push_back(get());
+
+      isReal = true;
     }
 
     if (peek() == 'e' || peek() == 'E') {
@@ -411,9 +440,8 @@ Token Lexer::scan() {
       {{path, tempL, tempC, line, col}, "character is not recognized", true},
   };
   engine.emit(dia);
-  throw runtime_error("");
-  // Error::diagnostic({path, tempL, tempC, line, col},
-  //                   "unexpected character '" + string(1, c) + "'");
+  recover.recover();
+  return {};
 }
 
 bool Lexer::isEscapeChar(char c) {
@@ -433,4 +461,123 @@ bool Lexer::isEscapeChar(char c) {
   default:
     return false;
   }
+}
+
+Utf8Scalar Lexer::consumeUtf8Scalar() {
+  const auto startLine = line;
+  const auto startColumn = col;
+
+  if (peek() == '\0') {
+    auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_L005);
+    dia.labels = {
+        {{path, startLine, startColumn, line, col},
+         "expected Unicode scalar value",
+         true},
+    };
+    engine.emit(dia);
+    recover.recover();
+  }
+
+  const auto first = static_cast<unsigned char>(peek());
+
+  std::size_t length = 0;
+  char32_t value = 0;
+  char32_t minimumValue = 0;
+
+  if (first <= 0x7F) {
+    length = 1;
+    value = first;
+    minimumValue = 0;
+  } else if ((first & 0xE0) == 0xC0) {
+    length = 2;
+    value = first & 0x1F;
+    minimumValue = 0x80;
+  } else if ((first & 0xF0) == 0xE0) {
+    length = 3;
+    value = first & 0x0F;
+    minimumValue = 0x800;
+  } else if ((first & 0xF8) == 0xF0) {
+    length = 4;
+    value = first & 0x07;
+    minimumValue = 0x10000;
+  } else {
+    auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_L005);
+    dia.labels = {
+        {{path, startLine, startColumn, line, col},
+         "invalid UTF-8 leading byte",
+         true},
+    };
+    engine.emit(dia);
+    recover.recover();
+  }
+  std::string bytes;
+  bytes.reserve(length);
+  bytes.push_back(get());
+
+  for (std::size_t ii = 1; ii < length; ++ii) {
+    if (peek() == '\0') {
+      auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_L005);
+      dia.labels = {
+          {{path, startLine, startColumn, line, col},
+           "incomplete UTF-8 sequence",
+           true},
+      };
+      engine.emit(dia);
+      recover.recover();
+    }
+
+    const auto byte = static_cast<unsigned char>(peek());
+
+    if ((byte & 0xC0) != 0x80) {
+      auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_L005);
+      dia.labels = {
+          {{path, startLine, startColumn, line, col},
+           "expected UTF-8 continuation byte",
+           true},
+      };
+      engine.emit(dia);
+      recover.recover();
+    }
+
+    bytes.push_back(get());
+    value = (value << 6) | (byte & 0x3F);
+  }
+
+  if (value < minimumValue) {
+    auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_L005);
+    dia.labels = {
+        {{path, startLine, startColumn, line, col},
+         "overlong UTF-8 encoding",
+         true},
+    };
+    engine.emit(dia);
+    recover.recover();
+  }
+
+  if (value >= 0xD800 && value <= 0xDFFF) {
+    auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_L005);
+    dia.labels = {
+        {{path, startLine, startColumn, line, col},
+         "surrogate code point is not a Unicode scalar value",
+         true},
+    };
+    engine.emit(dia);
+    recover.recover();
+  }
+
+  if (value > 0x10FFFF) {
+    auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_L005);
+    dia.labels = {
+        {{path, startLine, startColumn, line, col},
+         "code point is outside the Unicode range",
+         true},
+    };
+    engine.emit(dia);
+    recover.recover();
+  }
+
+  return {
+      value,
+      std::move(bytes),
+  };
 }

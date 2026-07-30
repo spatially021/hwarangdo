@@ -1,6 +1,7 @@
 #include "hrd/SemanticAnalyzer/symbol/TypeSymbol.h"
 #include "hrd/SemanticAnalyzer/Scope.h"
 #include "hrd/SemanticAnalyzer/symbol/MethodSymbol.h"
+#include "hrd/SourceSpan.h"
 #include <vector>
 
 TypeSymbol::TypeSymbol() {
@@ -11,13 +12,13 @@ TypeSymbol::TypeSymbol() {
 }
 TypeSymbol::~TypeSymbol() = default;
 
-bool TypeSymbol::addMethod(MethodSymbol *symbol) {
+pair<bool, SourceSpan> TypeSymbol::addMethod(MethodSymbol *symbol) {
   auto &bucket = memberScope->methodMap[symbol->name];
-  if (Helper::hasSameSig(bucket, symbol)) {
-    return false;
+  if (auto [result, span] = Helper::hasSameSig(bucket, symbol); result) {
+    return {false, span};
   }
   bucket.push_back(symbol);
-  return true;
+  return {true, {}};
 }
 
 MainSymbol::MainSymbol() {

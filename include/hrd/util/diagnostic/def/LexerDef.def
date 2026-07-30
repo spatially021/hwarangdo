@@ -43,4 +43,27 @@ DIAG(HRD_L004,
      Error,
      "invalid character",
      "HRD-L004")
-     
+
+//============================================================
+// HRD_L005
+//
+// Trigger:
+//   A Unicode scalar value is expected, but the input does
+//   not contain a valid Unicode scalar value.
+//============================================================
+DIAG(HRD_L005,
+     Error,
+     "invalid Unicode scalar value",
+     "HRD-L005")
+
+//============================================================
+// HRD_L006
+//
+// Trigger:
+//   A floating-point literal does not conform to the required
+//   fractional or exponent syntax.
+//============================================================
+DIAG(HRD_L006,
+     Error,
+     "invalid floating-point literal",
+     "HRD-L006")

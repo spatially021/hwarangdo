@@ -8,6 +8,7 @@
 #include "hrd/SemanticAnalyzer/symbol/MethodSymbol.h"
 #include "hrd/SemanticAnalyzer/symbol/TypeSymbol.h"
 #include "hrd/SemanticAnalyzer/symbol/ValueSymbol.h"
+#include "hrd/compiler/CompilerContexts.h"
 #include "hrd/util/Error.h"
 #include "hrd/util/Guard.h"
 #include "hrd/util/TypeResolver.h"
@@ -16,7 +17,8 @@
 #include <utility>
 #include <vector>
 
-Linker::Linker(SymbolTable *t) : table(t) {}
+Linker::Linker(LinkerContext &ctx)
+    : table(ctx.table), engine(ctx.engine), recover(*this) {}
 
 void Linker::visit(LiteralExpr *) {}
 void Linker::visit(BinaryExpr *expr) {
@@ -81,7 +83,7 @@ void Linker::visit(CaseValueExpr *expr) {
   }
 }
 void Linker::visit(MatchExpr *expr) {
-  ScopeGuard _(*table, expr->blockScope);
+  ScopeGuard _(table, expr->blockScope);
   expr->value->accept(this);
   for (auto &c : expr->cases) {
     c->accept(this);
@@ -90,7 +92,7 @@ void Linker::visit(MatchExpr *expr) {
 // Statement Linker::visitor methods
 void Linker::visit(ExprStmt *stmt) { stmt->expr->accept(this); }
 void Linker::visit(BlockStmt *stmt) {
-  ScopeGuard _(*table, stmt->blockScope);
+  ScopeGuard _(table, stmt->blockScope);
   for (auto s : stmt->statements) {
     s->accept(this);
   }
@@ -102,14 +104,14 @@ void Linker::visit(IfStmt *stmt) {
   }
 }
 void Linker::visit(ForStmt *stmt) {
-  ScopeGuard _(*table, stmt->blockScope);
+  ScopeGuard _(table, stmt->blockScope);
   stmt->initializer->accept(this);
   stmt->range->accept(this);
   stmt->body->accept(this);
 }
 void Linker::visit(WhileStmt *stmt) { stmt->body->accept(this); }
 void Linker::visit(SwitchStmt *stmt) {
-  ScopeGuard _(*table, stmt->blockScope);
+  ScopeGuard _(table, stmt->blockScope);
   for (auto &c : stmt->clauses) {
     c->accept(this);
   }
@@ -133,55 +135,114 @@ void Linker::visit(ClassDecl *decl) {
     auto symbol = static_cast<MainSymbol *>(decl->symbol);
     auto &bucket = symbol->memberScope->methodMap["update"];
     if (bucket.size() == 0) {
-      Error::diagnostic(decl->span, "missing required 'update' method");
+      auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S009);
+      dia.labels = {
+          {decl->span, "the 'Main' class must declare an 'update' frame method",
+           true},
+      };
+      engine.emit(dia);
+      recover.recover();
     } else if (bucket.size() > 1) {
-      Error::diagnostic(decl->span, "'update' methods cannot be overloaded");
+      auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S002);
+      dia.labels = {
+          {decl->span, "duplicate 'update' method", true},
+          {table.getType(decl->name)->decl->span,
+           "previous 'update' method declared here", false},
+      };
+      engine.emit(dia);
+      recover.recover();
     }
     symbol->update = bucket[0];
 
     bucket = symbol->memberScope->inits;
     if (bucket.size() > 1) {
-      Error::diagnostic(decl->span, "Main's init not allowed overload");
+      auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S010);
+      dia.labels = {
+          {decl->span, "duplicate 'Main' init method", true},
+          {bucket[0]->decl->span, "previous 'Main' init method declared here",
+           false},
+      };
+      engine.emit(dia);
+      recover.recover();
     }
 
     if (bucket.size() == 1) {
       auto init = bucket[0];
       if (!init->params.empty()) {
-        Error::diagnostic(init->decl->span,
-                          "Main;s init not allowed parameter");
+        auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S011);
+        dia.labels = {
+            {decl->span, "'Main' init method must not have parameters", true},
+
+        };
+        engine.emit(dia);
+        recover.recover();
       }
       symbol->init = init;
     }
   }
 
   if (decl->baseClass.has_value()) {
-    string s = decl->baseClass.value();
-    if (table->isType(s)) {
-      auto symbol = table->getType(s);
+    auto s = decl->baseClass.value();
+    if (table.isType(s.str)) {
+      auto symbol = table.getType(s.str);
       symbol->decl->isExtended = true;
       if (symbol->kind != TypeSymbol::TypeKind::CLASS) {
-        Error::diagnostic(decl->span, "'" + s + "' is not a class type");
+        auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S012);
+        dia.labels = {
+            {s.span, "this type is not a class", true},
+
+        };
+        engine.emit(dia);
+        recover.recover();
       }
       decl->symbol->base = symbol;
     } else {
-      Error::diagnostic(decl->span, "unknown base class '" + s + "'");
+      auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S013);
+      dia.labels = {
+          {s.span, "type '" + s.str + "' not found ", true},
+
+      };
+      engine.emit(dia);
+      recover.recover();
     }
   }
   for (auto &t : decl->traits) {
-    if (!table->isType(t)) {
-      Error::diagnostic(decl->span, "unknown trait '" + t + "'");
+    if (!table.isType(t.str)) {
+      auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S013);
+      dia.labels = {
+          {t.span, "type '" + t.str + "' not found ", true},
+
+      };
+      engine.emit(dia);
+      recover.recover();
     }
-    auto symbol = table->getType(t);
+    auto symbol = table.getType(t.str);
     if (symbol->kind != TypeSymbol::TypeKind::TRAIT) {
-      Error::diagnostic(decl->span, "'" + t + "' is not a trait type");
+      auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S014);
+      dia.labels = {
+          {t.span, "this type is not a trait", true},
+
+      };
+      engine.emit(dia);
+      recover.recover();
     }
     if (!decl->symbol->traits.emplace(symbol).second) {
-      Error::diagnostic(decl->span,
-                        "duplicate trait implementation: " + symbol->name);
+      auto prev = decl->symbol->traitSpan.find(symbol);
+      if (prev == decl->symbol->traitSpan.end()) {
+        Error::internal("fail to get trait span");
+      }
+      auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S015);
+      dia.labels = {
+          {t.span, "duplicate implementation of this trait", true},
+          {prev->second, "previous implementation is here", false},
+      };
+      engine.emit(dia);
+      recover.recover();
     }
+    decl->symbol->traitSpan.emplace(symbol, t.span);
   }
 
-  ScopeGuard _(*table, decl->symbol->memberScope);
+  ScopeGuard _(table, decl->symbol->memberScope);
   TypeContextGuard __(currentType, decl->symbol);
 
   for (auto &a : decl->fields) {
@@ -190,13 +251,10 @@ void Linker::visit(ClassDecl *decl) {
   for (auto &a : decl->methods) {
     a->accept(this);
   }
-  for (auto &a : decl->innerDecl) {
-    a->accept(this);
-  }
 }
 
 void Linker::visit(StructDecl *decl) {
-  ScopeGuard _(*table, decl->symbol->memberScope);
+  ScopeGuard _(table, decl->symbol->memberScope);
   for (auto &f : decl->fields) {
     f->accept(this);
   }
@@ -209,43 +267,82 @@ void Linker::visit(EnumDecl *decl) {
   for (auto &v : decl->variants) {
     if (v->payload.has_value()) {
       auto t = v->payload.value().get();
-      auto s = table->getType(t);
-      if (s == nullptr)
-        Error::diagnostic(t->span, "unknown type '" + t->type + "'");
+      auto s = table.getType(t);
+      if (s == nullptr) {
+        auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S013);
+        dia.labels = {
+            {v->token.span, "type '" + t->type + "' not found ", true},
+        };
+        engine.emit(dia);
+        recover.recover();
+      }
+
       if (s->kind == TypeSymbol::TypeKind::CLASS) {
-        Error::diagnostic(
-            t->span, "entity types are not allowed in enum variant payloads");
+        auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S016);
+        dia.labels = {
+            {decl->span, "entity type used here", true},
+        };
+        dia.notes = {{"enum variant payloads cannot contain entity types"}};
+        engine.emit(dia);
+        recover.recover();
       }
       t->resolved = s;
-      v->symbol->payloadType = table->getType(t);
+      v->symbol->payloadType = table.getType(t);
     }
   }
 }
 void Linker::visit(ImplDecl *decl) {
-  auto implIt = table->implMap.find(decl);
-  if (implIt == table->implMap.end()) {
+  auto implIt = table.implMap.find(decl);
+  if (implIt == table.implMap.end()) {
     Error::internal(decl->span, "fail to find impl");
   }
-  ScopeGuard _(*table, implIt->second->memberScope);
-  string s = decl->target;
+  ScopeGuard _(table, implIt->second->memberScope);
+  auto s = decl->target;
 
-  if (!table->isType(s)) {
-    Error::diagnostic(decl->span, "unknown impl target type");
+  if (!table.isType(s.str)) {
+    auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S013);
+    dia.labels = {
+        {s.span, "type '" + s.str + "' not found ", true},
+
+    };
+    engine.emit(dia);
+    recover.recover();
   }
-  auto symbol = table->getType(s);
+  auto symbol = table.getType(s.str);
   if (symbol->kind != TypeSymbol::TypeKind::STRUCT) {
-    Error::diagnostic(decl->span, "impl target must be a struct type");
+    auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S017);
+    dia.labels = {
+        {decl->span, "'" + s.str + "' is not a struct type", true},
+    };
+    engine.emit(dia);
+    recover.recover();
   }
 
   for (auto &c : decl->traits) {
-    auto t = table->getType(c);
+    auto t = table.getType(c.str);
     if (t->kind != TypeSymbol::TypeKind::TRAIT) {
-      Error::diagnostic(decl->span, "impl trait target must be a trait type");
+      auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S014);
+      dia.labels = {
+          {c.span, "this type is not a trait", true},
+
+      };
+      engine.emit(dia);
+      recover.recover();
     }
-    if (!symbol->traits.emplace(t).second) {
-      Error::diagnostic(decl->span,
-                        "duplicate trait implementation: " + t->name);
+    if (!decl->traitSpan.emplace(t, c.span).second) {
+      auto prev = decl->traitSpan.find(t);
+      if (prev == decl->traitSpan.end()) {
+        Error::internal("fail to get trait span");
+      }
+      auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S015);
+      dia.labels = {
+          {c.span, "duplicate implementation of this trait", true},
+          {prev->second, "previous implementation is here", false},
+      };
+      engine.emit(dia);
+      recover.recover();
     }
+
     for (auto &it : t->memberScope->methodMap) {
       for (auto sig : it.second) {
         decl->sigs.push_back(sig);
@@ -269,8 +366,21 @@ void Linker::visit(ImplDecl *decl) {
     if (methodSymbol == nullptr) {
       Error::internal(a->span, "not built methodSymbol : " + a->name);
     }
-    if (!symbol->addMethod(methodSymbol)) {
-      Error::diagnostic(a->span, "duplicate impl method declaration");
+    if (auto [result, span] = symbol->addMethod(methodSymbol); !result) {
+      auto it = symbol->memberScope->methodMap.find(a->name);
+      if (it == symbol->memberScope->methodMap.end()) {
+        Error::internal("fail to get method symbol");
+      }
+      auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S018);
+      dia.labels = {
+          {a->span, "duplicate impl method declared here", true},
+          {span, "previous impl method declared here", false},
+      };
+      dia.notes = {
+          "method signatures must be unique within the same type",
+      };
+      engine.emit(dia);
+      recover.recover();
     }
 
     a->accept(this);
@@ -281,7 +391,7 @@ void Linker::visit(ImplDecl *decl) {
 }
 
 void Linker::visit(TraitDecl *decl) {
-  ScopeGuard _(*table, decl->symbol->memberScope);
+  ScopeGuard _(table, decl->symbol->memberScope);
   for (auto &s : decl->traitSigs) {
     s->accept(this);
   }
@@ -296,7 +406,7 @@ void Linker::visit(FuncDecl *decl) {
   decl->returnType->accept(this);
   decl->methodSymbol->returnType = decl->returnType->resolved;
 
-  ScopeGuard _(*table, decl->methodSymbol->scope);
+  ScopeGuard _(table, decl->methodSymbol->scope);
   for (auto &p : decl->params) {
     p->accept(this);
     p->symbol->typeSymbol = p->type->resolved;
@@ -310,9 +420,13 @@ void Linker::visit(FuncDecl *decl) {
 
   auto &bucket = it->second;
   auto raw = decl->methodSymbol;
-  if (Helper::hasSameMethodSig(bucket, raw)) {
-    Error::diagnostic(decl->span,
-                      "duplicate method declaration '" + decl->name + "'");
+  if (auto [result, span] = Helper::hasSameMethodSig(bucket, raw); result) {
+    auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S018);
+    dia.labels = {
+        {raw->decl->span, "duplicate impl method declared here", true},
+        {span, "previous impl method declared here", false}};
+    engine.emit(dia);
+    recover.recover();
   }
 
   unique_ptr<ValueSymbol> selfReceiver = make_unique<ValueSymbol>();
@@ -320,7 +434,7 @@ void Linker::visit(FuncDecl *decl) {
   selfReceiver->name = decl->name + "self";
   auto rawSelf = selfReceiver.get();
 
-  table->selfSymbols.push_back(std::move(selfReceiver));
+  table.selfSymbols.push_back(std::move(selfReceiver));
   raw->selfReceiver = rawSelf;
 
   decl->body->accept(this);
@@ -352,7 +466,7 @@ void Linker::visit(Param *param) {
 }
 
 void Linker::visit(InitDecl *decl) {
-  ScopeGuard _(*table, decl->methodSymbol->scope);
+  ScopeGuard _(table, decl->methodSymbol->scope);
 
   for (auto &p : decl->params) {
     p->accept(this);
@@ -363,6 +477,6 @@ void Linker::visit(InitDecl *decl) {
 }
 
 void Linker::visit(OnDestroyDecl *decl) {
-  ScopeGuard _(*table, decl->methodSymbol->scope);
+  ScopeGuard _(table, decl->methodSymbol->scope);
   decl->body->accept(this);
 }

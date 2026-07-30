@@ -657,3 +657,26 @@ DIAG(HRD_P057,
      Error,
      "expected type width specifier",
      "HRD-P057")
+
+//============================================================
+// HRD_P058
+//
+// Trigger:
+//   Two or more trait names in a trait list are not separated
+//   by a comma.
+//============================================================
+DIAG(HRD_P058,
+     Error,
+     "expected ',' between trait names",
+     "HRD-P058")
+
+//============================================================
+// HRD_P059
+//
+// Trigger:
+//   A trait name is missing from a trait implementation list.
+//============================================================
+DIAG(HRD_P059,
+     Error,
+     "expected trait name",
+     "HRD-P059")

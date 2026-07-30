@@ -5,7 +5,10 @@
 #include "hrd/IR/HIR/HIRProgram.h"
 #include "hrd/IR/HIR/HIRStmt.h"
 #include "hrd/IR/HIR/HIRSymbol.h"
+#include "hrd/Recover/HIRVerifierRecover.h"
+#include "hrd/compiler/CompilerContexts.h"
 #include "hrd/enums/InheritState.h"
+#include "hrd/util/diagnostic/DiagnosticEngine.h"
 #include <magic_enum/magic_enum.hpp>
 #include <string>
 
@@ -45,7 +48,9 @@ private:
 
 public:
   HIRProgram *program = nullptr;
-  HIRVerifier(HIRProgram *p);
+  DiagnosticEngine &engine;
+  HIRVerifierRecover recover;
+  HIRVerifier(HIRVerifierContext &context);
   void verify();
   void verifyType(HIRTypeDecl *type);
   void linkField(HIRField *field);

@@ -2,6 +2,7 @@
 #include "AST/TokenStream.h"
 #include "Inputs.h"
 #include "Token.h"
+#include "hrd/Recover/LexerRecover.h"
 #include "hrd/compiler/CompilerContexts.h"
 #include "hrd/util/diagnostic/DiagnosticEngine.h"
 #include <string>
@@ -9,10 +10,15 @@
 
 using namespace std;
 
+struct Utf8Scalar {
+  char32_t value;
+  std::string bytes;
+};
 struct Lexer {
   explicit Lexer(LexerContext &context);
   Token next();
   vector<Token> tokenized;
+  LexerRecover recover;
 
 public:
   Token scan();
@@ -25,6 +31,7 @@ protected:
   bool isIdentFirst(char c);
   bool isIdentRest(char c);
   bool isNumber(char c);
+  Utf8Scalar consumeUtf8Scalar();
   InputSource input;
   DiagnosticEngine &engine;
   size_t i = 0;

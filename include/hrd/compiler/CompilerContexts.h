@@ -14,7 +14,7 @@ struct LexerContext {
 };
 
 struct ParserContext {
-  const TokenStream &tokenStream;
+  TokenStream &tokenStream;
   DiagnosticEngine &engine;
 };
 
@@ -29,9 +29,25 @@ struct BuilderContext {
   DiagnosticEngine &engine;
 };
 
+struct LinkerContext {
+  SymbolTable &table;
+  DiagnosticEngine &engine;
+};
+
+struct ResolverContext {
+  SymbolTable &table;
+  DiagnosticEngine &engine;
+};
+
 struct HIRContext {
   HIRProgram *program = nullptr;
+  DiagnosticEngine &engine;
   SymbolTable &table;
+};
+
+struct HIRVerifierContext {
+  HIRProgram *program = nullptr;
+  DiagnosticEngine &engine;
 };
 
 struct MIRContext {

@@ -175,9 +175,6 @@ unique_ptr<HIRExpr> HIRBuilder::lowerSpawn(SpawnExpr *expr) {
   case BuiltInNameExpr::StorageType::WORLD:
     storageKind = StorageKind::World;
     break;
-  case BuiltInNameExpr::StorageType::ARENA:
-    storageKind = StorageKind::Arena;
-    break;
   default:
     Error::internal(expr->span, "unknown storage kind");
   }
@@ -230,9 +227,6 @@ unique_ptr<HIRExpr> HIRBuilder::lowerView(ViewExpr *expr) {
   switch (storage->storageType) {
   case BuiltInNameExpr::StorageType::WORLD:
     storageKind = StorageKind::World;
-    break;
-  case BuiltInNameExpr::StorageType::ARENA:
-    storageKind = StorageKind::Arena;
     break;
   default:
     Error::internal(expr->span, "unknown storage kind");

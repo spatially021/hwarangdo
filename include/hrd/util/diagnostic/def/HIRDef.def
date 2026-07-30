@@ -1,0 +1,106 @@
+//=============================================================================
+// Trigger
+//-----------------------------------------------------------------------------
+// A method with a non-void return type has a reachable control-flow path that
+// reaches the end of the method without returning a value.
+//=============================================================================
+DIAG(HRD_H001,
+     Error,
+     "missing return value",
+     "HRD-H001")
+
+//=============================================================================
+// Trigger
+//-----------------------------------------------------------------------------
+// An onexit statement reaches HIR verification while onexit lowering and
+// verification are not implemented.
+//=============================================================================
+DIAG(HRD_H002,
+     Error,
+     "onexit is not supported yet",
+     "HRD-H002")
+
+//=============================================================================
+// Trigger
+//-----------------------------------------------------------------------------
+// A constant array index is greater than or equal to the array length.
+//=============================================================================
+DIAG(HRD_H003,
+     Error,
+     "array index out of bounds",
+     "HRD-H003")
+
+//=============================================================================
+// Trigger
+//-----------------------------------------------------------------------------
+// A constant array element is read before that element has been initialized on
+// every reachable control-flow path.
+//=============================================================================
+DIAG(HRD_H004,
+     Error,
+     "use of uninitialized array element",
+     "HRD-H004")
+
+//=============================================================================
+// Trigger
+//-----------------------------------------------------------------------------
+// A partially initialized array is read using a non-constant index, so the
+// selected element cannot be proven to be initialized.
+//=============================================================================
+DIAG(HRD_H005,
+     Error,
+     "array element may be uninitialized",
+     "HRD-H005")
+
+//=============================================================================
+// Trigger
+//-----------------------------------------------------------------------------
+// A local variable, parameter, field, or root value is read before it has been
+// initialized on every reachable control-flow path.
+//=============================================================================
+DIAG(HRD_H006,
+     Error,
+     "use of uninitialized value",
+     "HRD-H006")
+
+//=============================================================================
+// Trigger
+//-----------------------------------------------------------------------------
+// A constant array index has a negative integer value.
+//=============================================================================
+DIAG(HRD_H007,
+     Error,
+     "negative array index",
+     "HRD-H007")
+
+//=============================================================================
+// Trigger
+//-----------------------------------------------------------------------------
+// An assignment expression appears in a context that requires a produced
+// value.
+//=============================================================================
+DIAG(HRD_H008,
+     Error,
+     "assignment does not produce a value",
+     "HRD-H008")
+
+//=============================================================================
+// Trigger
+//-----------------------------------------------------------------------------
+// A world.destroy expression appears in a context that requires a produced
+// value.
+//=============================================================================
+DIAG(HRD_H009,
+     Error,
+     "destroy does not produce a value",
+     "HRD-H009")
+
+//=============================================================================
+// Trigger
+//-----------------------------------------------------------------------------
+// A quit expression appears in a context that requires a produced value.
+//=============================================================================
+DIAG(HRD_H010,
+     Error,
+     "quit does not produce a value",
+     "HRD-H010")

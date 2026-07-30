@@ -9,6 +9,7 @@
 #include "hrd/SourceSpan.h"
 #include "hrd/util/Error.h"
 #include <cstddef>
+#include <string>
 #include <variant>
 #include <vector>
 
@@ -29,7 +30,7 @@ Resolver::resolveMethodOverload(SourceSpan span,
           Error::internal("illegal ast kind");
         return func->params[i]->defaultValue.has_value();
       },
-      "unknown call", "ambiguous overload call");
+      "no matching method found", "ambiguous method call");
 }
 
 RuntimeSymbol *
@@ -40,7 +41,7 @@ Resolver::resolveRuntimeOverload(SourceSpan span,
       span, bucket, args, [](RuntimeSymbol *r) { return r->params.size(); },
       [](RuntimeSymbol *r, size_t i) { return r->params[i]; },
       [](RuntimeSymbol *, size_t) { return false; },
-      "no matching runtime function found", "ambiguous runtime overload call");
+      "no matching runtime method found", "ambiguous runtime method call");
 }
 
 void Resolver::checkMethodAccess(CallExpr *expr, MethodSymbol *method,
@@ -77,16 +78,32 @@ void Resolver::checkMethodAccess(CallExpr *expr, MethodSymbol *method,
     if (isInternalReceiver()) {
       return;
     }
-    Error::diagnostic(expr->span,
-                      "cannot access protected method in this context");
+    {
+      auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S019);
+      dia.labels = {
+          {expr->span, "protected method accessed here", true},
+      };
+      dia.notes = {{"protected methods can only be accessed from within the "
+                    "declaring type or its derived types"}};
+      engine.emit(dia);
+      recover.recover();
+    }
     return;
 
   case AModifier::PRIVATE:
     if (isInternalReceiver()) {
       return;
     }
-    Error::diagnostic(expr->span,
-                      "cannot access private method in this context");
+    {
+      auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S020);
+      dia.labels = {
+          {expr->span, "private method accessed here", true},
+      };
+      dia.notes = {{"private methods can only be accessed from within the "
+                    "declaring type"}};
+      engine.emit(dia);
+      recover.recover();
+    }
     return;
   }
 }
@@ -154,18 +171,31 @@ SymbolT *Resolver::resolveOverload(SourceSpan span,
   }
 
   if (bestIdx.empty()) {
-    Error::diagnostic(span, std::string(unknownMessage));
+    auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S031);
+    dia.labels = {
+        {span, std::string(unknownMessage), true},
+    };
+    dia.notes = {
+        {"the provided argument types do not match any available overload"}};
+    engine.emit(dia);
+    recover.recover();
   }
 
   if (bestIdx.size() > 1) {
-    Error::diagnostic(span, std::string(ambiguousMessage));
+    auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S032);
+    dia.labels = {
+        {span, std::string(ambiguousMessage), true},
+    };
+    dia.notes = {{"multiple overloads match the provided arguments"}};
+    engine.emit(dia);
+    recover.recover();
   }
 
   return candidates[bestIdx[0]].symbol;
 }
 
 void Resolver::resolveInit(CallExpr *expr) {
-  auto *type = table->getType(expr->methodName);
+  auto *type = table.getType(expr->methodName);
 
   std::vector<Expr *> args;
   for (auto &a : expr->arguments) {
@@ -180,8 +210,13 @@ void Resolver::resolveInit(CallExpr *expr) {
       expr->resolvedType = type;
       return;
     }
-
-    Error::diagnostic(expr->span, "no matching init declaration found");
+    auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S021);
+    dia.labels = {
+        {expr->span, "cannot find a matching init declaration", true},
+    };
+    dia.notes = {{"no init declaration accepts the provided argument types"}};
+    engine.emit(dia);
+    recover.recover();
   }
 
   auto *best = resolveMethodOverload(expr->span, bucket, args);
@@ -200,8 +235,13 @@ void Resolver::ResolveEnumVariant(CallExpr *expr) {
   }
 
   if (expr->arguments.size() > 1) {
-    Error::diagnostic(expr->span,
-                      "enum variants can have at most one payload argument");
+    auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S022);
+    dia.labels = {
+        {expr->span, "only one payload is allowed", true},
+    };
+    dia.notes = {{"enum variants can contain at most one payload"}};
+    engine.emit(dia);
+    recover.recover();
   }
 
   if (expr->arguments.size() == 1) {
@@ -213,18 +253,36 @@ void Resolver::ResolveEnumVariant(CallExpr *expr) {
     }
 
     if (variant->payloadType == nullptr) {
-      Error::diagnostic(expr->span, "this variant does not take payload: " +
-                                        expr->methodName);
+      auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S023);
+      dia.labels = {
+          {expr->span, "this variant has no payload", true},
+      };
+      dia.notes = {{"this enum variant is declared without a payload"}};
+      engine.emit(dia);
+      recover.recover();
     }
 
     if (!isAssignable(variant->payloadType, arg->resolvedType)) {
-      Error::diagnostic(expr->span, "incorrect payload type");
+      auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S024);
+      dia.labels = {
+          {expr->span, "expected payload of a different type", true},
+      };
+      dia.notes = {{"the payload type must match the type declared by the enum "
+                    "variant"}};
+      engine.emit(dia);
+      recover.recover();
     }
 
     arg->resolvedType = implicitCasting(arg, variant->payloadType).first;
   } else {
     if (variant->payloadType != nullptr) {
-      Error::diagnostic(expr->span, expr->methodName + " needs payload");
+      auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S025);
+      dia.labels = {
+          {expr->span, "missing payload", true},
+      };
+      dia.notes = {{"this enum variant must be constructed with a payload"}};
+      engine.emit(dia);
+      recover.recover();
     }
   }
 
@@ -239,7 +297,13 @@ void Resolver::ResolveEnumVariant(CallExpr *expr) {
 void Resolver::resolveCall(CallExpr *expr, Scope *scope, bool isImplict) {
   auto bucketIt = scope->methodMap.find(expr->methodName);
   if (bucketIt == scope->methodMap.end()) {
-    Error::diagnostic(expr->span, "unknown call");
+    auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S027);
+    dia.labels = {
+        {expr->span, "unknown method called here", true},
+    };
+    dia.notes = {{"the target type does not declare a method with this name"}};
+    engine.emit(dia);
+    recover.recover();
   }
 
   std::vector<Expr *> args;
@@ -329,15 +393,19 @@ bool Resolver::tryResolveRuntime(CallExpr *expr) {
     return false;
   }
 
-  auto ns = table->runtimeMap.find(name->name);
-  if (ns == table->runtimeMap.end()) {
+  auto ns = table.runtimeMap.find(name->name);
+  if (ns == table.runtimeMap.end()) {
     return false;
   }
 
   auto it = ns->second.functions.find(expr->methodName);
   if (it == ns->second.functions.end()) {
-    Error::diagnostic(expr->span, "unknown runtime function '" + name->name +
-                                      "." + expr->methodName + "'");
+    auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S026);
+    dia.labels = {
+        {expr->span, "unknown runtime method called here", true},
+    };
+    engine.emit(dia);
+    recover.recover();
   }
 
   std::vector<Expr *> args;
@@ -366,7 +434,7 @@ void Resolver::visit(CallExpr *expr) {
   // 1. receiver 없는 호출
   if (expr->receiver == nullptr) {
 
-    if (table->isType(expr->methodName)) {
+    if (table.isType(expr->methodName)) {
       expr->callType = CallExpr::CallType::INIT_CALL;
       resolveInit(expr);
       return;
@@ -379,8 +447,13 @@ void Resolver::visit(CallExpr *expr) {
       return;
     }
 
-    Error::diagnostic(expr->span,
-                      "cannot find method name : " + expr->methodName);
+    auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S027);
+    dia.labels = {
+        {expr->span, "unknown method called here", true},
+    };
+    dia.notes = {{"the target type does not declare a method with this name"}};
+    engine.emit(dia);
+    recover.recover();
   }
 
   // 2. receiver 해석
@@ -389,8 +462,14 @@ void Resolver::visit(CallExpr *expr) {
     if (expr->receiver->resolvedType->kind == TypeSymbol::TypeKind::ENUM) {
       auto it = expr->receiver->resolvedType->variantMap.find(expr->methodName);
       if (it == expr->receiver->resolvedType->variantMap.end()) {
-        Error::diagnostic(expr->span,
-                          "unknown variant name: " + expr->methodName);
+        auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S028);
+        dia.labels = {
+            {expr->span, "unknown variant referenced here", true},
+        };
+        dia.notes = {
+            {"the target enum does not declare a variant with this name"}};
+        engine.emit(dia);
+        recover.recover();
       }
 
       expr->callType = CallExpr::CallType::PAYLOAD_CALL;
@@ -399,10 +478,14 @@ void Resolver::visit(CallExpr *expr) {
       return;
     } else {
       // TODO:정적 메서드 추가시 추가.
-      Error::diagnostic(expr->span, "static method is not supported yet");
+      auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S029);
+      dia.labels = {
+          {expr->span, "static methods are not supported yet", true},
+      };
+      dia.notes = {{"support for static methods has not been implemented yet"}};
+      engine.emit(dia);
+      recover.recover();
     }
-    Error::diagnostic(expr->span, "static method is not supported yet: " +
-                                      expr->methodName);
   } else {
     auto *ownerType = expr->receiver->resolvedType;
     if (ownerType == nullptr) {
@@ -410,9 +493,15 @@ void Resolver::visit(CallExpr *expr) {
     }
 
     if (auto g = dynamic_cast<GenericSymbol *>(ownerType)) {
-      if (g->origin == table->getHandle()) {
-        Error::diagnostic(expr->span, "handle type cannot access member : " +
-                                          g->args[0]->name);
+      if (g->origin == table.getHandle()) {
+        auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S030);
+        dia.labels = {
+            {expr->span, "cannot access member of handle type", true},
+        };
+        dia.notes = {
+            {"dereference or resolve the handle before accessing members"}};
+        engine.emit(dia);
+        recover.recover();
       }
     }
 

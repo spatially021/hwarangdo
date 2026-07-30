@@ -7,6 +7,8 @@
 #include "AST/Stmt.h"
 #include "Token.h"
 #include "enums/AccessModifier.h"
+#include "hrd/AST/TokenStream.h"
+#include "hrd/Recover/ParserRecover.h"
 #include "hrd/compiler/CompilerContexts.h"
 #include "hrd/util/diagnostic/Diagnostic.h"
 #include "hrd/util/diagnostic/DiagnosticEngine.h"
@@ -60,6 +62,7 @@ private:
   const std::vector<Token> &tokens;
   DiagnosticEngine &engine;
   size_t current = 0;
+  TokenStream &stream;
 
   // 문장 단위
   Decl::Ptr declaration(DeclContext context); // 변수 선언, 함수 선언 등
@@ -124,9 +127,9 @@ private:
   bool isAtEnd() const;
   const Token &consume(TKind kind, DiagnosticCode code,
                        const std::string &message);
-  bool isFunc() const;
-  bool isInit() const;
-  bool isType() const;
+  bool isFunc();
+  bool isInit();
+  bool isType();
   Token parseLiteralForType(const Token &type);
   bool isValidSize(const std::string &s) const;
   bool isAccessModifier() const;
@@ -148,4 +151,5 @@ private:
     return check({TKind::LIT_BOOL, TKind::LIT_INT, TKind::LIT_CHARACTER,
                   TKind::LIT_STRING, TKind::LIT_FLOAT});
   }
+  ParserRecover recover;
 };

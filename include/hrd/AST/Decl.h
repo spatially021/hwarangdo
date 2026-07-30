@@ -9,6 +9,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -150,24 +151,29 @@ public:
 // 클래스 선언을 표현하는 AST 노드를 나타낸다.
 // 필드, 메서드, 내부 선언 및 상속/트레이트 정보를 포함한다.
 // 단일 상속과 다중 trait 구현을 지원하며 TypeSymbol과 연결된다.
+
+struct Identifier {
+  string str;
+  SourceSpan span;
+  Identifier(const string &s, SourceSpan sp) : str(s), span(sp) {}
+};
+
 class ClassDecl : public Decl {
 public:
   vector<shared_ptr<VarDecl>> fields;
   vector<shared_ptr<FuncDecl>> methods;
-  vector<shared_ptr<Decl>> innerDecl;
-  optional<string> baseClass; // 단일 상속 (필요시 벡터로 변경)
-  vector<string> traits;      // trait/interface 목록
+  optional<Identifier> baseClass; // 단일 상속 (필요시 벡터로 변경)
+  vector<Identifier> traits;      // trait/interface 목록
 
   ClassDecl(SourceSpan t, const string &n, vector<shared_ptr<VarDecl>> f,
-            vector<shared_ptr<FuncDecl>> m, vector<shared_ptr<Decl>> i,
-            optional<string> base = nullopt, vector<string> tr = {},
-            AModifier modi = AModifier::PUBLIC)
+            vector<shared_ptr<FuncDecl>> m, optional<Identifier> base = nullopt,
+            vector<Identifier> tr = {}, AModifier modi = AModifier::PUBLIC)
       : Decl(NKind::CLASS_DECL, t, n, modi), fields(f), methods(m),
-        innerDecl(i), baseClass(base), traits(std::move(tr)) {
+        baseClass(base), traits(std::move(tr)) {
     aModifier = modi;
   }
 
-  void setBaseClass(const string &b) { baseClass = b; }
+  void setBaseClass(Identifier b) { baseClass = b; }
   void accept(ASTVisitor *visitor) override { visitor->visit(this); }
   TypeSymbol *symbol = nullptr;
 };
@@ -205,13 +211,14 @@ public:
 // 실제 메서드 바인딩은 이후 단계에서 처리된다.
 class ImplDecl : public Decl {
 public:
-  string target;
-  vector<string> traits;
+  Identifier target;
+  vector<Identifier> traits;
+  unordered_map<TypeSymbol *, SourceSpan> traitSpan;
   vector<shared_ptr<FuncDecl>> LinkedImplMethods;
 
-  ImplDecl(SourceSpan t, const string &n, vector<string> tr,
+  ImplDecl(SourceSpan t, Identifier s, vector<Identifier> tr,
            vector<shared_ptr<FuncDecl>> m, AModifier modi)
-      : Decl(NKind::IMPL_DECL, t, "", modi), target(n), traits(std::move(tr)),
+      : Decl(NKind::IMPL_DECL, t, "", modi), target(s), traits(std::move(tr)),
         LinkedImplMethods(std::move(m)) {}
 
   void accept(ASTVisitor *visitor) override { visitor->visit(this); }

@@ -1,7 +1,9 @@
 #include "hrd/SemanticAnalyzer/Builder.h"
 #include "hrd/AST/ASTNode.h"
 #include "hrd/AST/Decl.h"
+#include "hrd/AST/DeclContext.h"
 #include "hrd/AST/Expr.h"
+#include "hrd/Recover/BuilderRecover.h"
 #include "hrd/SemanticAnalyzer/Scope.h"
 #include "hrd/SemanticAnalyzer/symbol/MethodSymbol.h"
 #include "hrd/SemanticAnalyzer/symbol/ValueSymbol.h"
@@ -11,9 +13,11 @@
 #include "hrd/util/Guard.h"
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <utility>
 
-Builder::Builder(BuilderContext &ctx) : table(ctx.table), engine(ctx.engine) {
+Builder::Builder(BuilderContext &ctx)
+    : table(ctx.table), engine(ctx.engine), recover(*this) {
   topLevel = make_unique<TypeSymbol>();
   topLevel->name = "<top-level>";
   currentType = topLevel.get();
@@ -164,7 +168,7 @@ void Builder::buildMain(ClassDecl *decl) {
       };
       dia.notes = {{"only one 'Main' class may be declared in a program"}};
       engine.emit(dia);
-      throw runtime_error("");
+      recover.recover();
     } break;
 
     case SymbolTable::Result::RESERVED:
@@ -194,9 +198,6 @@ void Builder::buildMain(ClassDecl *decl) {
   for (auto &a : decl->methods) {
     a->accept(this);
   }
-  for (auto &a : decl->innerDecl) {
-    a->accept(this);
-  }
 }
 
 void Builder::visit(ClassDecl *decl) {
@@ -209,22 +210,42 @@ void Builder::visit(ClassDecl *decl) {
   symbol->name = decl->name;
   symbol->decl = decl;
   symbol->kind = TypeSymbol::TypeKind::CLASS;
-  symbol->baseName = decl->baseClass;
+  symbol->baseName =
+      decl->baseClass.has_value()
+          ? std::optional<std::string>(decl->baseClass.value().str)
+          : nullopt;
   auto raw = symbol.get();
 
   auto result = table.add(std::move(symbol));
 
   if (!result.success) {
     switch (result.errorType) {
-    case SymbolTable::Result::DUPLICATED:
-      Error::diagnostic(decl->span,
-                        "duplicate class declaration '" + decl->name + "'");
+    case SymbolTable::Result::DUPLICATED: {
+      auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S002);
+      dia.labels = {
+          {decl->span, "type '" + decl->name + "' is already declared", true},
+          {table.getType(decl->name)->decl->span,
+           "previous declaration of '" + decl->name + "' is here", false},
+      };
+      dia.notes = {
+          "type names must be unique within the same scope",
+      };
+      engine.emit(dia);
+      recover.recover();
       break;
+    }
 
-    case SymbolTable::Result::RESERVED:
-      Error::diagnostic(decl->span, "reserved identifier '" + decl->name + "'");
+    case SymbolTable::Result::RESERVED: {
+      auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S003);
+      dia.labels = {
+          {decl->span, "'" + decl->name + "'is a reserved identifier", true},
+      };
+      dia.notes = {
+          {"reserved identifiers cannot be used in user declarations"}};
+      engine.emit(dia);
+      recover.recover();
       break;
-
+    }
     case SymbolTable::Result::UNKNOWN_SYMBOL:
       Error::internal(decl->span, "unknown symbol '" + decl->name + "'");
       break;
@@ -247,16 +268,6 @@ void Builder::visit(ClassDecl *decl) {
   for (auto &a : decl->methods) {
     a->accept(this);
   }
-
-  for (auto &a : decl->innerDecl) {
-    if (canInnerDecl(a.get())) {
-      a->accept(this);
-    } else {
-      Error::diagnostic(
-          a->span,
-          "only class and struct declarations are allowed in this context");
-    }
-  }
 }
 
 void Builder::visit(StructDecl *decl) {
@@ -271,14 +282,31 @@ void Builder::visit(StructDecl *decl) {
 
   if (!result.success) {
     switch (result.errorType) {
-    case SymbolTable::Result::DUPLICATED:
-      Error::diagnostic(decl->span,
-                        "duplicate struct declaration '" + decl->name + "'");
-      break;
+    case SymbolTable::Result::DUPLICATED: {
+      auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S002);
+      dia.labels = {
+          {decl->span, "type '" + decl->name + "' is already declared", true},
+          {table.getType(decl->name)->decl->span,
+           "previous declaration of '" + decl->name + "' is here", false},
+      };
+      dia.notes = {
+          "type names must be unique within the same scope",
+      };
+      engine.emit(dia);
+      recover.recover();
+    } break;
 
-    case SymbolTable::Result::RESERVED:
-      Error::diagnostic(decl->span, "reserved identifier '" + decl->name + "'");
+    case SymbolTable::Result::RESERVED: {
+      auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S003);
+      dia.labels = {
+          {decl->span, "'" + decl->name + "'is a reserved identifier", true},
+      };
+      dia.notes = {
+          {"reserved identifiers cannot be used in user declarations"}};
+      engine.emit(dia);
+      recover.recover();
       break;
+    } break;
 
     case SymbolTable::Result::UNKNOWN_SYMBOL:
       Error::internal(decl->span, "unknown symbol '" + decl->name + "'");
@@ -318,14 +346,31 @@ void Builder::visit(EnumDecl *decl) {
 
   if (!result.success) {
     switch (result.errorType) {
-    case SymbolTable::Result::DUPLICATED:
-      Error::diagnostic(decl->span,
-                        "duplicate enum declaration '" + decl->name + "'");
-      break;
+    case SymbolTable::Result::DUPLICATED: {
+      auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S002);
+      dia.labels = {
+          {decl->span, "type '" + decl->name + "' is already declared", true},
+          {table.getType(decl->name)->decl->span,
+           "previous declaration of '" + decl->name + "' is here", false},
+      };
+      dia.notes = {
+          "type names must be unique within the same scope",
+      };
+      engine.emit(dia);
+      recover.recover();
+    } break;
 
-    case SymbolTable::Result::RESERVED:
-      Error::diagnostic(decl->span, "reserved identifier '" + decl->name + "'");
+    case SymbolTable::Result::RESERVED: {
+      auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S003);
+      dia.labels = {
+          {decl->span, "'" + decl->name + "'is a reserved identifier", true},
+      };
+      dia.notes = {
+          {"reserved identifiers cannot be used in user declarations"}};
+      engine.emit(dia);
+      recover.recover();
       break;
+    } break;
 
     case SymbolTable::Result::UNKNOWN_SYMBOL:
       Error::internal(decl->span, "unknown symbol '" + decl->name + "'");
@@ -346,8 +391,17 @@ void Builder::visit(EnumDecl *decl) {
     v->name = a->name;
     v->ordinal = ordinal++;
     if (raw->variantMap.count(v->name)) {
-      Error::diagnostic(a->token,
-                        "duplicate enum variant declaration '" + a->name + "'");
+      auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S004);
+      dia.labels = {
+          {decl->span, "duplicate enum variant declared here", true},
+          {table.getType(decl->name)->decl->span,
+           "previous enum variant declared here", false},
+      };
+      dia.notes = {
+          "an enum cannot contain multiple variants with the same name",
+      };
+      engine.emit(dia);
+      recover.recover();
     }
     EnumVariantSymbol *r = v.get();
     v->typeSymbol = raw;
@@ -359,7 +413,7 @@ void Builder::visit(EnumDecl *decl) {
 
 void Builder::visit(ImplDecl *decl) {
   auto symbol = make_unique<ImplSymbol>();
-  symbol->targetName = decl->target;
+  symbol->targetName = decl->target.str;
   symbol->decl = decl;
 
   auto raw = symbol.get();
@@ -388,14 +442,31 @@ void Builder::visit(TraitDecl *decl) {
 
   if (!result.success) {
     switch (result.errorType) {
-    case SymbolTable::Result::DUPLICATED:
-      Error::diagnostic(decl->span,
-                        "duplicate trait declaration '" + decl->name + "'");
-      break;
+    case SymbolTable::Result::DUPLICATED: {
+      auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S002);
+      dia.labels = {
+          {decl->span, "type '" + decl->name + "' is already declared", true},
+          {table.getType(decl->name)->decl->span,
+           "previous declaration of '" + decl->name + "' is here", false},
+      };
+      dia.notes = {
+          "type names must be unique within the same scope",
+      };
+      engine.emit(dia);
+      recover.recover();
+    } break;
 
-    case SymbolTable::Result::RESERVED:
-      Error::diagnostic(decl->span, "reserved identifier '" + decl->name + "'");
+    case SymbolTable::Result::RESERVED: {
+      auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S003);
+      dia.labels = {
+          {decl->span, "'" + decl->name + "'is a reserved identifier", true},
+      };
+      dia.notes = {
+          {"reserved identifiers cannot be used in user declarations"}};
+      engine.emit(dia);
+      recover.recover();
       break;
+    } break;
 
     case SymbolTable::Result::UNKNOWN_SYMBOL:
       Error::internal(decl->span, "unknown symbol '" + decl->name + "'");
@@ -432,14 +503,30 @@ void Builder::visit(TraitSig *sig) {
 
   if (!result.success) {
     switch (result.errorType) {
-    case SymbolTable::Result::DUPLICATED:
-      Error::diagnostic(sig->span,
-                        "duplicate trait method signature '" + sig->name + "'");
-      break;
+    case SymbolTable::Result::DUPLICATED: {
+      auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S007);
+      dia.labels = {
+          {sig->span, "duplicate method declared here", true},
+          {table.getType(sig->name)->decl->span,
+           "previous method declared here", false},
+      };
+      dia.notes = {
+          "method signatures must be unique within the same type",
+      };
+      engine.emit(dia);
+    } break;
 
-    case SymbolTable::Result::RESERVED:
-      Error::diagnostic(sig->span, "reserved identifier '" + sig->name + "'");
+    case SymbolTable::Result::RESERVED: {
+      auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S003);
+      dia.labels = {
+          {sig->span, "'" + sig->name + "'is a reserved identifier", true},
+      };
+      dia.notes = {
+          {"reserved identifiers cannot be used in user declarations"}};
+      engine.emit(dia);
+      recover.recover();
       break;
+    } break;
 
     case SymbolTable::Result::UNKNOWN_SYMBOL:
       Error::internal(sig->span, "unknown symbol '" + sig->name + "'");
@@ -463,15 +550,30 @@ void Builder::visit(TraitSig *sig) {
 
     if (!re.success) {
       switch (re.errorType) {
-      case SymbolTable::Result::DUPLICATED:
-        Error::diagnostic(a.get()->span, "duplicate parameter declaration '" +
-                                             a.get()->name + "'");
+      case SymbolTable::Result::DUPLICATED: {
+        auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S005);
+        dia.labels = {
+            {a->span, "duplicate variable declared here", true},
+            {table.getType(a->name)->decl->span,
+             "previous variable declared here", false},
+        };
+        dia.notes = {
+            "variable names must be unique within the same scope",
+        };
+        engine.emit(dia);
         break;
-
-      case SymbolTable::Result::RESERVED:
-        Error::diagnostic(a.get()->span,
-                          "reserved identifier '" + a.get()->name + "'");
+      }
+      case SymbolTable::Result::RESERVED: {
+        auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S003);
+        dia.labels = {
+            {sig->span, "'" + sig->name + "'is a reserved identifier", true},
+        };
+        dia.notes = {
+            {"reserved identifiers cannot be used in user declarations"}};
+        engine.emit(dia);
+        recover.recover();
         break;
+      } break;
 
       case SymbolTable::Result::UNKNOWN_SYMBOL:
         Error::internal(a.get()->span,
@@ -503,14 +605,31 @@ void Builder::visit(FuncDecl *decl) {
 
   if (!result.success) {
     switch (result.errorType) {
-    case SymbolTable::Result::DUPLICATED:
-      Error::diagnostic(decl->span,
-                        "duplicate method declaration '" + decl->name + "'");
-      break;
+    case SymbolTable::Result::DUPLICATED: {
+      auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S007);
+      dia.labels = {
+          {decl->span, "duplicate method declared here", true},
+          {table.getType(decl->name)->decl->span,
+           "previous method declared here", false},
+      };
+      dia.notes = {
+          "method signatures must be unique within the same type",
+      };
+      engine.emit(dia);
+      recover.recover();
+    } break;
 
-    case SymbolTable::Result::RESERVED:
-      Error::diagnostic(decl->span, "reserved identifier '" + decl->name + "'");
+    case SymbolTable::Result::RESERVED: {
+      auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S003);
+      dia.labels = {
+          {decl->span, "'" + decl->name + "'is a reserved identifier", true},
+      };
+      dia.notes = {
+          {"reserved identifiers cannot be used in user declarations"}};
+      engine.emit(dia);
+      recover.recover();
       break;
+    } break;
 
     case SymbolTable::Result::UNKNOWN_SYMBOL:
       Error::internal(decl->span, "unknown symbol '" + decl->name + "'");
@@ -553,15 +672,31 @@ void Builder::visit(VarDecl *decl) {
   if (decl->isRoot) {
     if (!result.success) {
       switch (result.errorType) {
-      case SymbolTable::Result::DUPLICATED:
-        Error::diagnostic(decl->span, "duplicate root variable declaration '" +
-                                          decl->name + "'");
-        break;
+      case SymbolTable::Result::DUPLICATED: {
+        auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S005);
+        dia.labels = {
+            {decl->span, "duplicate variable declared here", true},
+            {table.getType(decl->name)->decl->span,
+             "previous variable declared here", false},
+        };
+        dia.notes = {
+            "variable names must be unique within the root",
+        };
+        engine.emit(dia);
+        recover.recover();
+      } break;
 
-      case SymbolTable::Result::RESERVED:
-        Error::diagnostic(decl->span,
-                          "reserved identifier '" + decl->name + "'");
+      case SymbolTable::Result::RESERVED: {
+        auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S003);
+        dia.labels = {
+            {decl->span, "'" + decl->name + "'is a reserved identifier", true},
+        };
+        dia.notes = {
+            {"reserved identifiers cannot be used in user declarations"}};
+        engine.emit(dia);
+        recover.recover();
         break;
+      } break;
 
       case SymbolTable::Result::UNKNOWN_SYMBOL:
         Error::internal(decl->span, "unknown symbol '" + decl->name + "'");
@@ -574,15 +709,45 @@ void Builder::visit(VarDecl *decl) {
   } else {
     if (!result.success) {
       switch (result.errorType) {
-      case SymbolTable::Result::DUPLICATED:
-        Error::diagnostic(decl->span, "duplicate variable declaration '" +
-                                          decl->name + "'");
-        break;
+      case SymbolTable::Result::DUPLICATED: {
+        if (decl->context == DeclContext::CLASSBODY) {
+          auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S006);
+          dia.labels = {
+              {decl->span, "duplicate field declared here", true},
+              {table.getType(decl->name)->decl->span,
+               "previous field declared here", false},
+          };
+          dia.notes = {
+              "field names must be unique within the same type",
+          };
+          engine.emit(dia);
+        } else {
+          auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S005);
+          dia.labels = {
+              {decl->span, "duplicate variable declared here", true},
+              {table.getType(decl->name)->decl->span,
+               "previous variable declared here", false},
+          };
+          dia.notes = {
+              "variable names must be unique within the same scope",
+          };
+          engine.emit(dia);
+        }
 
-      case SymbolTable::Result::RESERVED:
-        Error::diagnostic(decl->span,
-                          "reserved identifier '" + decl->name + "'");
+        recover.recover();
+      } break;
+
+      case SymbolTable::Result::RESERVED: {
+        auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S003);
+        dia.labels = {
+            {decl->span, "'" + decl->name + "'is a reserved identifier", true},
+        };
+        dia.notes = {
+            {"reserved identifiers cannot be used in user declarations"}};
+        engine.emit(dia);
+        recover.recover();
         break;
+      } break;
 
       case SymbolTable::Result::UNKNOWN_SYMBOL:
         Error::internal(decl->span, "unknown symbol '" + decl->name + "'");
@@ -614,14 +779,30 @@ void Builder::visit(Param *a) {
 
   if (!re.success) {
     switch (re.errorType) {
-    case SymbolTable::Result::DUPLICATED:
-      Error::diagnostic(a->span,
-                        "duplicate parameter declaration '" + a->name + "'");
-      break;
+    case SymbolTable::Result::DUPLICATED: {
+      auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S005);
+      dia.labels = {
+          {a->span, "duplicate variable declared here", true},
+          {table.getType(a->name)->decl->span,
+           "previous variable declared here", false},
+      };
+      dia.notes = {
+          "variable names must be unique within the same scope",
+      };
+      engine.emit(dia);
+    } break;
 
-    case SymbolTable::Result::RESERVED:
-      Error::diagnostic(a->span, "reserved identifier '" + a->name + "'");
+    case SymbolTable::Result::RESERVED: {
+      auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S003);
+      dia.labels = {
+          {a->span, "'" + a->name + "'is a reserved identifier", true},
+      };
+      dia.notes = {
+          {"reserved identifiers cannot be used in user declarations"}};
+      engine.emit(dia);
+      recover.recover();
       break;
+    } break;
 
     case SymbolTable::Result::UNKNOWN_SYMBOL:
       Error::internal(a->span, "unknown symbol '" + a->name + "'");
@@ -664,15 +845,30 @@ void Builder::visit(InitDecl *decl) {
 
     if (!re.success) {
       switch (re.errorType) {
-      case SymbolTable::Result::DUPLICATED:
-        Error::diagnostic(a.get()->span, "duplicate parameter declaration '" +
-                                             a.get()->name + "'");
-        break;
+      case SymbolTable::Result::DUPLICATED: {
+        auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S005);
+        dia.labels = {
+            {a->span, "duplicate variable declared here", true},
+            {table.getType(a->name)->decl->span,
+             "previous variable declared here", false},
+        };
+        dia.notes = {
+            "variable names must be unique within the same scope",
+        };
+        engine.emit(dia);
+      } break;
 
-      case SymbolTable::Result::RESERVED:
-        Error::diagnostic(a.get()->span,
-                          "reserved identifier '" + a.get()->name + "'");
+      case SymbolTable::Result::RESERVED: {
+        auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S003);
+        dia.labels = {
+            {decl->span, "'" + decl->name + "'is a reserved identifier", true},
+        };
+        dia.notes = {
+            {"reserved identifiers cannot be used in user declarations"}};
+        engine.emit(dia);
+        recover.recover();
         break;
+      } break;
 
       case SymbolTable::Result::UNKNOWN_SYMBOL:
         Error::internal(a.get()->span,
@@ -701,7 +897,16 @@ void Builder::visit(OnDestroyDecl *decl) {
   auto raw = symbol.get();
 
   if (!table.addOnDestroy(std::move(symbol))) {
-    Error::diagnostic(decl->span, "duplicated onDestroy method");
+    auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S007);
+    dia.labels = {
+        {decl->span, "duplicate onDestroy declared here", true},
+        {table.getType(decl->name)->decl->span,
+         "previous onDestroy declared here", false},
+    };
+    dia.notes = {
+        "method signatures must be unique within the same type",
+    };
+    engine.emit(dia);
   }
 
   decl->methodSymbol = raw;
@@ -712,15 +917,4 @@ void Builder::visit(OnDestroyDecl *decl) {
   table.getCurrent()->scopeKind = Scope::ScopeKind::ONDESTROY;
 
   decl->body->accept(this);
-}
-bool Builder::canInnerDecl(Decl *decl) {
-  switch (decl->kind) {
-
-  case NKind::CLASS_DECL:
-  case NKind::STRUCT_DECL:
-  case NKind::ENUM_DECL:
-    return true;
-  default:
-    return false;
-  }
 }

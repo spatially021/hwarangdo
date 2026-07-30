@@ -22,7 +22,7 @@ Ptr Parser::assignment() { // 대입 연산 처리
           {previous().span, "cannot assign to this expression", true},
       };
       engine.emit(dia);
-      throw runtime_error("");
+      recover.recover(ParserRecoveryPoint::Statement);
     }
     return make_shared<AssignExpr>(makeSpan(left->span, right->span), left, op,
                                    right);
@@ -278,7 +278,7 @@ Ptr Parser::postfix() {
             {previous().span, "cannot call this expression", true},
         };
         engine.emit(dia);
-        throw runtime_error("");
+        recover.recover(ParserRecoveryPoint::Statement);
       }
 
     } else if (check(TKind::LEFT_BRACKET)) {
@@ -375,5 +375,6 @@ Ptr Parser::primary() {
       {previous().span, "expected expression here", true},
   };
   engine.emit(dia);
-  throw runtime_error("");
+  recover.recover(ParserRecoveryPoint::Statement);
+  return nullptr;
 }

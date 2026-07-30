@@ -1,5 +1,3 @@
-
-
 #include "hrd/AST/Expr.h"
 #include "hrd/IR/HIR/HIRBuilder.h"
 #include "hrd/IR/HIR/HIRExpr.h"
@@ -13,11 +11,11 @@
 #include <variant>
 
 std::unique_ptr<HIRValueExpr> HIRBuilder::lowerVariantValue(CallExpr *expr) {
-  auto symbol = get_if<EnumVariantSymbol *>(&expr->resolved);
-  if (symbol == nullptr) {
+  auto *symbol = get_if<EnumVariantSymbol *>(&expr->resolved);
+  if (symbol == nullptr || *symbol == nullptr) {
     Error::internal(
         expr->span,
-        "in enum variant context but resolved is not EnumVariantSymbol");
+        "enum variant call resolved symbol is not EnumVariantSymbol");
   }
 
   auto [found, variant] = lookupVariant(*symbol);
@@ -25,17 +23,21 @@ std::unique_ptr<HIRValueExpr> HIRBuilder::lowerVariantValue(CallExpr *expr) {
     Error::internal(expr->span, "failed to find HIR enum variant");
   }
 
-  if (expr->receiver == nullptr || expr->resolvedType == nullptr) {
-    Error::internal(expr->span, "enum variant receiver type is nullptr");
+  if (expr->receiver == nullptr) {
+    Error::internal(expr->span, "enum variant receiver is nullptr");
+  }
+
+  if (expr->resolvedType == nullptr) {
+    Error::internal(expr->span, "enum variant resolved type is nullptr");
   }
 
   auto it = program->typeDeclMap.find(expr->resolvedType);
   if (it == program->typeDeclMap.end() || it->second == nullptr) {
     Error::internal(expr->span,
-                    "failed to find enum typeDecl for variant receiver");
+                    "failed to find enum type declaration for variant call");
   }
 
-  auto owner = it->second;
+  auto *owner = it->second;
 
   if (variant->owner == nullptr) {
     Error::internal(expr->span, "enum variant owner is nullptr");
@@ -49,16 +51,18 @@ std::unique_ptr<HIRValueExpr> HIRBuilder::lowerVariantValue(CallExpr *expr) {
 
   if (variant->payloadType == nullptr) {
     if (!expr->arguments.empty()) {
-      Error::internal(expr->span, "unit variant cannot have arguments");
+      Error::internal(expr->span, "unit variant has payload arguments");
     }
   } else {
     if (expr->arguments.size() != 1) {
       Error::internal(expr->span,
-                      "payload variant requires exactly one argument");
+                      "payload variant does not have exactly one argument");
     }
+
     payload = lowerExpr(expr->arguments[0].get());
     if (payload == nullptr) {
-      Error::internal(expr->span, "failed to lower enum variant payload");
+      Error::internal(expr->arguments[0]->span,
+                      "failed to lower enum variant payload");
     }
   }
 
@@ -67,9 +71,11 @@ std::unique_ptr<HIRValueExpr> HIRBuilder::lowerVariantValue(CallExpr *expr) {
 }
 
 std::unique_ptr<HIRValueExpr> HIRBuilder::lowerVariantValue(MemberExpr *expr) {
-  auto symbol = dynamic_cast<EnumVariantSymbol *>(expr->resolved);
+  auto *symbol = dynamic_cast<EnumVariantSymbol *>(expr->resolved);
   if (symbol == nullptr) {
-    Error::internal(expr->span, "unmatched resolved");
+    Error::internal(
+        expr->span,
+        "enum variant member resolved symbol is not EnumVariantSymbol");
   }
 
   auto [found, variant] = lookupVariant(symbol);
@@ -78,125 +84,176 @@ std::unique_ptr<HIRValueExpr> HIRBuilder::lowerVariantValue(MemberExpr *expr) {
   }
 
   if (variant->payloadType != nullptr) {
-    Error::internal(expr->span, "unit variant cannot be used with payload");
+    Error::internal(expr->span,
+                    "payload variant reached unit variant lowering");
+  }
+
+  if (expr->resolvedType == nullptr) {
+    Error::internal(expr->span, "enum variant resolved type is nullptr");
   }
 
   auto it = program->typeDeclMap.find(expr->resolvedType);
-  if (it == program->typeDeclMap.end()) {
-    Error::diagnostic(expr->span, "unknown enum variant");
+  if (it == program->typeDeclMap.end() || it->second == nullptr) {
+    Error::internal(expr->span,
+                    "failed to find enum type declaration for variant member");
   }
 
-  auto owner = it->second;
+  auto *owner = it->second;
 
   if (variant->owner == nullptr) {
-    Error::internal(expr->span, "enum variant owenr is nullptr");
+    Error::internal(expr->span, "enum variant owner is nullptr");
   }
 
   if (variant->owner != owner) {
-    Error::internal(expr->span, "mismatched variant owner");
+    Error::internal(expr->span, "enum variant owner mismatch");
   }
 
-  return make_unique<HIRVariantValueExpr>(expr->span, owner->type, variant,
-                                          nullptr);
+  return std::make_unique<HIRVariantValueExpr>(expr->span, owner->type, variant,
+                                               nullptr);
 }
 
-unique_ptr<HIRPlaceExpr> HIRBuilder::lowerPlace(NameExpr *expr) {
+std::unique_ptr<HIRPlaceExpr> HIRBuilder::lowerPlace(NameExpr *expr) {
   if (expr == nullptr) {
-    Error::internal("nameExpr is nullptr");
+    Error::internal("NameExpr is nullptr");
   }
+
   if (expr->resolved == nullptr) {
-    Error::internal(expr->span, "unresolved symbol");
+    Error::internal(expr->span, "name expression has no resolved symbol");
   }
 
   if (expr->resolved->type != Symbol::SymbolType::VALUE) {
-    Error::internal("iliegal symbol kind");
+    Error::internal(expr->span,
+                    "name expression resolved to a non-value symbol");
   }
 
-  auto value = dynamic_cast<ValueSymbol *>(expr->resolved);
+  auto *value = dynamic_cast<ValueSymbol *>(expr->resolved);
   if (value == nullptr) {
-    Error::internal(expr->span, "valueSymbol is nullptr");
+    Error::internal(expr->span, "value symbol cannot be cast to ValueSymbol");
   }
 
-  if (auto [cond, result] = lookupLocal(value); cond) {
-    return make_unique<HIRLocalPlaceExpr>(expr->span, result);
+  if (auto [found, local] = lookupLocal(value); found) {
+    if (local == nullptr) {
+      Error::internal(expr->span, "local lookup returned nullptr");
+    }
+
+    return std::make_unique<HIRLocalPlaceExpr>(expr->span, local);
   }
-  if (auto [cond, result] = lookupParam(value); cond) {
-    return make_unique<HIRParamPlaceExpr>(expr->span, result);
+
+  if (auto [found, param] = lookupParam(value); found) {
+    if (param == nullptr) {
+      Error::internal(expr->span, "parameter lookup returned nullptr");
+    }
+
+    return std::make_unique<HIRParamPlaceExpr>(expr->span, param);
   }
-  if (auto [cond, result] = lookupField(value); cond) {
-    return make_unique<HIRFieldPlaceExpr>(expr->span, lowerImplictSelf(),
-                                          result);
+
+  if (auto [found, field] = lookupField(value); found) {
+    if (field == nullptr) {
+      Error::internal(expr->span, "field lookup returned nullptr");
+    }
+
+    auto receiver = lowerImplictSelf();
+    if (receiver == nullptr) {
+      Error::internal(expr->span, "implicit self lowering returned nullptr");
+    }
+
+    return std::make_unique<HIRFieldPlaceExpr>(expr->span, std::move(receiver),
+                                               field);
   }
-  Error::internal(expr->span, "unregisitered value : " + expr->name);
+
+  Error::internal(expr->span, "unregistered value: " + expr->name);
 }
 
 std::unique_ptr<HIRFieldPlaceExpr> HIRBuilder::lowerMember(MemberExpr *expr) {
-  std::unique_ptr<HIRValueExpr> receiver = lowerReceiver(expr->object.get());
+  auto receiver = lowerReceiver(expr->object.get());
   if (receiver == nullptr) {
-    Error::internal(expr->span, "receiver is nullptr");
-  }
-  if (expr->resolved == nullptr) {
-    Error::internal(expr->span, "unresolved member symbol");
+    Error::internal(expr->object->span,
+                    "member receiver lowering returned nullptr");
   }
 
-  auto value = dynamic_cast<ValueSymbol *>(expr->resolved);
+  if (expr->resolved == nullptr) {
+    Error::internal(expr->span, "member expression has no resolved symbol");
+  }
+
+  auto *value = dynamic_cast<ValueSymbol *>(expr->resolved);
   if (value == nullptr) {
-    Error::internal(expr->span, "member field resolved is not ValueSymbol");
+    Error::internal(expr->span,
+                    "member field resolved symbol is not ValueSymbol");
+  }
+
+  if (expr->object->resolvedType == nullptr) {
+    Error::internal(expr->object->span,
+                    "member receiver resolved type is nullptr");
   }
 
   auto it = program->typeDeclMap.find(expr->object->resolvedType);
-  if (it == program->typeDeclMap.end()) {
-    Error::internal(expr->span, "unknown type");
+  if (it == program->typeDeclMap.end() || it->second == nullptr) {
+    Error::internal(expr->object->span,
+                    "failed to find receiver HIR type declaration");
   }
 
   if (dynamic_cast<HIRRootExpr *>(receiver.get())) {
-    auto rIt = program->rootMap.find(value);
-    if (rIt != program->rootMap.end()) {
-      return make_unique<HIRFieldPlaceExpr>(expr->span, std::move(receiver),
-                                            rIt->second);
+    auto rootIt = program->rootMap.find(value);
+    if (rootIt != program->rootMap.end()) {
+      if (rootIt->second == nullptr) {
+        Error::internal(expr->span, "root field lookup returned nullptr");
+      }
+
+      return std::make_unique<HIRFieldPlaceExpr>(
+          expr->span, std::move(receiver), rootIt->second);
     }
   }
 
-  auto type = it->second;
+  for (auto *type = it->second; type != nullptr; type = type->base) {
+    if (auto [found, field] = lookupField(type, value); found) {
+      if (field == nullptr) {
+        Error::internal(expr->span, "field lookup returned nullptr");
+      }
 
-  for (; type != nullptr; type = type->base) {
-    if (auto [cond, result] = lookupField(type, value); cond) {
-      return make_unique<HIRFieldPlaceExpr>(expr->span, std::move(receiver),
-                                            result);
+      return std::make_unique<HIRFieldPlaceExpr>(expr->span,
+                                                 std::move(receiver), field);
     }
   }
 
-  Error::internal(expr->span, "fail to lower field");
+  Error::internal(expr->span, "failed to lower member field");
 }
 
 std::unique_ptr<HIRPlaceExpr>
 HIRBuilder::lowerArrayAccess(ArrayAccessExpr *expr) {
-
-  auto type = dynamic_cast<ArrayTypeSymbol *>(expr->object->resolvedType);
-  if (type == nullptr) {
-    Error::internal(expr->span, "expected array type ");
+  auto *arrayType = dynamic_cast<ArrayTypeSymbol *>(expr->object->resolvedType);
+  if (arrayType == nullptr) {
+    Error::internal(expr->object->span,
+                    "array access object does not have an array type");
   }
 
-  // Expr -> hirValueExpr
-  // nullptr아님을 보장
-  ;
-  unique_ptr<HIRPlaceExpr> object = nullptr;
-  if (auto name = dynamic_cast<NameExpr *>(expr->object.get())) {
+  std::unique_ptr<HIRPlaceExpr> object = nullptr;
+
+  if (auto *name = dynamic_cast<NameExpr *>(expr->object.get())) {
     object = lowerPlace(name);
-  } else if (auto arr = dynamic_cast<ArrayAccessExpr *>(expr->object.get())) {
-    object = lowerArrayAccess(arr);
+  } else if (auto *array =
+                 dynamic_cast<ArrayAccessExpr *>(expr->object.get())) {
+    object = lowerArrayAccess(array);
   }
 
   if (object == nullptr) {
-    Error::internal(expr->span, "illegal array's base kind");
+    Error::internal(expr->object->span,
+                    "array access base is not a lowerable place expression");
   }
 
-  unique_ptr<HIRValueExpr> index = lowerValue(expr->index.get());
+  auto index = lowerValue(expr->index.get());
+  if (index == nullptr) {
+    Error::internal(expr->index->span, "array index lowering returned nullptr");
+  }
 
-  // TypeSymbol -> hirType
-  // nullptr 아님을 보장
-  auto elementType = HIRHelper::lowerType(program, source, expr->resolvedType);
+  if (expr->resolvedType == nullptr) {
+    Error::internal(expr->span, "array element resolved type is nullptr");
+  }
 
-  return make_unique<HIRArrayAccessPlaceExpr>(expr->span, std::move(object),
-                                              std::move(index), elementType);
+  auto *elementType = HIRHelper::lowerType(program, source, expr->resolvedType);
+  if (elementType == nullptr) {
+    Error::internal(expr->span, "failed to lower array element type");
+  }
+
+  return std::make_unique<HIRArrayAccessPlaceExpr>(
+      expr->span, std::move(object), std::move(index), elementType);
 }

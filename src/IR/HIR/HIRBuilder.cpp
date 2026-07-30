@@ -4,6 +4,7 @@
 #include "hrd/IR/HIR/HIRExpr.h"
 #include "hrd/IR/HIR/HIRProgram.h"
 #include "hrd/IR/HIR/HIRStmt.h"
+#include "hrd/Recover/HIRReover.h"
 #include "hrd/compiler/CompilerContexts.h"
 #include "hrd/util/Error.h"
 
@@ -11,7 +12,8 @@
 #include <utility>
 
 HIRBuilder::HIRBuilder(HIRContext &ctx, HIRSource *s)
-    : program(ctx.program), source(s), table(ctx.table) {}
+    : program(ctx.program), source(s), engine(ctx.engine), recover(*this),
+      table(ctx.table) {}
 
 void HIRBuilder::build() {
   for (auto &d : source->source->decls) {

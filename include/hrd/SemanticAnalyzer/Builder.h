@@ -4,6 +4,7 @@
 #include "hrd/AST/Decl.h"
 #include "hrd/AST/Stmt.h"
 #include "hrd/AST/Visitor.h"
+#include "hrd/Recover/BuilderRecover.h"
 #include "hrd/SourceSpan.h"
 #include "hrd/compiler/CompilerContexts.h"
 #include "hrd/util/Error.h"
@@ -34,5 +35,5 @@ private:
   unique_ptr<TypeSymbol> topLevel;
   void extracted();
   void buildMain(ClassDecl *decl);
-  bool canInnerDecl(Decl *decl);
+  BuilderRecover recover;
 };

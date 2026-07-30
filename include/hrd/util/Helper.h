@@ -1,5 +1,6 @@
 
 #include "hrd/AST/Decl.h"
+#include "hrd/SourceSpan.h"
 #include <llvm/ADT/APInt.h>
 #include <llvm/ADT/SmallString.h>
 #include <string>
@@ -10,11 +11,12 @@ class TraitSig;
 
 namespace Helper {
 std::string apIntToString(const llvm::APInt &v);
-bool hasSameSig(const std::vector<MethodSymbol *> &vec, MethodSymbol *method);
+pair<bool, SourceSpan> hasSameSig(const std::vector<MethodSymbol *> &vec,
+                                  MethodSymbol *method);
 bool hasSameSig(const vector<TraitSig *> &vec, TraitSig *sig);
-bool checkImplementTraitSig(TypeSymbol *symbol);
-bool hasSameMethodSig(const std::vector<MethodSymbol *> &vec,
-                      MethodSymbol *method);
+pair<bool, TypeSymbol *> checkImplementTraitSig(TypeSymbol *symbol);
+pair<bool, SourceSpan> hasSameMethodSig(const std::vector<MethodSymbol *> &vec,
+                                        MethodSymbol *method);
 bool hasMethodInHierarchyWithSameSig(TypeSymbol *type, const std::string &name,
                                      MethodSymbol *sig);
 } // namespace Helper

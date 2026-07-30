@@ -3,6 +3,7 @@
 #include "hrd/SemanticAnalyzer/SymbolTable.h"
 #include "hrd/SemanticAnalyzer/symbol/MethodSymbol.h"
 #include "hrd/SemanticAnalyzer/symbol/TypeSymbol.h"
+#include "hrd/SourceSpan.h"
 #include "hrd/util/Error.h"
 #include "hrd/util/TypeResolver.h"
 std::string Helper::apIntToString(const llvm::APInt &v) {
@@ -11,8 +12,9 @@ std::string Helper::apIntToString(const llvm::APInt &v) {
   return std::string(buf.str());
 }
 
-bool Helper::hasSameMethodSig(const vector<MethodSymbol *> &vec,
-                              MethodSymbol *symbol) {
+pair<bool, SourceSpan>
+Helper::hasSameMethodSig(const vector<MethodSymbol *> &vec,
+                         MethodSymbol *symbol) {
   for (auto *m : vec) {
     if (m == symbol)
       continue;
@@ -27,6 +29,7 @@ bool Helper::hasSameMethodSig(const vector<MethodSymbol *> &vec,
     }
 
     bool same = true;
+    SourceSpan span = m->decl->span;
     for (size_t i = 0; i < m->params.size(); ++i) {
       if (m->params[i]->typeSymbol != symbol->params[i]->typeSymbol) {
         same = false;
@@ -35,15 +38,15 @@ bool Helper::hasSameMethodSig(const vector<MethodSymbol *> &vec,
     }
 
     if (same) {
-      return true;
+      return {true, span};
     }
   }
 
-  return false;
+  return {false, {}};
 }
 
-bool Helper::hasSameSig(const vector<MethodSymbol *> &vec,
-                        MethodSymbol *symbol) {
+pair<bool, SourceSpan> Helper::hasSameSig(const vector<MethodSymbol *> &vec,
+                                          MethodSymbol *symbol) {
   for (auto *m : vec) {
     if (m == symbol)
       continue;
@@ -53,6 +56,7 @@ bool Helper::hasSameSig(const vector<MethodSymbol *> &vec,
     }
 
     bool same = true;
+    SourceSpan span = m->decl->span;
     for (size_t i = 0; i < m->params.size(); ++i) {
       if (m->params[i]->typeSymbol != symbol->params[i]->typeSymbol) {
         same = false;
@@ -61,11 +65,11 @@ bool Helper::hasSameSig(const vector<MethodSymbol *> &vec,
     }
 
     if (same) {
-      return true;
+      return {true, span};
     }
   }
 
-  return false;
+  return {false, {}};
 }
 
 bool Helper::hasSameSig(const vector<TraitSig *> &vec, TraitSig *sig) {
@@ -90,17 +94,17 @@ bool Helper::hasSameSig(const vector<TraitSig *> &vec, TraitSig *sig) {
   return false;
 }
 
-void TypeResolver::resolveTypeNode(TypeNode *type, SymbolTable *table) {
+void TypeResolver::resolveTypeNode(TypeNode *type, SymbolTable &table) {
   if (dynamic_cast<BuiltinTypeNode *>(type) ||
       dynamic_cast<IdentifierTypeNode *>(type)) {
-    auto symbol = table->getType(type);
+    auto symbol = table.getType(type);
     if (!symbol)
       Error::diagnostic(type->span, "unknown type : " + type->type);
     type->resolved = symbol;
   } else if (auto a = dynamic_cast<ArrayTypeNode *>(type)) {
     TypeResolver::resolveTypeNode(a->elementType.get(), table);
     llvm::APInt size = resolveFixedArraySize(a->fixedSize.get(), table);
-    a->resolved = table->arrayTypeGetOrCreate(a->elementType->resolved, size);
+    a->resolved = table.arrayTypeGetOrCreate(a->elementType->resolved, size);
   } else if (auto g = dynamic_cast<GenericTypeNode *>(type)) {
     auto ar = g->typeArgs;
     TypeSymbol *orign = nullptr;
@@ -131,14 +135,14 @@ void TypeResolver::resolveTypeNode(TypeNode *type, SymbolTable *table) {
                           "not allowed handle target type : " + ar[0]->type);
       }
 
-      orign = table->getHandle();
+      orign = table.getHandle();
       break;
     case GenericTypeNode::GenericKind::OPTION:
       if (args.size() != 1) {
         Error::diagnostic(g->span, "Option need one type but '" +
                                        to_string(args.size()) + "'");
       }
-      orign = table->getOption();
+      orign = table.getOption();
       break;
     case GenericTypeNode::GenericKind::RESULT:
       if (args.size() != 2) {
@@ -151,14 +155,14 @@ void TypeResolver::resolveTypeNode(TypeNode *type, SymbolTable *table) {
       }
       break;
     }
-    g->resolved = table->GenericInsGetOrCreate(orign, args);
+    g->resolved = table.GenericInsGetOrCreate(orign, args);
   } else {
     Error::diagnostic(type->span, "unknown type : " + type->type);
   }
 }
 
 llvm::APInt TypeResolver::resolveFixedArraySize(Expr *expr,
-                                                SymbolTable *table) {
+                                                SymbolTable &table) {
 
   auto lit = dynamic_cast<LiteralExpr *>(expr);
   if (!lit) {
@@ -204,7 +208,7 @@ static int compareUnsignedDecimal(const std::string &a, const std::string &b) {
   return 0;
 }
 
-ResolvedLit TypeResolver::resolveLitInt(LiteralExpr *expr, SymbolTable *table) {
+ResolvedLit TypeResolver::resolveLitInt(LiteralExpr *expr, SymbolTable &table) {
   const string max32 = "2147483647";
   const string max64 = "9223372036854775807";
   const string max128 = "170141183460469231731687303715884105727";
@@ -234,13 +238,13 @@ ResolvedLit TypeResolver::resolveLitInt(LiteralExpr *expr, SymbolTable *table) {
 
   switch (bits) {
   case 32:
-    resolvedLit.type = table->getType("i32");
+    resolvedLit.type = table.getType("i32");
     break;
   case 64:
-    resolvedLit.type = table->getType("i64");
+    resolvedLit.type = table.getType("i64");
     break;
   case 128:
-    resolvedLit.type = table->getType("i128");
+    resolvedLit.type = table.getType("i128");
     break;
   default:
     Error::internal(expr->token, "invalid integer literal bit width");
@@ -250,7 +254,7 @@ ResolvedLit TypeResolver::resolveLitInt(LiteralExpr *expr, SymbolTable *table) {
   return resolvedLit;
 }
 
-bool Helper::checkImplementTraitSig(TypeSymbol *symbol) {
+pair<bool, TypeSymbol *> Helper::checkImplementTraitSig(TypeSymbol *symbol) {
   if (!symbol) {
     Error::internal("null type symbol");
   }
@@ -272,12 +276,12 @@ bool Helper::checkImplementTraitSig(TypeSymbol *symbol) {
 
       if (!Helper::hasMethodInHierarchyWithSameSig(symbol, sig->name,
                                                    sig->symbol)) {
-        return false;
+        return {false, traitType};
       }
     }
   }
 
-  return true;
+  return {true, nullptr};
 }
 
 bool Helper::hasMethodInHierarchyWithSameSig(TypeSymbol *type,
@@ -293,7 +297,7 @@ bool Helper::hasMethodInHierarchyWithSameSig(TypeSymbol *type,
       continue;
     }
     auto vec = it->second;
-    if (Helper::hasSameSig(vec, sig)) {
+    if (Helper::hasSameSig(vec, sig).first) {
       return true;
     }
   }

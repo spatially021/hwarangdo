@@ -256,9 +256,6 @@ void Verifier::visit(ClassDecl *decl) {
   for (auto &a : decl->methods) {
     a->accept(this);
   }
-  for (auto &a : decl->innerDecl) {
-    a->accept(this);
-  }
 }
 void Verifier::visit(StructDecl *decl) {
   if (decl->symbol == nullptr)

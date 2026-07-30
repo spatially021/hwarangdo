@@ -93,7 +93,7 @@ Ptr Parser::forStmt() {
         {peek().span, "initializer is not allowed here", true},
     };
     engine.emit(dia);
-    throw runtime_error("");
+    recover.recover(ParserRecoveryPoint::Statement);
   }
 
   Expr::Ptr from = expression();
@@ -172,7 +172,7 @@ shared_ptr<Case> Parser::caseStmt(bool isSwtich) {
               {peek().span, "expected case selector after ','", true},
           };
           engine.emit(dia);
-          throw runtime_error("");
+          recover.recover(ParserRecoveryPoint::Statement);
         } else
           advance(); //,처리
       }
@@ -216,7 +216,7 @@ shared_ptr<Case> Parser::caseStmt(bool isSwtich) {
            "only 'case' and 'default' declarations are allowed here", true},
       };
       engine.emit(dia);
-      throw runtime_error("");
+      recover.recover(ParserRecoveryPoint::Statement);
     } else {
       auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_P038);
       dia.labels = {
@@ -225,9 +225,10 @@ shared_ptr<Case> Parser::caseStmt(bool isSwtich) {
            true},
       };
       engine.emit(dia);
-      throw runtime_error("");
+      recover.recover(ParserRecoveryPoint::Statement);
     }
   }
+  Error::internal("unreachable");
 }
 
 Ptr Parser::returnStmt() {

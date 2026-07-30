@@ -4,8 +4,77 @@
 // Trigger:
 //   More than one 'Main' class is declared in the program.
 //============================================================
-
 DIAG(HRD_S001,
      Error,
      "duplicate 'Main' class declaration",
      "HRD-S001")
+
+//============================================================
+// HRD_S002
+//
+// Trigger:
+//   A class is declared more than once with the same name.
+//============================================================
+DIAG(HRD_S002,
+     Error,
+     "duplicate type declaration",
+     "HRD-S002")
+
+//============================================================
+// HRD_S003
+//
+// Trigger:
+//   A reserved identifier is used where a user-defined
+//   identifier is expected.
+//============================================================
+DIAG(HRD_S003,
+     Error,
+     "reserved identifier",
+     "HRD-S003")
+
+//============================================================
+// HRD_S004
+//
+// Trigger:
+//   An enum declares more than one variant with the same name.
+//============================================================
+DIAG(HRD_S004,
+     Error,
+     "duplicate enum variant declaration",
+     "HRD-S004")
+
+//============================================================
+// HRD_S005
+//
+// Trigger:
+//   A variable is declared more than once with the same name
+//   in the same scope.
+//============================================================
+DIAG(HRD_S005,
+     Error,
+     "duplicate variable declaration ",
+     "HRD-S005")
+
+//============================================================
+// HRD_S006
+//
+// Trigger:
+//   A field is declared more than once with the same name
+//   in the same type.
+//============================================================
+DIAG(HRD_S006,
+     Error,
+     "duplicate field declaration",
+     "HRD-S006")
+
+//============================================================
+// HRD_S007
+//
+// Trigger:
+//   A method is declared more than once with the same
+//   signature in the same type.
+//============================================================
+DIAG(HRD_S007,
+     Error,
+     "duplicate method declaration",
+     "HRD-S007")

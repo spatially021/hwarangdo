@@ -8,9 +8,12 @@
 #include "hrd/IR/HIR/HIRStmt.h"
 #include "hrd/IR/HIR/HIRSymbol.h"
 #include "hrd/IR/HIR/HIRType.h"
+#include "hrd/Recover/HIRVerifierRecover.h"
 #include "hrd/SemanticAnalyzer/symbol/TypeSymbol.h"
+#include "hrd/compiler/CompilerContexts.h"
 #include "hrd/enums/InheritState.h"
 #include "hrd/util/Error.h"
+#include "hrd/util/diagnostic/Diagnostic.h"
 #include "magic_enum/magic_enum.hpp"
 #include <cassert>
 #include <llvm/ADT/APInt.h>
@@ -22,7 +25,8 @@ static bool isObserver(HIRType *type);
 static InitMap mergeIntersection(const InitMap &a, const InitMap &b);
 static pair<bool, llvm::APInt> tryGetConstIndex(HIRValueExpr *value);
 
-HIRVerifier::HIRVerifier(HIRProgram *p) : program(p) {}
+HIRVerifier::HIRVerifier(HIRVerifierContext &ctx)
+    : program(ctx.program), engine(ctx.engine), recover(*this) {}
 
 void HIRVerifier::verify() {
   if (program == nullptr) {
@@ -159,8 +163,22 @@ void HIRVerifier::verifyMethod(HIRMethodDecl *method) {
   }
   if (method->returnType->typeSymbol->kind != TypeSymbol::TypeKind::VOID &&
       !definitelyReturns(method->body.get())) {
-    Error::diagnostic(method->span, "non-void function '" + method->name +
-                                        "' may exit without returning a value");
+    auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_H001);
+    dia.labels = {
+        {method->span,
+         "method '" + method->name +
+             "' may reach the end without returning a value",
+         true},
+    };
+    dia.notes = {
+        "the declared return type is '" + method->returnType->name + "'",
+        "every reachable control-flow path must return a value",
+    };
+    dia.helps = {
+        "add a return statement to every reachable path",
+    };
+    engine.emit(dia);
+    recover.recover();
   }
 }
 
@@ -263,10 +281,13 @@ void HIRVerifier::verifyStmt(HIRStmt *stmt) {
     verifyBlock(ifStmt->thenBlock.get());
     InitMap then = initmap;
     InitMap else_ = before;
+
     if (ifStmt->elseBlock != nullptr) {
+      initmap = before;
       verifyBlock(ifStmt->elseBlock.get());
       else_ = initmap;
     }
+
     initmap = mergeIntersection(then, else_);
     break;
   }
@@ -376,9 +397,21 @@ void HIRVerifier::verifyStmt(HIRStmt *stmt) {
     verifyBlock(caseStmt->body.get());
     break;
   }
-  case HIRNodeKind::OnExitStmt:
-    Error::diagnostic(stmt->span, "not developed function");
+  case HIRNodeKind::OnExitStmt: {
+    auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_H002);
+    dia.labels = {
+        {stmt->span, "onexit cannot be verified in the current HIR", true},
+    };
+    dia.notes = {
+        "onexit lowering and verification are not implemented yet",
+    };
+    dia.helps = {
+        "remove this onexit statement until the feature is implemented",
+    };
+    engine.emit(dia);
+    recover.recover();
     break;
+  }
   case HIRNodeKind::ValueTransferStmt: {
     auto value =
         expect<HIRValueTransferStmt>(stmt, HIRNodeKind::ValueTransferStmt);
@@ -817,17 +850,67 @@ void HIRVerifier::checkInitialize(HIRPlaceExpr *place) {
           Error::internal(arr->span, "array access object is not array type");
         }
 
-        if (index.uge(arrayType->size)) {
-          Error::diagnostic(arr->index->span, "array index out of bounds");
+        if (index.isNegative()) {
+          auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_H007);
+          dia.labels = {
+              {arr->index->span, "array index is negative", true},
+          };
+          dia.notes = {
+              "array indices must be zero or greater",
+          };
+          dia.helps = {
+              "use a non-negative index",
+          };
+          engine.emit(dia);
+          recover.recover();
         }
+
+        if (index.uge(arrayType->size)) {
+          auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_H003);
+          dia.labels = {
+              {arr->index->span, "this index is outside the array bounds",
+               true},
+          };
+          dia.notes = {
+              "a constant array index must be smaller than the array length",
+          };
+          dia.helps = {
+              "use an index smaller than the array length",
+          };
+          engine.emit(dia);
+          recover.recover();
+        }
+
         auto it = init.initializedIndices.find(index);
         if (it == init.initializedIndices.end()) {
-          Error::diagnostic(place->span, "use of uninitialized array elements");
+          auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_H004);
+          dia.labels = {
+              {place->span, "this array element may be uninitialized", true},
+          };
+          dia.notes = {
+              "the selected element is not initialized on every reachable path",
+          };
+          dia.helps = {
+              "initialize this element before reading it",
+          };
+          engine.emit(dia);
+          recover.recover();
         }
       } else {
-        Error::diagnostic(
-            place->span,
-            "use of not fully initialized array with non-const index");
+        auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_H005);
+        dia.labels = {
+            {place->span,
+             "a non-constant index reads from a partially initialized array",
+             true},
+        };
+        dia.notes = {
+            "the selected element cannot be proven to be initialized",
+        };
+        dia.helps = {
+            "initialize the entire array before using a non-constant index",
+        };
+        engine.emit(dia);
+        recover.recover();
       }
     }
     return;
@@ -835,7 +918,18 @@ void HIRVerifier::checkInitialize(HIRPlaceExpr *place) {
 
   auto &init = getInitState(place);
   if (!init.initialized) {
-    Error::diagnostic(place->span, "use of uninitialized variable");
+    auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_H006);
+    dia.labels = {
+        {place->span, "this value may be uninitialized", true},
+    };
+    dia.notes = {
+        "the value is not initialized on every reachable control-flow path",
+    };
+    dia.helps = {
+        "initialize this value before reading it",
+    };
+    engine.emit(dia);
+    recover.recover();
   }
 }
 
@@ -851,9 +945,39 @@ void HIRVerifier::initialize(HIRPlaceExpr *place) {
         Error::internal(arr->span, "array access object is not array type");
       }
 
-      if (index.uge(arrayType->size)) {
-        Error::diagnostic(arr->index->span, "array index out of bounds");
+      if (index.isNegative()) {
+        auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_H007);
+        dia.labels = {
+            {arr->index->span, "array index is negative", true},
+        };
+        dia.notes = {
+            "array indices must be zero or greater",
+        };
+        dia.helps = {
+            "use a non-negative index",
+        };
+        engine.emit(dia);
+        recover.recover();
       }
+
+      if (index.uge(arrayType->size)) {
+        llvm::SmallString<32> sizeText;
+        arrayType->size.toString(sizeText, 10, false);
+
+        auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_H003);
+        dia.labels = {
+            {arr->index->span, "this index is outside the array bounds", true},
+        };
+        dia.notes = {
+            "the array length is " + std::string(sizeText),
+        };
+        dia.helps = {
+            "use an index smaller than the array length",
+        };
+        engine.emit(dia);
+        recover.recover();
+      }
+
       auto it = init.initializedIndices.find(index);
       if (it == init.initializedIndices.end()) {
         init.initializedIndices.insert(index);
@@ -974,16 +1098,12 @@ static std::pair<bool, llvm::APInt> tryGetConstIndex(HIRValueExpr *value) {
 
   if (auto lit = dynamic_cast<HIRLiteralExpr *>(value)) {
     if (!lit->resolvedLit.isInt()) {
-      Error::diagnostic(value->span, "array index must be integer type");
+      Error::internal(value->span,
+                      "non-integer literal reached array index verification");
     }
 
     llvm::APInt index = lit->resolvedLit.asInt().value;
-
-    if (index.isNegative()) {
-      Error::diagnostic(value->span, "array index cannot be negative");
-    }
-
-    return {true, index.zextOrTrunc(128)};
+    return {true, index.sextOrTrunc(128)};
   }
 
   return {false, llvm::APInt(128, 0)};

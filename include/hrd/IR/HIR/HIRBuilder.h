@@ -10,12 +10,14 @@
 #include "hrd/IR/HIR/HIRStmt.h"
 #include "hrd/IR/HIR/HIRSymbol.h"
 #include "hrd/IR/HIR/HIRType.h"
+#include "hrd/Recover/HIRReover.h"
 #include "hrd/SemanticAnalyzer/SymbolTable.h"
 #include "hrd/SemanticAnalyzer/symbol/MethodSymbol.h"
 #include "hrd/SemanticAnalyzer/symbol/TypeSymbol.h"
 #include "hrd/SemanticAnalyzer/symbol/ValueSymbol.h"
 #include "hrd/compiler/CompilerContexts.h"
 #include "hrd/util/Error.h"
+#include "hrd/util/diagnostic/DiagnosticEngine.h"
 #include <cassert>
 #include <memory>
 #include <utility>
@@ -28,6 +30,8 @@ public:
 
   HIRProgram *program;
   HIRSource *source;
+  DiagnosticEngine &engine;
+  HIRRecover recover;
 
 private:
   HIRProgram *module = nullptr;

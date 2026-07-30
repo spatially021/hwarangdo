@@ -13,14 +13,15 @@
 #include "hrd/util/Error.h"
 #include "hrd/util/Guard.h"
 #include "hrd/util/TypeResolver.h"
+#include "hrd/util/diagnostic/Diagnostic.h"
 #include <llvm/ADT/APInt.h>
 #include <string>
 
 void Resolver::visit(ClassDecl *decl) {
   if (!decl->symbol) {
-    Error::internal(decl->span, "StructDecl symbol not initialized");
+    Error::internal(decl->span, "ClassDecl symbol not initialized");
   }
-  ScopeGuard _(*table, decl->symbol->memberScope);
+  ScopeGuard _(table, decl->symbol->memberScope);
   TypeContextGuard __(currentType, decl->symbol);
 
   for (auto a : decl->fields)
@@ -28,12 +29,16 @@ void Resolver::visit(ClassDecl *decl) {
   for (auto a : decl->methods) {
     a->accept(this);
   }
-  for (auto a : decl->innerDecl) {
-    a->accept(this);
-  }
 
-  if (!Helper::checkImplementTraitSig(decl->symbol)) {
-    Error::internal(decl->span, "not implement trait");
+  if (auto [result, type] = Helper::checkImplementTraitSig(decl->symbol);
+      !result) {
+    auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S034);
+    dia.labels = {{decl->span,
+                   "type '" + decl->name + "' does not implement trait '" +
+                       type->name + "'",
+                   true}};
+    engine.emit(dia);
+    recover.recover();
   }
 }
 
@@ -41,7 +46,7 @@ void Resolver::visit(StructDecl *decl) {
   if (!decl->symbol) {
     Error::internal(decl->span, "StructDecl symbol not initialized");
   }
-  ScopeGuard _(*table, decl->symbol->memberScope);
+  ScopeGuard _(table, decl->symbol->memberScope);
   TypeContextGuard __(currentType, decl->symbol);
   for (auto &a : decl->fields) {
     a->accept(this);
@@ -51,25 +56,41 @@ void Resolver::visit(StructDecl *decl) {
     i->accept(this);
   }
 
-  if (!Helper::checkImplementTraitSig(decl->symbol)) {
-    Error::internal(decl->span, "not implement trait");
+  if (auto [result, type] = Helper::checkImplementTraitSig(decl->symbol);
+      !result) {
+    auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S034);
+    dia.labels = {{decl->span,
+                   "type '" + decl->name + "' does not implement trait '" +
+                       type->name + "'",
+                   true}};
+    engine.emit(dia);
+    recover.recover();
   }
 }
 void Resolver::visit(EnumDecl *) {}
 void Resolver::visit(ImplDecl *decl) {
-  auto implIt = table->implMap.find(decl);
-  if (implIt == table->implMap.end()) {
+  auto implIt = table.implMap.find(decl);
+  if (implIt == table.implMap.end()) {
     Error::internal(decl->span, "fail to find impl");
   }
-  ScopeGuard _(*table, implIt->second->memberScope);
+  ScopeGuard _(table, implIt->second->memberScope);
   TypeContextGuard __(currentType, implIt->second->target);
   auto prev = currentSelf;
   currentSelf = implIt->second->target->memberScope;
   for (auto &m : decl->LinkedImplMethods) {
     m->accept(this);
     if (!decl->traits.empty() &&
-        !Helper::hasSameMethodSig(decl->sigs, m->methodSymbol)) {
-      Error::diagnostic(m->span, "not allowed normal method declare here");
+        !Helper::hasSameMethodSig(decl->sigs, m->methodSymbol).first) {
+      auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S035);
+      dia.labels = {
+          {decl->span,
+           "method '" + m->name + "' is not declared by the implemented traits",
+           true}};
+      dia.notes = {
+          {"trait implementation blocks may only contain methods required by "
+           "their traits"}};
+      engine.emit(dia);
+      recover.recover();
     }
   }
 
@@ -77,7 +98,7 @@ void Resolver::visit(ImplDecl *decl) {
 }
 
 void Resolver::visit(TraitDecl *decl) {
-  ScopeGuard _(*table, decl->symbol->memberScope);
+  ScopeGuard _(table, decl->symbol->memberScope);
   for (auto a : decl->traitSigs) {
     a->accept(this);
   }
@@ -85,7 +106,7 @@ void Resolver::visit(TraitDecl *decl) {
 
 void Resolver::visit(FuncDecl *decl) {
 
-  ScopeGuard _(*table, decl->methodSymbol->scope);
+  ScopeGuard _(table, decl->methodSymbol->scope);
   auto symbol = decl->methodSymbol;
   auto prev = currentMethod;
   currentMethod = decl->methodSymbol;
@@ -98,12 +119,15 @@ void Resolver::visit(FuncDecl *decl) {
   auto rt = decl->returnType.get();
   rt->accept(this);
   auto type = rt->resolved;
-  if (symbol->returns.empty() && table->getType("void") != type) {
-    Error::diagnostic(decl->span, "non-void method must have return");
-  }
   for (auto r : symbol->returns) {
     if (!isAssignable(type, r->returnType)) {
-      Error::diagnostic(r->span, "unmatched return type");
+      auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S036);
+      dia.labels = {{decl->span,
+                     "expected return type '" + rt->type + "', found '" +
+                         r->returnType->name + "'",
+                     true}};
+      engine.emit(dia);
+      recover.recover();
     }
   }
   symbol->returnType = rt->resolved;
@@ -115,30 +139,59 @@ void Resolver::visit(FuncDecl *decl) {
 
     if (it == currentType->base->memberScope->methodMap.end()) {
       if (decl->isOverride) {
-        Error::diagnostic(decl->span,
-                          "unknown override target : " + decl->name);
+        auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S037);
+        dia.labels = {{decl->span, "no matching method to override", true}};
+        dia.helps = {{"remove the override modifier or match a parent method "
+                      "signature"}};
+        engine.emit(dia);
+        recover.recover();
       }
       return;
     }
-    if (Helper::hasSameMethodSig(it->second, decl->methodSymbol)) {
+    if (Helper::hasSameMethodSig(it->second, decl->methodSymbol).first) {
       if (!decl->isOverride) {
-        Error::diagnostic(decl->span,
-                          "missing 'override' for inherited method : " +
-                              decl->name);
+        auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S038);
+        dia.labels = {{decl->span,
+                       "inherited method overridden without 'override'", true}};
+        dia.helps = {{"add the override modifier to this method"}};
+        engine.emit(dia);
+        recover.recover();
       }
     } else if (decl->isOverride) {
-      Error::diagnostic(decl->span, "unkwown override target : " + decl->name);
+      auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S037);
+      dia.labels = {{decl->span, "no matching method to override", true}};
+      dia.helps = {{"remove the override modifier or match a parent method "
+                    "signature"}};
+      engine.emit(dia);
+      recover.recover();
     }
   } else if (decl->isOverride) {
-    Error::diagnostic(decl->span, "override not allowed non-inherited classi");
+    auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S039);
+    dia.labels = {{decl->span,
+                   "'override' is not valid in a class without a parent",
+                   true}};
+    dia.helps = {{"remove the override modifier"}};
+    engine.emit(dia);
+    recover.recover();
   }
 
   if (decl->isFrame) {
     if (!dynamic_cast<MainSymbol *>(currentType)) {
-      Error::diagnostic(decl->span, "frame can only in Main class");
+      auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S040);
+      dia.labels = {
+          {decl->span, "frame method must be declared in 'Main'", true}};
+      dia.helps = {{"change the method declaration to satisfy the frame method "
+                    "requirements"}};
+      engine.emit(dia);
+      recover.recover();
     }
     if (decl->name != "update") {
-      Error::diagnostic(decl->span, "after frame need method name - update");
+      auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S040);
+      dia.labels = {{decl->span, "frame method's name must be update", true}};
+      dia.helps = {{"change the method declaration to satisfy the frame method "
+                    "requirements"}};
+      engine.emit(dia);
+      recover.recover();
     }
   }
 }
@@ -175,13 +228,29 @@ void Resolver::visit(VarDecl *decl) {
     Error::internal(decl->span, "decl->type->resolved is nullptr");
   }
 
+  if (!decl->symbol) {
+    Error::internal(decl->span, "VarDecl symbol not initialized");
+  }
+
+  if (!decl->type || !decl->type->resolved) {
+    Error::internal(decl->span, "VarDecl type not resolved");
+  }
+
+  if (!decl->symbol->typeSymbol) {
+    Error::internal(decl->span, "VarDecl symbol type not initialized");
+  }
+
   if (decl->init) {
     decl->init->accept(this);
 
     if (decl->symbol->typeSymbol->kind == TypeSymbol::TypeKind::CLASS) {
       if (!dynamic_cast<ViewExpr *>(decl->init.get())) {
-        // Error품질 - copy인지, 단순 view사용하지 않은 초기화인지 확인.
-        Error::diagnostic(decl->init->span, "using class directly not allowed");
+        auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S041);
+        dia.labels = {{decl->init->span,
+                       "observer must be initialized from 'world.view'", true}};
+        dia.helps = {{"initialize this observer with 'world.view(handle)'"}};
+        engine.emit(dia);
+        recover.recover();
       }
     }
 
@@ -203,25 +272,31 @@ void Resolver::visit(VarDecl *decl) {
 
     if (decl->context == DeclContext::CLASSBODY && decl->init) {
       if (!canFieldInit(decl->init.get())) {
-        Error::diagnostic(decl->init->span, "invalid field initializer");
+        auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S041);
+        dia.labels = {{decl->init->span,
+                       "initializer is not valid for field type '" +
+                           decl->type->type + "'",
+                       true}};
+        engine.emit(dia);
+        recover.recover();
       }
-    }
-  } else {
-    if (decl->symbol->typeSymbol->kind == TypeSymbol::TypeKind::CLASS) {
-      Error::diagnostic(decl->span, "observer must be initalize when declare");
     }
   }
 
-  if (!decl->symbol->typeSymbol) {
-    Error::internal(decl->span, "typeSymbol is nullptr");
-  }
   if (decl->symbol->typeSymbol->kind == TypeSymbol::TypeKind::CLASS) {
     if (decl->init == nullptr) {
-      Error::diagnostic(decl->span, "observer variable must be initialized");
+      auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S043);
+      dia.labels = {
+          {decl->init->span, "observer requires an initializer", true}};
+      engine.emit(dia);
+      recover.recover();
     }
     if (currentMethod == nullptr) {
-      Error::diagnostic(decl->span,
-                        "observer variable must be declared in method");
+      auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S044);
+      dia.labels = {
+          {decl->init->span, "observer cannot be stored as a field", true}};
+      engine.emit(dia);
+      recover.recover();
     }
   }
 }
@@ -247,30 +322,53 @@ void Resolver::visit(Param *param) {
   if (param->defaultValue.has_value()) {
     param->defaultValue.value()->accept(this);
   }
+  if (!isAssignable(param->type->resolved,
+                    param->defaultValue.value()->resolvedType)) {
+    auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S045);
+    dia.labels = {{param->span,
+                   "expected type '" + param->type->type + "', found '" +
+                       param->defaultValue.value()->resolvedType->name + "'",
+                   true}};
+    engine.emit(dia);
+    recover.recover();
+  }
 }
 
 void Resolver::visit(InitDecl *decl) {
   auto symbol = decl->methodSymbol;
   for (auto r : symbol->returns) {
-    if (r->returnType != table->getBuilt("void")) {
-      Error::diagnostic(r->span, "in init cannot declare a return type");
+    if (r->returnType != table.getBuilt("void")) {
+      auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S046);
+      dia.labels = {{decl->span, "init cannot declare a return type", true}};
+      dia.helps = {{"remove the return type from this init declaration"}};
+      engine.emit(dia);
+      recover.recover();
     }
   }
 
+  auto prev = currentMethod;
   currentMethod = decl->methodSymbol;
-  ScopeGuard _(*table, decl->methodSymbol->scope);
+
+  ScopeGuard _(table, decl->methodSymbol->scope);
   decl->body->accept(this);
+
+  currentMethod = prev;
 }
 
 void Resolver::visit(OnDestroyDecl *decl) {
   auto symbol = decl->methodSymbol;
   for (auto r : symbol->returns) {
-    if (r->returnType != table->getBuilt("void")) {
-      Error::diagnostic(r->span, "in init cannot declare a return type");
+    if (r->returnType != table.getBuilt("void")) {
+      auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S047);
+      dia.labels = {
+          {decl->span, "onDestroy cannot declare a return type", true}};
+      dia.helps = {{"remove the return type from this onDestroy declaration"}};
+      engine.emit(dia);
+      recover.recover();
     }
   }
 
   currentMethod = decl->methodSymbol;
-  ScopeGuard _(*table, decl->methodSymbol->scope);
+  ScopeGuard _(table, decl->methodSymbol->scope);
   decl->body->accept(this);
 }

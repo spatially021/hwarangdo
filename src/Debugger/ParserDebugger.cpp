@@ -190,19 +190,16 @@ void ParserDebugger::visit(EmptyStmt *) {}
 // declare ParserDebugger::visitor methods
 void ParserDebugger::visit(ClassDecl *decl) {
   cout << ident() << "[classDecl] name : " << decl->name << " , baseClass : "
-       << (decl->baseClass.has_value() ? decl->baseClass.value() : " ")
+       << (decl->baseClass.has_value() ? decl->baseClass.value().str : " ")
        << " , implements : ";
   for (auto s : decl->traits)
-    cout << s << " ";
+    cout << s.str << " ";
   cout << "\n";
   depth++;
   for (auto a : decl->fields) {
     a->accept(this);
   }
   for (auto a : decl->methods) {
-    a->accept(this);
-  }
-  for (auto a : decl->innerDecl) {
     a->accept(this);
   }
   depth--;
@@ -227,7 +224,7 @@ void ParserDebugger::visit(EnumDecl *decl) {
   depth--;
 }
 void ParserDebugger::visit(ImplDecl *decl) {
-  cout << ident() << "[implDecl] target : " << decl->target << "\n";
+  cout << ident() << "[implDecl] target : " << decl->target.str << "\n";
   depth++;
   for (auto m : decl->LinkedImplMethods)
     m->accept(this);

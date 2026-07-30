@@ -2,6 +2,7 @@
 #include "hrd/SemanticAnalyzer/ResolvedLit.h"
 #include "hrd/SemanticAnalyzer/Resolver.h"
 #include "hrd/util/Error.h"
+#include "hrd/util/diagnostic/Diagnostic.h"
 #include "llvm/ADT/APFloat.h"
 #include "llvm/ADT/APInt.h"
 #include "llvm/ADT/StringRef.h"
@@ -44,16 +45,22 @@ ResolvedLit Resolver::resolveLitFloat(LiteralExpr *expr) {
                                             llvm::APFloat::rmNearestTiesToEven);
 
   if (!parseResult) {
-    Error::diagnostic(expr->span, "invalid floating-point literal");
+    Error::internal(expr->span, "invalid floating-point literal");
   }
 
   auto parseStatus = *parseResult;
 
   if (parseStatus & llvm::APFloat::opInvalidOp) {
-    Error::diagnostic(expr->span, "invalid floating-point literal");
+    Error::internal(expr->span, "invalid floating-point literal");
   }
   if (parseStatus & llvm::APFloat::opOverflow) {
-    Error::diagnostic(expr->span, "unsupported floating-point literal range");
+    auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S033);
+    dia.labels = {
+        {expr->span, "value exceeds the supported floating-point range", true}};
+    dia.notes = {{"the largest supported floating-point type is float:f128"}};
+    dia.helps = {{"use a smaller floating-point value"}};
+    engine.emit(dia);
+    recover.recover();
   }
 
   struct Candidate {
@@ -74,10 +81,17 @@ ResolvedLit Resolver::resolveLitFloat(LiteralExpr *expr) {
     }
 
     ResolvedLit resolvedLit;
-    resolvedLit.type = table->getType(cand.name);
+    resolvedLit.type = table.getType(cand.name);
     resolvedLit.value = FloatPayload(convertFloatTo(base, cand.sem));
     return resolvedLit;
   }
 
-  Error::diagnostic(expr->span, "unsupported floating-point literal range");
+  auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S033);
+  dia.labels = {
+      {expr->span, "value exceeds the supported floating-point range", true}};
+  dia.notes = {{"the largest supported floating-point type is float:f128"}};
+  dia.helps = {{"use a smaller floating-point value"}};
+  engine.emit(dia);
+  recover.recover();
+  return {};
 }

@@ -2,6 +2,7 @@
 #include "hrd/AST/Decl.h"
 #include "hrd/AST/DeclContext.h"
 #include "hrd/AST/TokenStream.h"
+#include "hrd/Recover/ParserRecover.h"
 #include "hrd/Token.h"
 #include "hrd/compiler/CompilerContexts.h"
 #include "hrd/util/Error.h"
@@ -10,7 +11,8 @@
 using ptr = shared_ptr<ASTNode>;
 
 Parser::Parser(ParserContext &ctx)
-    : tokens(ctx.tokenStream.tokens), engine(ctx.engine) {}
+    : tokens(ctx.tokenStream.tokens), engine(ctx.engine),
+      stream(ctx.tokenStream), recover(*this) {}
 
 vector<Decl::Ptr> Parser::parse() {
 
@@ -39,7 +41,7 @@ Decl::Ptr Parser::declaration(DeclContext context) {
           {peek().span, "an access modifier was already specified", true},
       };
       engine.emit(dia);
-      throw runtime_error("");
+      recover.recover(ParserRecoveryPoint::Declaration);
     }
     if (context != DeclContext::CLASSBODY) {
       auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_P001);
@@ -47,7 +49,7 @@ Decl::Ptr Parser::declaration(DeclContext context) {
           {peek().span, "only fields may have an access modifier", true},
       };
       engine.emit(dia);
-      throw runtime_error("");
+      recover.recover(ParserRecoveryPoint::Declaration);
     }
     prefix.modi = AModifierConvertor(advance());
     checkAceess = true;
@@ -68,7 +70,7 @@ Decl::Ptr Parser::declaration(DeclContext context) {
             {peek().span, "'const' modifier is already specified", true},
         };
         engine.emit(dia);
-        throw runtime_error("");
+        recover.recover(ParserRecoveryPoint::Declaration);
       }
 
       prefix.isConst = true;
@@ -81,7 +83,7 @@ Decl::Ptr Parser::declaration(DeclContext context) {
             {peek().span, "'root' modifier is already specified", true},
         };
         engine.emit(dia);
-        throw runtime_error("");
+        recover.recover(ParserRecoveryPoint::Declaration);
       }
 
       prefix.isRoot = true;
@@ -94,7 +96,7 @@ Decl::Ptr Parser::declaration(DeclContext context) {
             {peek().span, "'frame' modifier is already specified", true},
         };
         engine.emit(dia);
-        throw runtime_error("");
+        recover.recover(ParserRecoveryPoint::Declaration);
       }
       prefix.isFrame = true;
     }
@@ -106,7 +108,7 @@ Decl::Ptr Parser::declaration(DeclContext context) {
             {peek().span, "'override' modifier is already specified", true},
         };
         engine.emit(dia);
-        throw runtime_error("");
+        recover.recover(ParserRecoveryPoint::Declaration);
       }
       prefix.isOverride = true;
     }
@@ -118,7 +120,7 @@ Decl::Ptr Parser::declaration(DeclContext context) {
             {peek().span, "'async' modifier is already specified", true},
         };
         engine.emit(dia);
-        throw runtime_error("");
+        recover.recover(ParserRecoveryPoint::Declaration);
       }
       prefix.isAsync = true;
     }
@@ -177,7 +179,8 @@ Decl::Ptr Parser::declaration(DeclContext context) {
       {peek().span, "expected a declaration here", true},
   };
   engine.emit(dia);
-  throw runtime_error("");
+  recover.recover(ParserRecoveryPoint::Declaration);
+  return nullptr;
 }
 
 Stmt::Ptr Parser::statement() {

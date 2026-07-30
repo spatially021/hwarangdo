@@ -29,7 +29,8 @@ void SemanticAnalyzer::build() {
 }
 
 void SemanticAnalyzer::link() {
-  Linker linker(&symbolTable);
+  LinkerContext context = {symbolTable, engine};
+  Linker linker(context);
   for (auto &s : program->sources) {
     try {
       for (auto &a : s->decls) {
@@ -48,7 +49,8 @@ void SemanticAnalyzer::link() {
 }
 
 void SemanticAnalyzer::resolve() {
-  Resolver resolver(&symbolTable);
+  ResolverContext context = {symbolTable, engine};
+  Resolver resolver(context);
   for (auto &s : program->sources) {
 
     try {

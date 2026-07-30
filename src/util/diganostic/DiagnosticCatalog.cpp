@@ -10,8 +10,11 @@ const std::unordered_map<DiagnosticCode, Diagnostic>
     DiagnosticCatalog::definitions = {
 
 #include "hrd/util/diagnostic/def/BuilderDef.def"
+#include "hrd/util/diagnostic/def/HIRDef.def"
 #include "hrd/util/diagnostic/def/LexerDef.def"
+#include "hrd/util/diagnostic/def/LinkerDef.def"
 #include "hrd/util/diagnostic/def/ParserDef.def"
+#include "hrd/util/diagnostic/def/ResolverDef.def"
 
 };
 

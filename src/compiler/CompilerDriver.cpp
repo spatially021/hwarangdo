@@ -158,6 +158,8 @@ bool CompilerDriver::runLexer() {
       cout << Color::RED << "error occur while lexing\n" << Color::RESET;
 #endif
       return false;
+    } catch (Failure &f) {
+      return false;
     }
   }
 
@@ -180,7 +182,7 @@ bool CompilerDriver::runParser() {
 
   storage.program = make_unique<Program>();
 
-  for (const auto &s : storage.tokenStreams) {
+  for (auto &s : storage.tokenStreams) {
     ParserContext context = {s, engine};
     Parser parser(context);
     try {
@@ -191,6 +193,8 @@ bool CompilerDriver::runParser() {
       cout << Color::RED << "error occur while parsing\n";
 #endif
       cout << Color::RESET << e.what() << "\n";
+      return false;
+    } catch (Failure &f) {
       return false;
     }
   }
@@ -223,6 +227,8 @@ bool CompilerDriver::runSemantic() {
 #endif
     cout << Color::RESET << e.what() << "\n";
     return false;
+  } catch (Failure &f) {
+    return false;
   }
 
   if (options.dumpBuilder) {
@@ -241,6 +247,8 @@ bool CompilerDriver::runSemantic() {
 #endif
     cout << Color::RESET << e.what() << "\n";
     return false;
+  } catch (Failure &f) {
+    return false;
   }
 
   try {
@@ -250,6 +258,8 @@ bool CompilerDriver::runSemantic() {
     cout << Color::RED << "error occur while resolving\n";
 #endif
     cout << Color::RESET << e.what() << "\n";
+    return false;
+  } catch (Failure &f) {
     return false;
   }
 
@@ -272,6 +282,8 @@ bool CompilerDriver::runSemantic() {
 #endif
     cout << Color::RESET << e.what() << "\n";
     return false;
+  } catch (Failure &f) {
+    return false;
   }
 
   return true;
@@ -282,7 +294,7 @@ bool CompilerDriver::runHIR() {
   storage.hirProgram =
       make_unique<HIRProgram>(SourceSpan{"[program]", 0}, &storage.table);
 
-  HIRContext context = {storage.hirProgram.get(), storage.table};
+  HIRContext context = {storage.hirProgram.get(), engine, storage.table};
 
   try {
     for (auto &s : storage.program->sources) {
@@ -303,6 +315,8 @@ bool CompilerDriver::runHIR() {
 #endif
     cout << Color::RESET << e.what() << "\n";
     return false;
+  } catch (Failure &f) {
+    return false;
   }
 
   if (options.dumpHIR) {
@@ -313,13 +327,16 @@ bool CompilerDriver::runHIR() {
   }
 
   try {
-    HIRVerifier hirVerifer(context.program);
+    HIRVerifierContext ctx = {storage.hirProgram.get(), engine};
+    HIRVerifier hirVerifer(ctx);
     hirVerifer.verify();
   } catch (std::runtime_error &e) {
 #if HGM_DEBUG
     cout << Color::RED << "error occur while hir verifying\n";
 #endif
     cout << Color::RESET << e.what() << "\n";
+    return false;
+  } catch (Failure &f) {
     return false;
   }
 
@@ -340,6 +357,8 @@ bool CompilerDriver::runMIR() {
     cout << Color::RED << "error occur while mir building\n";
 #endif
     cout << Color::RESET << e.what() << "\n";
+    return false;
+  } catch (Failure &f) {
     return false;
   }
 
@@ -387,6 +406,8 @@ bool CompilerDriver::runCodegen() {
     cout << Color::RED << "error occur while codegen\n";
 #endif
     cout << Color::RESET << e.what() << "\n";
+    return false;
+  } catch (Failure &f) {
     return false;
   }
 

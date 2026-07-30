@@ -415,8 +415,6 @@ public:
   Token token;
   enum class StorageType {
     WORLD,
-    ARENA,
-
   } storageType;
   BuiltInNameExpr(SourceSpan t, Token tok, string n)
       : Expr(NKind::BUILTIN_NAME_EXPR, t), name(std::move(n)), token(tok) {}

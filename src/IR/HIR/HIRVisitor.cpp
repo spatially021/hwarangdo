@@ -13,6 +13,7 @@
 #include "hrd/SemanticAnalyzer/symbol/TypeSymbol.h"
 #include "hrd/util/Error.h"
 #include "hrd/util/Guard.h"
+#include "hrd/util/diagnostic/Diagnostic.h"
 #include <memory>
 #include <utility>
 #include <variant>
@@ -25,176 +26,265 @@ void HIRBuilder::visit(BinaryExpr *expr) {
   auto left = lowerValue(expr->left.get());
   auto right = lowerValue(expr->right.get());
   auto type = HIRHelper::lowerType(program, source, expr->resolvedType);
+
   if (left == nullptr) {
-    Error::internal(expr->left->span, "expr's left hir is nullptr");
+    Error::internal(expr->left->span, "binary left lowering returned nullptr");
   }
+
   if (right == nullptr) {
-    Error::internal(expr->right->span, "expr's right hir is nullptr");
+    Error::internal(expr->right->span,
+                    "binary right lowering returned nullptr");
   }
+
   if (type == nullptr) {
-    Error::internal(expr->span, "fail to get binary's type");
+    Error::internal(expr->span, "failed to lower binary result type");
   }
 
   exprResult =
       make_unique<HIRBinaryExpr>(expr->span, type, expr->op, std::move(left),
                                  std::move(right), expr->operrandType);
 }
+
 void HIRBuilder::visit(NameExpr *expr) {
   if (expr == nullptr) {
-    Error::internal("nameExpr is nullptr");
+    Error::internal("NameExpr is nullptr");
   }
+
   if (expr->resolved == nullptr) {
-    Error::internal(expr->span, "nameExpr resolved is nullptr");
+    Error::internal(expr->span, "NameExpr resolved symbol is nullptr");
   }
 
   switch (expr->resolved->type) {
   case Symbol::SymbolType::VALUE: {
     auto place = lowerPlace(expr);
+
     if (place == nullptr) {
-      Error::internal(expr->span, "failed to lower name expr as place");
+      Error::internal(expr->span, "failed to lower name expression as place");
     }
+
     exprResult = make_unique<HIRLoadExpr>(expr->span, std::move(place));
     return;
   }
 
   case Symbol::SymbolType::TYPE:
     Error::internal(expr->span,
-                    "type name cannot be used as standalone expression");
-    return;
+                    "type name reached standalone expression lowering");
 
   default:
-    Error::internal(expr->span, "unsupported resolved symbol in name expr");
+    Error::internal(expr->span,
+                    "unsupported resolved symbol in name expression");
   }
 }
 
 void HIRBuilder::visit(UnaryExpr *expr) {
   auto operand = lowerExpr(expr->right.get());
-  exprResult = make_unique<HIRUnaryExpr>(
-      expr->span, HIRHelper::lowerType(program, source, expr->resolvedType),
-      expr->op, std::move(operand));
+
+  if (operand == nullptr) {
+    Error::internal(expr->right->span,
+                    "unary operand lowering returned nullptr");
+  }
+
+  auto *type = HIRHelper::lowerType(program, source, expr->resolvedType);
+  if (type == nullptr) {
+    Error::internal(expr->span, "failed to lower unary result type");
+  }
+
+  exprResult =
+      make_unique<HIRUnaryExpr>(expr->span, type, expr->op, std::move(operand));
 }
 
 void HIRBuilder::visit(CallExpr *expr) {
-
   if (get_if<RuntimeSymbol *>(&expr->resolved)) {
     exprResult = lowerRuntime(expr);
     return;
   }
 
-  if (expr->receiver == nullptr) { // 해당 객체 내에서 this생략한 call
+  if (expr->receiver == nullptr) {
     if (expr->callType == CallExpr::CallType::INIT_CALL) {
       exprResult = lowerInitCall(expr);
       return;
     }
+
     exprResult = lowerImplictCall(expr);
     return;
   }
+
   if (isTypeReceiver(expr->receiver.get())) {
-    auto type = dynamic_cast<TypeSymbol *>(
-        dynamic_cast<NameExpr *>(expr->receiver.get())->resolved);
+    auto *name = dynamic_cast<NameExpr *>(expr->receiver.get());
+    if (name == nullptr) {
+      Error::internal(expr->receiver->span,
+                      "type receiver is not a name expression");
+    }
+
+    auto *type = dynamic_cast<TypeSymbol *>(name->resolved);
+    if (type == nullptr) {
+      Error::internal(expr->receiver->span,
+                      "type receiver did not resolve to TypeSymbol");
+    }
 
     if (type->kind == TypeSymbol::TypeKind::ENUM) {
       exprResult = lowerVariantValue(expr);
       return;
-    } else {
-      Error::internal("static method is not developed");
     }
-  } else {
-    if (expr->callType == CallExpr::CallType::INIT_CALL) {
-      exprResult = lowerInitCall(expr);
-      return;
-    }
-    exprResult = lowerCall(expr);
+
+    Error::internal(expr->span, "static method call reached HIR lowering");
+  }
+
+  if (expr->callType == CallExpr::CallType::INIT_CALL) {
+    exprResult = lowerInitCall(expr);
     return;
   }
+
+  exprResult = lowerCall(expr);
 }
+
 void HIRBuilder::visit(AssignExpr *expr) {
-  Error::diagnostic(expr->span, "not allowed assign in expression");
+  auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_H008);
+  dia.labels = {
+      {expr->span, "this assignment is used as a value expression", true},
+  };
+  dia.notes = {
+      "assignment does not produce a value",
+  };
+  dia.helps = {
+      "move the assignment into its own statement",
+  };
+  engine.emit(dia);
+  recover.recover();
 }
+
 void HIRBuilder::visit(MemberExpr *expr) {
   if (isTypeReceiver(expr->object.get())) {
+    if (expr->object->resolvedType == nullptr) {
+      Error::internal(expr->object->span,
+                      "member type receiver has no resolved type");
+    }
+
     if (expr->object->resolvedType->kind == TypeSymbol::TypeKind::ENUM) {
       exprResult = lowerVariantValue(expr);
       return;
-    } else {
-      Error::internal("static field access is not developed");
     }
-  } else {
-    exprResult = lowerMember(expr);
-    return;
+
+    Error::internal(expr->span, "static field access reached HIR lowering");
   }
+
+  exprResult = lowerMember(expr);
 }
+
 void HIRBuilder::visit(ArrayAccessExpr *expr) {
   exprResult = lowerArrayAccess(expr);
-  return;
 }
-void HIRBuilder::visit(TernaryExpr *expr) {
-  exprResult = lowerTernary(expr);
-  return;
-}
-void HIRBuilder::visit(ThisExpr *) {
-  exprResult = lowerImplictSelf();
-  return;
-}
+
+void HIRBuilder::visit(TernaryExpr *expr) { exprResult = lowerTernary(expr); }
+
+void HIRBuilder::visit(ThisExpr *) { exprResult = lowerImplictSelf(); }
+
 void HIRBuilder::visit(SuperExpr *expr) {
-  auto type = currentType->type;
-  if (currentType->base == nullptr) {
-    Error::internal(expr->span, "current Type has no parant type");
+  if (currentType == nullptr) {
+    Error::internal(expr->span, "current HIR type is nullptr");
   }
+
+  if (currentType->type == nullptr) {
+    Error::internal(expr->span, "current HIR type representation is nullptr");
+  }
+
+  if (currentType->base == nullptr) {
+    Error::internal(expr->span,
+                    "super expression reached a type without a base type");
+  }
+
+  if (currentType->base->type == nullptr) {
+    Error::internal(expr->span, "base HIR type representation is nullptr");
+  }
+
+  auto *type = currentType->type;
+
   exprResult = make_unique<HIRSelfExpr>(expr->span, HIRSelfKind::This, type,
                                         type, currentType->base->type);
 }
-void HIRBuilder::visit(SelfExpr *) {
-  exprResult = lowerImplictSelf();
-  return;
-}
+
+void HIRBuilder::visit(SelfExpr *) { exprResult = lowerImplictSelf(); }
+
 void HIRBuilder::visit(RootExpr *expr) {
+  if (program->rootType == nullptr) {
+    Error::internal(expr->span, "program root type is nullptr");
+  }
+
   exprResult = make_unique<HIRRootExpr>(expr->span, program->rootType);
-  return;
 }
-void HIRBuilder::visit(CastExpr *expr) {
-  exprResult = lowerCast(expr);
-  return;
-}
+
+void HIRBuilder::visit(CastExpr *expr) { exprResult = lowerCast(expr); }
+
 void HIRBuilder::visit(BuiltInNameExpr *) {}
-void HIRBuilder::visit(SpawnExpr *expr) {
-  exprResult = lowerSpawn(expr);
-  return;
-}
-void HIRBuilder::visit(ViewExpr *expr) {
-  exprResult = lowerView(expr);
-  return;
-}
+
+void HIRBuilder::visit(SpawnExpr *expr) { exprResult = lowerSpawn(expr); }
+
+void HIRBuilder::visit(ViewExpr *expr) { exprResult = lowerView(expr); }
+
 void HIRBuilder::visit(DestroyExpr *expr) {
-  Error::diagnostic(expr->span, "not allowed destroy in expression");
+  auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_H009);
+  dia.labels = {
+      {expr->span, "this destroy operation is used as a value expression",
+       true},
+  };
+  dia.notes = {
+      "'world.destroy' removes an entity and does not produce a value",
+  };
+  dia.helps = {
+      "move this destroy operation into its own statement",
+  };
+  engine.emit(dia);
+  recover.recover();
 }
 
 void HIRBuilder::visit(QuitExpr *expr) {
-  Error::diagnostic(expr->span, "not allowed quit in expression");
+  auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_H010);
+  dia.labels = {
+      {expr->span, "this quit operation is used as a value expression", true},
+  };
+  dia.notes = {
+      "quit terminates execution and does not produce a value",
+  };
+  dia.helps = {
+      "use quit as a standalone statement",
+  };
+  engine.emit(dia);
+  recover.recover();
 }
+
 void HIRBuilder::visit(DefaultValueExpr *expr) {
-  Error::internal(expr->span, "use defaultValue with default");
+  Error::internal(expr->span,
+                  "default value expression remained after argument lowering");
 }
+
 void HIRBuilder::visit(Range *) {
-  // for내부에서 처리
+  // Lowered as part of ForStmt.
 }
+
 void HIRBuilder::visit(CaseValueExpr *) {
-  // case value 내부에서 처리
+  // Lowered as part of Case.
 }
+
 void HIRBuilder::visit(MatchExpr *expr) { exprResult = lowerMatch(expr); }
 
 // Statement HIRBuilder::visitor methods
 void HIRBuilder::visit(ExprStmt *stmt) { emit(lowerExprStmt(stmt)); }
+
 void HIRBuilder::visit(BlockStmt *stmt) {
   BoolGuard _(isField, false);
   emit(lowerBlock(stmt));
 }
+
 void HIRBuilder::visit(IfStmt *stmt) { emit(lowerIf(stmt)); }
+
 void HIRBuilder::visit(ForStmt *stmt) { emit(lowerFor(stmt)); }
+
 void HIRBuilder::visit(WhileStmt *stmt) { emit(lowerWhile(stmt)); }
+
 void HIRBuilder::visit(SwitchStmt *stmt) { emit(lowerSwitch(stmt)); }
+
 void HIRBuilder::visit(Case *) {
-  // visitor 접근으로 처리 안함
+  // Case is lowered through switch/match lowering.
 }
 
 void HIRBuilder::visit(ReturnStmt *stmt) { emit(lowerReturn(stmt)); }
@@ -202,136 +292,179 @@ void HIRBuilder::visit(ReturnStmt *stmt) { emit(lowerReturn(stmt)); }
 void HIRBuilder::visit(ValueTransferStmt *stmt) {
   emit(lowerValueTransfer(stmt));
 }
+
 void HIRBuilder::visit(BreakStmt *stmt) {
   emit(make_unique<HIRBreakStmt>(stmt->span));
 }
+
 void HIRBuilder::visit(ContinueStmt *stmt) {
   emit(make_unique<HIRContinueStmt>(stmt->span));
 }
+
 void HIRBuilder::visit(DeclStmt *stmt) { stmt->decl->accept(this); }
 
 void HIRBuilder::visit(EmptyStmt *) {}
 
-// declare HIRBuilder::visitor methods
+// Declaration HIRBuilder::visitor methods
 void HIRBuilder::visit(ClassDecl *decl) {
   auto it = program->typeDeclMap.find(decl->symbol);
 
-  if (it == program->typeDeclMap.end()) {
-    Error::internal(decl->span, "not made typeShell");
+  if (it == program->typeDeclMap.end() || it->second == nullptr) {
+    Error::internal(decl->span, "class HIR type shell was not created");
   }
 
   TypeGuard typeGuard(currentType, it->second);
 
   if (decl->baseClass.has_value()) {
-    it = program->typeDeclMap.find(decl->symbol->base);
-    if (it == program->typeDeclMap.end()) {
-      Error::internal(decl->span, "not made typeShell");
+    if (decl->symbol->base == nullptr) {
+      Error::internal(decl->span, "class base symbol is nullptr");
     }
+
+    it = program->typeDeclMap.find(decl->symbol->base);
+
+    if (it == program->typeDeclMap.end() || it->second == nullptr) {
+      Error::internal(decl->span, "base class HIR type shell was not created");
+    }
+
     currentType->base = it->second;
   }
 
   {
     BoolGuard fieldGuard(isField, true);
-    for (auto &f : decl->fields) {
-      f->accept(this);
+
+    for (auto &field : decl->fields) {
+      field->accept(this);
     }
   }
+
   setDefaultInit(currentType);
 
-  for (auto &m : decl->methods) {
-    m->accept(this);
-  }
-
-  for (auto &i : decl->innerDecl) {
-    i->accept(this);
+  for (auto &method : decl->methods) {
+    method->accept(this);
   }
 }
 
 void HIRBuilder::visit(StructDecl *decl) {
-  BoolGuard _(isField, true);
   auto it = program->typeDeclMap.find(decl->symbol);
 
-  if (it == program->typeDeclMap.end()) {
-    Error::internal(decl->span, "not made typeShell");
+  if (it == program->typeDeclMap.end() || it->second == nullptr) {
+    Error::internal(decl->span, "struct HIR type shell was not created");
   }
 
   TypeGuard typeGuard(currentType, it->second);
 
-  for (auto &f : decl->fields) {
-    f->accept(this);
+  {
+    BoolGuard fieldGuard(isField, true);
+
+    for (auto &field : decl->fields) {
+      field->accept(this);
+    }
   }
+
   setDefaultInit(currentType);
-  for (auto &i : decl->inits) {
-    i->accept(this);
+
+  for (auto &init : decl->inits) {
+    init->accept(this);
   }
 }
+
 void HIRBuilder::visit(EnumDecl *) {
-  // linker 2-pass에서 처리
+  // Lowered during linker two-pass processing.
 }
+
 void HIRBuilder::visit(ImplDecl *decl) {
-  auto typeSymbol = table.getType(decl->target);
+  auto *typeSymbol = table.getType(decl->target.str);
+
   if (typeSymbol == nullptr) {
-    Error::internal(decl->span, "fail to find impl target symbol");
+    Error::internal(decl->span, "failed to find impl target symbol");
   }
 
   auto it = program->typeDeclMap.find(typeSymbol);
-  if (it == program->typeDeclMap.end()) {
-    Error::internal(decl->span, "fail to find typeShell");
+
+  if (it == program->typeDeclMap.end() || it->second == nullptr) {
+    Error::internal(decl->span, "impl target HIR type shell was not created");
   }
 
   TypeGuard typeGuard(currentType, it->second);
-  for (auto &m : decl->LinkedImplMethods) {
-    m->accept(this);
+
+  for (auto &method : decl->LinkedImplMethods) {
+    method->accept(this);
   }
 }
+
 void HIRBuilder::visit(TraitDecl *) {}
+
 void HIRBuilder::visit(TraitSig *) {}
+
 void HIRBuilder::visit(FuncDecl *decl) { bindMethod(decl); }
+
 void HIRBuilder::visit(VarDecl *decl) {
   if (decl->isRoot) {
     auto it = program->rootMap.find(decl->symbol);
-    if (it == program->rootMap.end()) {
-      Error::internal(decl->span, "cannot find linked root : " + decl->name);
+
+    if (it == program->rootMap.end() || it->second == nullptr) {
+      Error::internal(decl->span, "failed to find linked root: " + decl->name);
     }
-  } else {
-    if (isField) {
-      auto it = currentType->fieldMap.find(decl->symbol);
-      if (it == currentType->fieldMap.end()) {
-        Error::internal(decl->span, "cannot find field");
-      }
-      auto field = it->second;
-      if (field == nullptr) {
-        Error::internal("field is nullptr");
-      }
-      if (decl->init) {
-        currentType->defaultInit.emplace(field, decl->init.get());
-      }
-    } else {
-      auto local = lowerLocal(decl);
-      if (local == nullptr) {
-        Error::internal("local is nullptr");
-      }
 
-      if (local->type->typeSymbol == nullptr) {
-        Error::internal(decl->span, "local's typeSymbol is nullptr");
-      }
+    return;
+  }
 
-      unique_ptr<HIRValueExpr> init = nullptr;
-      if (decl->init) {
-        init = lowerValue(decl->init.get());
-        if (init == nullptr) {
-          Error::internal("init is exist but nulltpr");
-        }
-      }
-      emit(make_unique<HIRLocalDeclStmt>(decl->span, local, std::move(init)));
+  if (isField) {
+    if (currentType == nullptr) {
+      Error::internal(decl->span, "field declaration has no current HIR type");
+    }
+
+    auto it = currentType->fieldMap.find(decl->symbol);
+
+    if (it == currentType->fieldMap.end() || it->second == nullptr) {
+      Error::internal(decl->span, "failed to find linked HIR field");
+    }
+
+    auto *field = it->second;
+
+    if (decl->init) {
+      currentType->defaultInit.emplace(field, decl->init.get());
+    }
+
+    return;
+  }
+
+  auto *local = lowerLocal(decl);
+
+  if (local == nullptr) {
+    Error::internal(decl->span, "local lowering returned nullptr");
+  }
+
+  if (local->type == nullptr) {
+    Error::internal(decl->span, "local HIR type is nullptr");
+  }
+
+  if (local->type->typeSymbol == nullptr) {
+    Error::internal(decl->span, "local type symbol is nullptr");
+  }
+
+  unique_ptr<HIRValueExpr> init = nullptr;
+
+  if (decl->init) {
+    init = lowerValue(decl->init.get());
+
+    if (init == nullptr) {
+      Error::internal(decl->init->span,
+                      "local initializer lowering returned nullptr");
     }
   }
+
+  emit(make_unique<HIRLocalDeclStmt>(decl->span, local, std::move(init)));
 }
+
 void HIRBuilder::visit(InitDecl *decl) { bindMethod(decl); }
+
 void HIRBuilder::visit(OnDestroyDecl *decl) { bindMethod(decl); }
 
 void HIRBuilder::visit(TypeNode *) {}
+
 void HIRBuilder::visit(ASTNode *node) {
-  Error::internal(node->span, "unknown generic");
+  Error::internal(node->span, "unsupported generic AST node");
 }
+
 void HIRBuilder::visit(Param *) {}

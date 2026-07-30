@@ -5,6 +5,7 @@
 #include "hrd/BuiltInType.h"
 #include "hrd/IR/HIR/HIRType.h"
 #include "hrd/SemanticAnalyzer/symbol/MethodSymbol.h"
+#include "hrd/SourceSpan.h"
 #include "hrd/enums/StorageKind.h"
 #include "hrd/util/Error.h"
 #include <cstdint>
@@ -42,6 +43,7 @@ public:
   TypeSymbol *base = nullptr;
   optional<string> baseName = nullopt;
   unordered_set<TypeSymbol *> traits;
+  unordered_map<TypeSymbol *, SourceSpan> traitSpan;
 
   // class/struct
   Scope *memberScope = nullptr;
@@ -61,7 +63,7 @@ public:
   // trait
   unordered_map<string, vector<TraitSig *>> traitSigs;
 
-  bool addMethod(MethodSymbol *symbol);
+  pair<bool, SourceSpan> addMethod(MethodSymbol *symbol);
 
 protected:
   void _anchor() override {};

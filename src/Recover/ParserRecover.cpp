@@ -2,4 +2,4 @@
 
 ParserRecover::ParserRecover(Parser &p) : parser(p) {}
 
-void ParserRecover::recover(ParserRecoveryPoint) { fail(); }
+void ParserRecover::recover() { fail(); }

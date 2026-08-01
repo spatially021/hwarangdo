@@ -680,3 +680,34 @@ DIAG(HRD_P059,
      Error,
      "expected trait name",
      "HRD-P059")
+
+//=============================================================================
+// Trigger
+//-----------------------------------------------------------------------------
+// A built-in storage expression is followed by a method name that is not a
+// supported method of that storage.
+//=============================================================================
+DIAG(HRD_P060,
+     Error,
+     "unknown storage method",
+     "HRD-P058")
+
+//=============================================================================
+// Trigger
+//-----------------------------------------------------------------------------
+// A non-default match case contains zero or more than one selector value.
+//=============================================================================
+DIAG(HRD_P061,
+     Error,
+     "invalid match case selector count",
+     "HRD-P059")
+
+//=============================================================================
+// Trigger
+//-----------------------------------------------------------------------------
+// A default clause is used inside a match expression.
+//=============================================================================
+DIAG(HRD_P062,
+     Error,
+     "invalid match default clause",
+     "HRD-P060")

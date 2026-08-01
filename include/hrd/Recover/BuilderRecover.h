@@ -7,7 +7,8 @@ class Builder;
 class BuilderRecover final : public Recover {
 public:
   BuilderRecover(Builder &buolder);
-  void recover();
+  ~BuilderRecover() {}
+  void recover() override;
 
 private:
   Builder &builder;

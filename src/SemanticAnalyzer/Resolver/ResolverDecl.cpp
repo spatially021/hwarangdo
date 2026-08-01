@@ -302,7 +302,7 @@ void Resolver::visit(VarDecl *decl) {
 }
 
 void Resolver::visit(TypeNode *type) {
-  TypeResolver::resolveTypeNode(type, table);
+  TypeResolver::resolveTypeNode(type, typeContext);
 }
 void Resolver::visit(ASTNode *) {}
 

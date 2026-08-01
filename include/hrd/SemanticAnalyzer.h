@@ -5,6 +5,7 @@
 #include "SemanticAnalyzer/SymbolTable.h"
 #include "SemanticAnalyzer/symbol/Symbol.h"
 #include "SemanticAnalyzer/symbol/TypeSymbol.h"
+#include "hrd/Recover/SementicRecover.h"
 #include "hrd/compiler/CompilerContexts.h"
 #include "hrd/util/diagnostic/DiagnosticEngine.h"
 
@@ -20,7 +21,7 @@ public:
   SemanticAnalyzer(SemanContext &context);
   SymbolTable &symbolTable;
   DiagnosticEngine &engine;
-
+  SemanticAnalyzerRecover recover;
   void build();
   void link();
   void addLog();

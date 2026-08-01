@@ -7,7 +7,8 @@ class HIRVerifier;
 class HIRVerifierRecover final : public Recover {
 public:
   HIRVerifierRecover(HIRVerifier &verifier);
-  void recover();
+  ~HIRVerifierRecover() {}
+  void recover() override;
 
 private:
   HIRVerifier &verifier;

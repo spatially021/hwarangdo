@@ -7,7 +7,8 @@ class HIRBuilder;
 class HIRRecover final : public Recover {
 public:
   HIRRecover(HIRBuilder &builder);
-  void recover();
+  ~HIRRecover() {}
+  void recover() override;
 
 private:
   HIRBuilder &builder;

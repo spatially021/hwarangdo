@@ -182,3 +182,19 @@ bool llvmCodegen::needsDestroy(TypeSymbol *type) {
 llvm::Type *llvmCodegen::getHrdHandleType() {
   return llvm::Type::getInt64Ty(context);
 }
+
+std::string llvmCodegen::getStringSuffix(TypeSymbol *type) {
+  if (type == table.getBuilt("s8")) {
+    return "s8";
+  }
+
+  if (type == table.getBuilt("s16")) {
+    return "s16";
+  }
+
+  if (type == table.getBuilt("s32")) {
+    return "s32";
+  }
+
+  Error::internal("invalid string type");
+}

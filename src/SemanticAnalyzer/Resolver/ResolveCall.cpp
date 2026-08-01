@@ -421,6 +421,7 @@ bool Resolver::tryResolveRuntime(CallExpr *expr) {
 
   return true;
 }
+
 void Resolver::visit(CallExpr *expr) {
   if (expr->callType != CallExpr::CallType::UNRESOLVED) {
     return;

@@ -462,38 +462,6 @@ LoweredValue llvmCodegen::lowerLiteralExpr(MIRLiteralExpr *expr,
   Error::internal("unknwon literal type");
 }
 
-LoweredValue llvmCodegen::lowerStringLiteral(const StringPayload &payload,
-                                             TypeSymbol *type) {
-  auto *s8Ty = getLayoutType(type);
-  auto *ptrTy = llvm::PointerType::getUnqual(context);
-  auto *i64Ty = builder.getInt64Ty();
-  auto *voidTy = builder.getVoidTy();
-
-  std::string bytes;
-  bytes.reserve(payload.codePoints.size());
-
-  for (uint32_t cp : payload.codePoints) {
-    if (cp > 0x7F) {
-      Error::internal("non-ascii string literal in s8 lowering");
-    }
-    bytes.push_back(static_cast<char>(cp));
-  }
-
-  auto *out = builder.CreateAlloca(s8Ty, nullptr, "s8.lit.out");
-  auto *dataPtr = builder.CreateGlobalString(bytes, "s8lit");
-  auto *len =
-      llvm::ConstantInt::get(i64Ty, static_cast<uint64_t>(bytes.size()));
-
-  auto *fnTy = llvm::FunctionType::get(voidTy, {ptrTy, ptrTy, i64Ty}, false);
-
-  auto *fn = getRuntimeFunc("hrd_s8_from_literal", fnTy);
-
-  builder.CreateCall(fn, {out, dataPtr, len});
-
-  return {builder.CreateLoad(s8Ty, out, "s8.literal"), out,
-          MIRValueCategory::OwnedTemp};
-}
-
 LoweredValue llvmCodegen::lowerUnaryExpr(MIRUnaryExpr *expr, FuncContext &ctx) {
   auto operand = lowerValue(expr->operrand.get(), ctx);
   switch (expr->op) {

@@ -15,7 +15,7 @@ void llvmCodegen::assign(llvm::Value *dst, LoweredValue rhs, TypeSymbol *type,
       builder.CreateStore(rhs.value, srcPtr);
     }
 
-    lowerStringAssign(dst, srcPtr, rhs.category);
+    lowerStringAssign(getStringSuffix(type), dst, srcPtr, rhs.category);
     return;
   }
 
@@ -167,7 +167,7 @@ void llvmCodegen::lowerStructAssign(TypeSymbol *ty, llvm::Value *dst,
         builder.CreateStructGEP(layoutTy, src, field->index, field->name);
 
     if (dynamic_cast<StringType *>(fieldTy)) {
-      lowerStringAssign(dstField, srcField, category);
+      lowerStringAssign(getStringSuffix(ty), dstField, srcField, category);
       continue;
     }
 
@@ -189,16 +189,18 @@ void llvmCodegen::lowerStructAssign(TypeSymbol *ty, llvm::Value *dst,
   }
 }
 
-void llvmCodegen::lowerStringCopyAssign(llvm::Value *dst, llvm::Value *srcPtr) {
+void llvmCodegen::lowerStringCopyAssign(Str type, llvm::Value *dst,
+                                        llvm::Value *srcPtr) {
   auto *ptrTy = llvm::PointerType::getUnqual(context);
   auto *voidTy = builder.getVoidTy();
 
   auto *copyTy = llvm::FunctionType::get(voidTy, {ptrTy, ptrTy}, false);
-  builder.CreateCall(getRuntimeFunc("hrd_copy_s8", copyTy), {dst, srcPtr});
+  builder.CreateCall(getRuntimeFunc("hrd_copy_" + type, copyTy), {dst, srcPtr});
 }
 
-void llvmCodegen::lowerStringMoveAssign(llvm::Value *dst, llvm::Value *srcPtr) {
-  auto *s8Ty = getType(table.getBuilt("s8"));
+void llvmCodegen::lowerStringMoveAssign(Str type, llvm::Value *dst,
+                                        llvm::Value *srcPtr) {
+  auto *s8Ty = getType(table.getBuilt(type));
 
   auto *v = builder.CreateLoad(s8Ty, srcPtr);
   builder.CreateStore(v, dst);
@@ -209,22 +211,22 @@ void llvmCodegen::lowerStringMoveAssign(llvm::Value *dst, llvm::Value *srcPtr) {
   builder.CreateStore(empty, srcPtr);
 }
 
-void llvmCodegen::lowerStringAssign(llvm::Value *dst, llvm::Value *srcPtr,
+void llvmCodegen::lowerStringAssign(Str type, llvm::Value *dst,
+                                    llvm::Value *srcPtr,
                                     MIRValueCategory category) {
   if (dst == srcPtr) {
     return;
   }
-
   auto *ptrTy = llvm::PointerType::getUnqual(context);
   auto *voidTy = builder.getVoidTy();
 
   auto *destroyTy = llvm::FunctionType::get(voidTy, {ptrTy}, false);
-  builder.CreateCall(getRuntimeFunc("hrd_destroy_s8", destroyTy), {dst});
+  builder.CreateCall(getRuntimeFunc("hrd_destroy_" + type, destroyTy), {dst});
 
   if (category == MIRValueCategory::OwnedTemp) {
-    lowerStringMoveAssign(dst, srcPtr);
+    lowerStringMoveAssign(type, dst, srcPtr);
   } else {
-    lowerStringCopyAssign(dst, srcPtr);
+    lowerStringCopyAssign(type, dst, srcPtr);
   }
 }
 

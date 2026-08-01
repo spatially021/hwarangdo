@@ -27,7 +27,7 @@ Ptr Parser::classDecl(DeclPrefix prefix) {
         {peek().span, "'class' declaration is not allowed here", true},
     };
     engine.emit(dia);
-    recover.recover(ParserRecoveryPoint::Declaration);
+    recover.recover();
   }
 
   ContextGuard _{contexts, DeclContext::CLASSBODY};
@@ -67,7 +67,7 @@ Ptr Parser::classDecl(DeclPrefix prefix) {
       };
       dia.helps = {{"insert ',' between the trait names"}};
       engine.emit(dia);
-      recover.recover(ParserRecoveryPoint::Declaration);
+      recover.recover();
     }
   }
 
@@ -85,7 +85,7 @@ Ptr Parser::classDecl(DeclPrefix prefix) {
            true},
       };
       engine.emit(dia);
-      recover.recover(ParserRecoveryPoint::Declaration);
+      recover.recover();
     }
     if (auto f = dynamic_pointer_cast<VarDecl>(b)) {
       fields.push_back(f);
@@ -113,7 +113,7 @@ Ptr Parser::structDecl(DeclPrefix prefix) {
         {peek().span, "'struct' declaration is not allowed here", true},
     };
     engine.emit(dia);
-    recover.recover(ParserRecoveryPoint::Declaration);
+    recover.recover();
   }
   ContextGuard _{contexts, DeclContext::CLASSBODY};
 
@@ -154,7 +154,7 @@ Ptr Parser::structDecl(DeclPrefix prefix) {
              true},
         };
         engine.emit(dia);
-        recover.recover(ParserRecoveryPoint::Declaration);
+        recover.recover();
       }
     } else if (isInit()) {
       auto init = dynamic_pointer_cast<InitDecl>(initDecl(p));
@@ -165,7 +165,7 @@ Ptr Parser::structDecl(DeclPrefix prefix) {
              true},
         };
         engine.emit(dia);
-        recover.recover(ParserRecoveryPoint::Declaration);
+        recover.recover();
       }
       inits.push_back(init);
     } else {
@@ -175,7 +175,7 @@ Ptr Parser::structDecl(DeclPrefix prefix) {
            true},
       };
       engine.emit(dia);
-      recover.recover(ParserRecoveryPoint::Declaration);
+      recover.recover();
     }
   }
   consume(TKind::RIGHT_BRACE, DiagnosticCode::HRD_P040,
@@ -193,7 +193,7 @@ Ptr Parser::varDecl(DeclPrefix prefix) {
         {peek().span, "expected a declaration here", true},
     };
     engine.emit(dia);
-    recover.recover(ParserRecoveryPoint::Declaration);
+    recover.recover();
   }
 
   notFunc(prefix);
@@ -230,7 +230,7 @@ Ptr Parser::functionDecl(DeclPrefix prefix, bool isDynamic) {
         {peek().span, "expected a declaration here", true},
     };
     engine.emit(dia);
-    recover.recover(ParserRecoveryPoint::Declaration);
+    recover.recover();
   }
 
   if (contexts.back() == DeclContext::BLOCK) {
@@ -239,7 +239,7 @@ Ptr Parser::functionDecl(DeclPrefix prefix, bool isDynamic) {
         {peek().span, "method declaration is not allowed here", true},
     };
     engine.emit(dia);
-    recover.recover(ParserRecoveryPoint::Declaration);
+    recover.recover();
   }
 
   ContextGuard _{contexts, DeclContext::BLOCK};
@@ -282,7 +282,7 @@ Ptr Parser::functionDecl(DeclPrefix prefix, bool isDynamic) {
               {peek().span, "expected parameter after ','", true},
           };
           engine.emit(dia);
-          recover.recover(ParserRecoveryPoint::Declaration);
+          recover.recover();
         }
       }
     } else {
@@ -291,7 +291,7 @@ Ptr Parser::functionDecl(DeclPrefix prefix, bool isDynamic) {
           {peek().span, "parameter type is missing", true},
       };
       engine.emit(dia);
-      recover.recover(ParserRecoveryPoint::Declaration);
+      recover.recover();
     }
   }
 
@@ -318,7 +318,7 @@ Ptr Parser::implDecl(DeclPrefix prefix) {
         {peek().span, "expected a declaration here", true},
     };
     engine.emit(dia);
-    recover.recover(ParserRecoveryPoint::Declaration);
+    recover.recover();
   }
 
   notFunc(prefix);
@@ -351,7 +351,7 @@ Ptr Parser::implDecl(DeclPrefix prefix) {
       };
       dia.helps = {{"insert ',' between the trait names"}};
       engine.emit(dia);
-      recover.recover(ParserRecoveryPoint::Declaration);
+      recover.recover();
     }
   }
   consume(TKind::LEFT_BRACE, DiagnosticCode::HRD_P043,
@@ -369,7 +369,7 @@ Ptr Parser::implDecl(DeclPrefix prefix) {
           {peek().span, "'const' is not allowed on this declaration", true},
       };
       engine.emit(dia);
-      recover.recover(ParserRecoveryPoint::Declaration);
+      recover.recover();
     }
 
     if (check(TKind::ROOT)) {
@@ -378,7 +378,7 @@ Ptr Parser::implDecl(DeclPrefix prefix) {
           {peek().span, "'root' is not allowed on this declaration", true},
       };
       engine.emit(dia);
-      recover.recover(ParserRecoveryPoint::Declaration);
+      recover.recover();
     }
 
     if (isFunc()) {
@@ -390,7 +390,7 @@ Ptr Parser::implDecl(DeclPrefix prefix) {
            true},
       };
       engine.emit(dia);
-      recover.recover(ParserRecoveryPoint::Declaration);
+      recover.recover();
     }
   }
   consume(TKind::RIGHT_BRACE, DiagnosticCode::HRD_P040,
@@ -428,7 +428,7 @@ Ptr Parser::traitDecl(DeclPrefix prefix) {
              true},
         };
         engine.emit(dia);
-        recover.recover(ParserRecoveryPoint::Declaration);
+        recover.recover();
       }
       Token ty = advance();
       // if (ty.kind == TKind::FUNC) {
@@ -438,7 +438,7 @@ Ptr Parser::traitDecl(DeclPrefix prefix) {
       //        true},
       //   };
       //   engine.emit(dia);
-      //   recover.recover(ParserRecoveryPoint::Declaration);
+      //   recover.recover();
       //   // Error::diagnostic(ty, "'func' is not allowed in trait
       //   declarations");
       // }
@@ -469,7 +469,7 @@ Ptr Parser::traitDecl(DeclPrefix prefix) {
                   {peek().span, "expected parameter after ','", true},
               };
               engine.emit(dia);
-              recover.recover(ParserRecoveryPoint::Declaration);
+              recover.recover();
             }
           }
         } else {
@@ -478,7 +478,7 @@ Ptr Parser::traitDecl(DeclPrefix prefix) {
               {peek().span, "parameter type is missing", true},
           };
           engine.emit(dia);
-          recover.recover(ParserRecoveryPoint::Declaration);
+          recover.recover();
         }
       }
 
@@ -496,7 +496,7 @@ Ptr Parser::traitDecl(DeclPrefix prefix) {
           {peek().span, "only method signatures are allowed here", true},
       };
       engine.emit(dia);
-      recover.recover(ParserRecoveryPoint::Declaration);
+      recover.recover();
     }
   }
 
@@ -534,7 +534,7 @@ Ptr Parser::enumDecl(DeclPrefix prefix) {
             {peek().span, "expected payload type name", true},
         };
         engine.emit(dia);
-        recover.recover(ParserRecoveryPoint::Declaration);
+        recover.recover();
       }
 
       consume(TKind::RIGHT_PAREN, DiagnosticCode::HRD_P047,
@@ -569,7 +569,7 @@ Ptr Parser::handleDecl(DeclPrefix prefix) {
         {peek().span, "expected type name for Handle", true},
     };
     engine.emit(dia);
-    recover.recover(ParserRecoveryPoint::Declaration);
+    recover.recover();
   }
   consume(TKind::GREATER, DiagnosticCode::HRD_P050,
           "expected '>' after type name");
@@ -624,7 +624,7 @@ Ptr Parser::initDecl(DeclPrefix prefix) {
               {peek().span, "expected parameter after ','", true},
           };
           engine.emit(dia);
-          recover.recover(ParserRecoveryPoint::Declaration);
+          recover.recover();
         }
       }
     } else {
@@ -633,7 +633,7 @@ Ptr Parser::initDecl(DeclPrefix prefix) {
           {peek().span, "parameter type is missing", true},
       };
       engine.emit(dia);
-      recover.recover(ParserRecoveryPoint::Declaration);
+      recover.recover();
     }
   }
 
@@ -646,7 +646,7 @@ Ptr Parser::initDecl(DeclPrefix prefix) {
         {peek().span, "init methods cannot be called here", true},
     };
     engine.emit(dia);
-    recover.recover(ParserRecoveryPoint::Declaration);
+    recover.recover();
   }
   if (contexts.back() == DeclContext::TOPLEVEL) {
     auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_P007);
@@ -654,7 +654,7 @@ Ptr Parser::initDecl(DeclPrefix prefix) {
         {peek().span, "expected a init declaration here", true},
     };
     engine.emit(dia);
-    recover.recover(ParserRecoveryPoint::Declaration);
+    recover.recover();
   }
 
   if (contexts.back() == DeclContext::BLOCK) {
@@ -663,7 +663,7 @@ Ptr Parser::initDecl(DeclPrefix prefix) {
         {peek().span, "init method declaration is not allowed here", true},
     };
     engine.emit(dia);
-    recover.recover(ParserRecoveryPoint::Declaration);
+    recover.recover();
   }
   if (prefix.modi != AModifier::PUBLIC) {
     auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_P023);
@@ -671,7 +671,7 @@ Ptr Parser::initDecl(DeclPrefix prefix) {
         {peek().span, "init method must be public", true},
     };
     engine.emit(dia);
-    recover.recover(ParserRecoveryPoint::Declaration);
+    recover.recover();
   }
   consume(TKind::LEFT_BRACE, DiagnosticCode::HRD_P043,
           "expected '{' to begin init method body");
@@ -701,7 +701,7 @@ Ptr Parser::onDestroyDecl(DeclPrefix prefix) {
          true},
     };
     engine.emit(dia);
-    recover.recover(ParserRecoveryPoint::Declaration);
+    recover.recover();
   }
   if (contexts.back() == DeclContext::TOPLEVEL) {
     auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_P007);
@@ -709,7 +709,7 @@ Ptr Parser::onDestroyDecl(DeclPrefix prefix) {
         {peek().span, "expected a onDestroy declaration here", true},
     };
     engine.emit(dia);
-    recover.recover(ParserRecoveryPoint::Declaration);
+    recover.recover();
   }
 
   if (contexts.back() == DeclContext::BLOCK) {
@@ -718,7 +718,7 @@ Ptr Parser::onDestroyDecl(DeclPrefix prefix) {
         {peek().span, "onDestroy method declaration is not allowed here", true},
     };
     engine.emit(dia);
-    recover.recover(ParserRecoveryPoint::Declaration);
+    recover.recover();
   }
 
   // if (contexts.back() == DeclContext::TOPLEVEL){
@@ -739,7 +739,7 @@ Ptr Parser::onDestroyDecl(DeclPrefix prefix) {
         {peek().span, "onDestroy method must be public", true},
     };
     engine.emit(dia);
-    recover.recover(ParserRecoveryPoint::Declaration);
+    recover.recover();
   }
   consume(TKind::LEFT_BRACE, DiagnosticCode::HRD_P043,
           "expected '{' to begin onDestroy method body");

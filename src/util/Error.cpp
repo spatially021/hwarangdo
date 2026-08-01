@@ -15,17 +15,19 @@
 inline void throwError(const std::string &msg) {
   throw std::runtime_error(msg);
 }
-[[noreturn]] void Error::diagnostic(const Token &token,
-                                    const std::string &message) {
-  diagnostic(token.span, message);
-}
-[[noreturn]] void Error::diagnostic(const SourceSpan &span,
-                                    const std::string &message) {
-  std::ostringstream oss;
-  oss << span.path << ":" << span.lineStart << ":" << span.colStart
-      << ": error: " << message;
-  throwError(oss.str());
-}
+
+// [[noreturn]] void Error::diagnostic(const Token &token,
+//                                     const std::string &message) {
+//   diagnostic(token.span, message);
+// }
+// [[noreturn]] void Error::diagnostic(const SourceSpan &span,
+//                                     const std::string &message) {
+//   std::ostringstream oss;
+//   oss << span.path << ":" << span.lineStart << ":" << span.colStart
+//       << ": error: " << message;
+//   throwError(oss.str());
+// }
+
 [[noreturn]] void Error::internal(const std::string &message) {
   std::cerr << "[internal compiler error]\n";
   std::cerr << message << "\n";
@@ -55,9 +57,9 @@ inline void throwError(const std::string &msg) {
   throwError(oss.str());
 }
 
-void Error::warn(Token &token, str message) { warn(token.span, message); }
-void Error::warn(SourceSpan span, str message) {
-  std::cerr << "warning: " << message << "\n";
-  std::cerr << " -->               " << span.path << " : " << span.lineStart
-            << " : " << span.colStart << "\n";
-}
+// void Error::warn(Token &token, str message) { warn(token.span, message); }
+// void Error::warn(SourceSpan span, str message) {
+//   std::cerr << "warning: " << message << "\n";
+//   std::cerr << " -->               " << span.path << " : " << span.lineStart
+//             << " : " << span.colStart << "\n";
+// }

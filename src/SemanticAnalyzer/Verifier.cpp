@@ -33,7 +33,18 @@ void Verifier::verifyCycledInherit(ClassDecl *decl) {
     return;
 
   if (inheritStates[decl] == InheritState::Visiting) {
-    Error::diagnostic(decl->span, "cyclic inheritance detected");
+    auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S118);
+    dia.labels = {
+        {decl->span, "inheritance cycle detected here", true},
+    };
+    dia.notes = {
+        "a class cannot inherit from itself directly or indirectly",
+    };
+    dia.helps = {
+        "remove the cyclic inheritance relationship",
+    };
+    engine.emit(dia);
+    recover.recover();
   }
 
   inheritStates[decl] = InheritState::Visiting;
@@ -42,7 +53,15 @@ void Verifier::verifyCycledInherit(ClassDecl *decl) {
     if (auto c = dynamic_cast<ClassDecl *>(decl->symbol->base->decl)) {
       verifyCycledInherit(c);
     } else {
-      Error::diagnostic(decl->span, "parent is not class Type");
+      auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S119);
+      dia.labels = {
+          {decl->span, "base type is not a class", true},
+      };
+      dia.helps = {
+          "inherit only from class types",
+      };
+      engine.emit(dia);
+      recover.recover();
     }
   }
 
@@ -235,12 +254,26 @@ void Verifier::visit(ReturnStmt *stmt) {
 void Verifier::visit(ValueTransferStmt *stmt) { stmt->value->accept(this); }
 void Verifier::visit(BreakStmt *stmt) {
   if (context.loopDepth == 0) {
-    Error::diagnostic(stmt->span, "break only allowed in loop statement");
+    auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S120);
+    dia.labels = {
+        {stmt->span, "break is not inside a loop", true},
+    };
+    dia.helps = {
+        "move the break statement into a loop",
+    };
+    engine.emit(dia);
   }
 }
 void Verifier::visit(ContinueStmt *stmt) {
   if (context.loopDepth == 0) {
-    Error::diagnostic(stmt->span, "continue only allowed in loop statement");
+    auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S121);
+    dia.labels = {
+        {stmt->span, "continue is not inside a loop", true},
+    };
+    dia.helps = {
+        "move the continue statement into a loop",
+    };
+    engine.emit(dia);
   }
 }
 void Verifier::visit(DeclStmt *stmt) { stmt->decl->accept(this); }

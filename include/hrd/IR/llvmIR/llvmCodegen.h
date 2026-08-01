@@ -4,6 +4,7 @@
 #include "hrd/IR/MIR/MIRNode.h"
 #include "hrd/IR/MIR/MIRProgram.h"
 #include "hrd/IR/MIR/MIRStmt.h"
+#include "hrd/SemanticAnalyzer/ResolvedLit.h"
 #include "hrd/SemanticAnalyzer/SymbolTable.h"
 #include "hrd/SemanticAnalyzer/symbol/MethodSymbol.h"
 #include "hrd/SemanticAnalyzer/symbol/RuntimeSymbol.h"
@@ -30,6 +31,8 @@
 using BlockMap = unordered_map<BlockID, llvm::BasicBlock *>;
 using localMap = unordered_map<ValueSymbol *, llvm::AllocaInst *>;
 using ParamMap = unordered_map<ValueSymbol *, llvm::Value *>;
+
+using Str = const string &;
 
 struct Cleanup {
   llvm::Value *addr = nullptr;
@@ -88,10 +91,10 @@ private:
   void lowerCleanup(MIRCleanupStmt *stmt, FuncContext &ctx);
 
   void lowerAssign(MIRAssignStmt *stmt, FuncContext &ctx);
-  void lowerStringAssign(llvm::Value *dstPtr, llvm::Value *srcValue,
+  void lowerStringAssign(Str type, llvm::Value *dstPtr, llvm::Value *srcValue,
                          MIRValueCategory category);
-  void lowerStringCopyAssign(llvm::Value *dst, llvm::Value *srcPtr);
-  void lowerStringMoveAssign(llvm::Value *dst, llvm::Value *srcPtr);
+  void lowerStringCopyAssign(Str type, llvm::Value *dst, llvm::Value *srcPtr);
+  void lowerStringMoveAssign(Str type, llvm::Value *dst, llvm::Value *srcPtr);
   void lowerStructAssign(TypeSymbol *ty, llvm::Value *dst, LoweredValue rhs,
                          MIRValueCategory category, FuncContext &ctx);
   void lowerEnumMoveAssign(TypeSymbol *type, llvm::Value *dst,
@@ -132,6 +135,10 @@ private:
   LoweredValue lowerLiteralExpr(MIRLiteralExpr *expr, FuncContext &ctx);
   LoweredValue lowerStringLiteral(const StringPayload &payload,
                                   TypeSymbol *type);
+  LoweredValue lowerS8(const StringPayload &payload, StringType *type);
+  LoweredValue lowerS16(const StringPayload &payload, StringType *type);
+  LoweredValue lowerS32(const StringPayload &payload, StringType *type);
+
   LoweredValue lowerUnaryExpr(MIRUnaryExpr *expr, FuncContext &ctx);
   LoweredValue lowerCastExpr(MIRCastExpr *expr, FuncContext &ctx);
   LoweredValue lowerCallExpr(MIRCallExpr *expr, FuncContext &ctx);
@@ -201,4 +208,5 @@ private:
                                   llvm::Type *layoutType, llvm::StringRef name);
 
   llvm::Value *extractEnumTag(const LoweredValue &value, TypeSymbol *enumType);
+  std::string getStringSuffix(TypeSymbol *type);
 };

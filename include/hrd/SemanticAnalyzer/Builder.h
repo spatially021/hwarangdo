@@ -7,7 +7,6 @@
 #include "hrd/Recover/BuilderRecover.h"
 #include "hrd/SourceSpan.h"
 #include "hrd/compiler/CompilerContexts.h"
-#include "hrd/util/Error.h"
 #include "hrd/util/diagnostic/DiagnosticEngine.h"
 #include <cassert>
 #include <memory>
@@ -26,8 +25,17 @@ public:
 
   inline void linkRoot() {
     if (!table.main) {
-      Error::diagnostic(SourceSpan(), "has no main");
+      auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S122);
+      dia.labels = {
+          {SourceSpan(), "main declaration was not found", true},
+      };
+      dia.helps = {
+          "declare exactly one Main class",
+      };
+      engine.emit(dia);
+      recover.recover();
     }
+
     table.main->rootScope = std::move(rootScope);
   }
 

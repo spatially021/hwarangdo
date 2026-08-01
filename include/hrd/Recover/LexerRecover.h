@@ -7,6 +7,7 @@ struct Lexer;
 class LexerRecover final : public Recover {
 public:
   LexerRecover(Lexer &lexer);
+  ~LexerRecover() {}
   void recover();
 
 private:

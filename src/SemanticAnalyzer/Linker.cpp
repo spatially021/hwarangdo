@@ -448,7 +448,8 @@ void Linker::visit(VarDecl *decl) {
 }
 
 void Linker::visit(TypeNode *type) {
-  TypeResolver::resolveTypeNode(type, table);
+  TypeResolverContext context = {engine, table, recover};
+  TypeResolver::resolveTypeNode(type, context);
 }
 void Linker::visit(ASTNode *) {}
 

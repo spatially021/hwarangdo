@@ -39,6 +39,11 @@ struct ResolverContext {
   DiagnosticEngine &engine;
 };
 
+struct VerifierContext {
+  Program *program;
+  DiagnosticEngine &engine;
+};
+
 struct HIRContext {
   HIRProgram *program = nullptr;
   DiagnosticEngine &engine;

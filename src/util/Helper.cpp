@@ -6,32 +6,38 @@
 #include "hrd/SourceSpan.h"
 #include "hrd/util/Error.h"
 #include "hrd/util/TypeResolver.h"
-std::string Helper::apIntToString(const llvm::APInt &v) {
-  llvm::SmallString<32> buf;
-  v.toString(buf, 10, false);
-  return std::string(buf.str());
+
+std::string Helper::apIntToString(const llvm::APInt &value) {
+  llvm::SmallString<32> buffer;
+  value.toString(buffer, 10, false);
+  return std::string(buffer.str());
 }
 
 pair<bool, SourceSpan>
-Helper::hasSameMethodSig(const vector<MethodSymbol *> &vec,
+Helper::hasSameMethodSig(const vector<MethodSymbol *> &methods,
                          MethodSymbol *symbol) {
-  for (auto *m : vec) {
-    if (m == symbol)
-      continue;
-    if (m->name != symbol->name)
-      continue;
-    if (m->returnType != symbol->returnType) {
+  for (auto *method : methods) {
+    if (method == symbol) {
       continue;
     }
 
-    if (m->params.size() != symbol->params.size()) {
+    if (method->name != symbol->name) {
+      continue;
+    }
+
+    if (method->returnType != symbol->returnType) {
+      continue;
+    }
+
+    if (method->params.size() != symbol->params.size()) {
       continue;
     }
 
     bool same = true;
-    SourceSpan span = m->decl->span;
-    for (size_t i = 0; i < m->params.size(); ++i) {
-      if (m->params[i]->typeSymbol != symbol->params[i]->typeSymbol) {
+    SourceSpan span = method->decl->span;
+
+    for (size_t i = 0; i < method->params.size(); ++i) {
+      if (method->params[i]->typeSymbol != symbol->params[i]->typeSymbol) {
         same = false;
         break;
       }
@@ -45,20 +51,22 @@ Helper::hasSameMethodSig(const vector<MethodSymbol *> &vec,
   return {false, {}};
 }
 
-pair<bool, SourceSpan> Helper::hasSameSig(const vector<MethodSymbol *> &vec,
+pair<bool, SourceSpan> Helper::hasSameSig(const vector<MethodSymbol *> &methods,
                                           MethodSymbol *symbol) {
-  for (auto *m : vec) {
-    if (m == symbol)
+  for (auto *method : methods) {
+    if (method == symbol) {
       continue;
+    }
 
-    if (m->params.size() != symbol->params.size()) {
+    if (method->params.size() != symbol->params.size()) {
       continue;
     }
 
     bool same = true;
-    SourceSpan span = m->decl->span;
-    for (size_t i = 0; i < m->params.size(); ++i) {
-      if (m->params[i]->typeSymbol != symbol->params[i]->typeSymbol) {
+    SourceSpan span = method->decl->span;
+
+    for (size_t i = 0; i < method->params.size(); ++i) {
+      if (method->params[i]->typeSymbol != symbol->params[i]->typeSymbol) {
         same = false;
         break;
       }
@@ -72,15 +80,16 @@ pair<bool, SourceSpan> Helper::hasSameSig(const vector<MethodSymbol *> &vec,
   return {false, {}};
 }
 
-bool Helper::hasSameSig(const vector<TraitSig *> &vec, TraitSig *sig) {
-  for (auto *m : vec) {
-    if (m->params.size() != sig->params.size()) {
+bool Helper::hasSameSig(const vector<TraitSig *> &signatures, TraitSig *sig) {
+  for (auto *signature : signatures) {
+    if (signature->params.size() != sig->params.size()) {
       continue;
     }
 
     bool same = true;
-    for (size_t i = 0; i < m->params.size(); ++i) {
-      if (m->params[i] != sig->params[i]) {
+
+    for (size_t i = 0; i < signature->params.size(); ++i) {
+      if (signature->params[i] != sig->params[i]) {
         same = false;
         break;
       }
@@ -94,184 +103,385 @@ bool Helper::hasSameSig(const vector<TraitSig *> &vec, TraitSig *sig) {
   return false;
 }
 
-void TypeResolver::resolveTypeNode(TypeNode *type, SymbolTable &table) {
+void TypeResolver::resolveTypeNode(TypeNode *type, TypeResolverContext &ctx) {
+  if (type == nullptr) {
+    Error::internal("type node is nullptr");
+  }
+
   if (dynamic_cast<BuiltinTypeNode *>(type) ||
       dynamic_cast<IdentifierTypeNode *>(type)) {
-    auto symbol = table.getType(type);
-    if (!symbol)
-      Error::diagnostic(type->span, "unknown type : " + type->type);
+    auto *symbol = ctx.table.getType(type);
+
+    if (symbol == nullptr) {
+      auto dia = ctx.engine.makeDiagnostic(DiagnosticCode::HRD_S013);
+      dia.labels = {
+          {type->span, "type '" + type->type + "' is not declared", true},
+      };
+      dia.helps = {
+          "declare the type before using it",
+      };
+      ctx.engine.emit(dia);
+      ctx.recover.recover();
+    }
+
     type->resolved = symbol;
-  } else if (auto a = dynamic_cast<ArrayTypeNode *>(type)) {
-    TypeResolver::resolveTypeNode(a->elementType.get(), table);
-    llvm::APInt size = resolveFixedArraySize(a->fixedSize.get(), table);
-    a->resolved = table.arrayTypeGetOrCreate(a->elementType->resolved, size);
-  } else if (auto g = dynamic_cast<GenericTypeNode *>(type)) {
-    auto ar = g->typeArgs;
-    TypeSymbol *orign = nullptr;
-    vector<TypeSymbol *> args;
-    for (auto &t : g->typeArgs) {
-      resolveTypeNode(t.get(), table);
-      if (!t->resolved) {
-        Error::internal(t->span, "fail to resolve args Type : " + t->type);
-      }
-      args.push_back(t->resolved);
-    }
-
-    switch (g->gKind) {
-    case GenericTypeNode::GenericKind::HANDLE:
-
-      if (args.size() != 1) {
-        Error::diagnostic(g->span, "Handle need one type but '" +
-                                       to_string(args.size()) + "'");
-      }
-
-      if (ar[0]->resolved->kind != TypeSymbol::TypeKind::CLASS) {
-        Error::diagnostic(ar[0]->span,
-                          "not allowed handle target type : " + ar[0]->type);
-      }
-
-      if (ar[0]->resolved->type == Symbol::SymbolType::MAIN) {
-        Error::diagnostic(ar[0]->span,
-                          "not allowed handle target type : " + ar[0]->type);
-      }
-
-      orign = table.getHandle();
-      break;
-    case GenericTypeNode::GenericKind::OPTION:
-      if (args.size() != 1) {
-        Error::diagnostic(g->span, "Option need one type but '" +
-                                       to_string(args.size()) + "'");
-      }
-      orign = table.getOption();
-      break;
-    case GenericTypeNode::GenericKind::RESULT:
-      if (args.size() != 2) {
-        Error::diagnostic(g->span, "Result neet two type but '" +
-                                       to_string(args.size()) + "'");
-      }
-      if (args[1]->kind != TypeSymbol::TypeKind::ERROR) {
-        Error::diagnostic(g->span, "Result's second type is Error but '" +
-                                       args[1]->name);
-      }
-      break;
-    }
-    g->resolved = table.GenericInsGetOrCreate(orign, args);
-  } else {
-    Error::diagnostic(type->span, "unknown type : " + type->type);
+    return;
   }
+
+  if (auto *array = dynamic_cast<ArrayTypeNode *>(type)) {
+    if (array->elementType == nullptr) {
+      Error::internal(array->span, "array element type node is nullptr");
+    }
+
+    if (array->fixedSize == nullptr) {
+      Error::internal(array->span, "fixed array size expression is nullptr");
+    }
+
+    resolveTypeNode(array->elementType.get(), ctx);
+
+    if (array->elementType->resolved == nullptr) {
+      Error::internal(array->elementType->span,
+                      "array element type was not resolved");
+    }
+
+    llvm::APInt size = resolveFixedArraySize(array->fixedSize.get(), ctx);
+
+    array->resolved =
+        ctx.table.arrayTypeGetOrCreate(array->elementType->resolved, size);
+
+    if (array->resolved == nullptr) {
+      Error::internal(array->span, "failed to create array type");
+    }
+
+    return;
+  }
+
+  if (auto *generic = dynamic_cast<GenericTypeNode *>(type)) {
+    vector<TypeSymbol *> args;
+    args.reserve(generic->typeArgs.size());
+
+    for (auto &arg : generic->typeArgs) {
+      if (arg == nullptr) {
+        Error::internal(generic->span, "generic type argument is nullptr");
+      }
+
+      resolveTypeNode(arg.get(), ctx);
+
+      if (arg->resolved == nullptr) {
+        Error::internal(arg->span,
+                        "generic type argument was not resolved: " + arg->type);
+      }
+
+      args.push_back(arg->resolved);
+    }
+
+    TypeSymbol *origin = nullptr;
+
+    switch (generic->gKind) {
+    case GenericTypeNode::GenericKind::HANDLE: {
+      if (args.size() != 1) {
+        auto dia = ctx.engine.makeDiagnostic(DiagnosticCode::HRD_S109);
+        dia.labels = {
+            {generic->span,
+             "Handle has " + to_string(args.size()) + " type arguments", true},
+        };
+        dia.notes = {
+            "Handle requires exactly one type argument",
+        };
+        dia.helps = {
+            "use 'Handle<T>' with one entity type",
+        };
+        ctx.engine.emit(dia);
+        ctx.recover.recover();
+      }
+
+      auto *target = args[0];
+
+      if (target->kind != TypeSymbol::TypeKind::CLASS ||
+          target->type == Symbol::SymbolType::MAIN) {
+        auto dia = ctx.engine.makeDiagnostic(DiagnosticCode::HRD_S110);
+        dia.labels = {
+            {generic->typeArgs[0]->span,
+             "type '" + target->name + "' cannot be used as a Handle target",
+             true},
+        };
+        dia.notes = {
+            "Handle can only reference non-Main class entity types",
+        };
+        dia.helps = {
+            "use a class entity type as the Handle target",
+        };
+        ctx.engine.emit(dia);
+        ctx.recover.recover();
+      }
+
+      origin = ctx.table.getHandle();
+      break;
+    }
+
+    case GenericTypeNode::GenericKind::OPTION: {
+      if (args.size() != 1) {
+        auto dia = ctx.engine.makeDiagnostic(DiagnosticCode::HRD_S111);
+        dia.labels = {
+            {generic->span,
+             "Option has " + to_string(args.size()) + " type arguments", true},
+        };
+        dia.notes = {
+            "Option requires exactly one type argument",
+        };
+        dia.helps = {
+            "use 'Option<T>' with one type",
+        };
+        ctx.engine.emit(dia);
+        ctx.recover.recover();
+      }
+
+      origin = ctx.table.getOption();
+      break;
+    }
+
+    case GenericTypeNode::GenericKind::RESULT: {
+      if (args.size() != 2) {
+        auto dia = ctx.engine.makeDiagnostic(DiagnosticCode::HRD_S112);
+        dia.labels = {
+            {generic->span,
+             "Result has " + to_string(args.size()) + " type arguments", true},
+        };
+        dia.notes = {
+            "Result requires a value type and an error type",
+        };
+        dia.helps = {
+            "use 'Result<T, E>' with exactly two type arguments",
+        };
+        ctx.engine.emit(dia);
+        ctx.recover.recover();
+      }
+
+      if (args[1]->kind != TypeSymbol::TypeKind::ERROR) {
+        auto dia = ctx.engine.makeDiagnostic(DiagnosticCode::HRD_S113);
+        dia.labels = {
+            {generic->typeArgs[1]->span,
+             "type '" + args[1]->name + "' is not an error type", true},
+        };
+        dia.notes = {
+            "the second type argument of Result must be an error type",
+        };
+        dia.helps = {
+            "use an error type as the second Result argument",
+        };
+        ctx.engine.emit(dia);
+        ctx.recover.recover();
+      }
+
+      origin = ctx.table.getResult();
+      break;
+    }
+    }
+
+    if (origin == nullptr) {
+      Error::internal(generic->span, "generic origin type is nullptr");
+    }
+
+    generic->resolved = ctx.table.GenericInsGetOrCreate(origin, args);
+
+    if (generic->resolved == nullptr) {
+      Error::internal(generic->span, "failed to create generic type instance");
+    }
+
+    return;
+  }
+
+  auto dia = ctx.engine.makeDiagnostic(DiagnosticCode::HRD_S013);
+  dia.labels = {
+      {type->span, "this type syntax cannot be resolved", true},
+  };
+  dia.helps = {
+      "use a builtin, declared, array, or supported generic type",
+  };
+  ctx.engine.emit(dia);
+  ctx.recover.recover();
 }
 
 llvm::APInt TypeResolver::resolveFixedArraySize(Expr *expr,
-                                                SymbolTable &table) {
-
-  auto lit = dynamic_cast<LiteralExpr *>(expr);
-  if (!lit) {
-    // TODO: 오류명 맞추기(-는 unary로 들어가서 literal인지로는 에러품질이 좋지
-    // 않음)
-    Error::diagnostic(expr->span, "array size must be integer literal : ");
-  }
-  ResolvedLit r;
-  switch (lit->token.kind) {
-  case TKind::LIT_INT:
-    r = TypeResolver::resolveLitInt(lit, table);
-    lit->resolvedType = r.type;
-    lit->resolvedLit = r;
-    break;
-  default:
-    Error::diagnostic(expr->span, "array size must be integer literal");
-  }
-  if (!lit) {
-    Error::diagnostic(expr->span, "array size must be integer literal");
+                                                TypeResolverContext &ctx) {
+  if (expr == nullptr) {
+    Error::internal("fixed array size expression is nullptr");
   }
 
-  llvm::APInt value = lit->resolvedLit.asInt().value;
+  auto *literal = dynamic_cast<LiteralExpr *>(expr);
+
+  if (literal == nullptr || literal->token.kind != TKind::LIT_INT) {
+    auto dia = ctx.engine.makeDiagnostic(DiagnosticCode::HRD_S114);
+    dia.labels = {
+        {expr->span, "this expression is not an integer literal", true},
+    };
+    dia.notes = {
+        "a fixed array size must be known at compile time",
+    };
+    dia.helps = {
+        "use a positive integer literal as the array size",
+    };
+    ctx.engine.emit(dia);
+    ctx.recover.recover();
+  }
+
+  ResolvedLit resolved = resolveLitInt(literal, ctx);
+
+  literal->resolvedType = resolved.type;
+  literal->resolvedLit = resolved;
+
+  if (!literal->resolvedLit.isInt()) {
+    Error::internal(literal->span,
+                    "fixed array size literal did not resolve as integer");
+  }
+
+  llvm::APInt value = literal->resolvedLit.asInt().value;
 
   if (value.isNegative()) {
-    Error::diagnostic(expr->span, "array size cannot be negative");
+    auto dia = ctx.engine.makeDiagnostic(DiagnosticCode::HRD_S115);
+    dia.labels = {
+        {expr->span, "array size is negative", true},
+    };
+    dia.notes = {
+        "a fixed array size cannot be negative",
+    };
+    dia.helps = {
+        "use a positive integer literal",
+    };
+    ctx.engine.emit(dia);
+    ctx.recover.recover();
   }
-  if (value == 0) {
-    Error::diagnostic(expr->span, "array size must be greater than zero");
+
+  if (value.isZero()) {
+    auto dia = ctx.engine.makeDiagnostic(DiagnosticCode::HRD_S116);
+    dia.labels = {
+        {expr->span, "array size is zero", true},
+    };
+    dia.notes = {
+        "a fixed array must contain at least one element",
+    };
+    dia.helps = {
+        "use an integer literal greater than zero",
+    };
+    ctx.engine.emit(dia);
+    ctx.recover.recover();
   }
 
   return value.zextOrTrunc(128);
 }
 
-static int compareUnsignedDecimal(const std::string &a, const std::string &b) {
-  if (a.size() < b.size())
+static int compareUnsignedDecimal(const std::string &left,
+                                  const std::string &right) {
+  if (left.size() < right.size()) {
     return -1;
-  if (a.size() > b.size())
+  }
+
+  if (left.size() > right.size()) {
     return 1;
-  if (a < b)
+  }
+
+  if (left < right) {
     return -1;
-  if (a > b)
+  }
+
+  if (left > right) {
     return 1;
+  }
+
   return 0;
 }
 
-ResolvedLit TypeResolver::resolveLitInt(LiteralExpr *expr, SymbolTable &table) {
+ResolvedLit TypeResolver::resolveLitInt(LiteralExpr *expr,
+                                        TypeResolverContext &ctx) {
+  if (expr == nullptr) {
+    Error::internal("integer literal expression is nullptr");
+  }
+
   const string max32 = "2147483647";
   const string max64 = "9223372036854775807";
   const string max128 = "170141183460469231731687303715884105727";
 
-  std::string s = expr->value;
+  std::string value = expr->value;
 
-  size_t pos = s.find_first_not_of('0');
-  if (pos == std::string::npos) {
-    s = "0";
+  const size_t position = value.find_first_not_of('0');
+
+  if (position == std::string::npos) {
+    value = "0";
   } else {
-    s = s.substr(pos);
+    value = value.substr(position);
   }
 
   unsigned bits = 0;
 
-  if (compareUnsignedDecimal(s, max32) <= 0) {
+  if (compareUnsignedDecimal(value, max32) <= 0) {
     bits = 32;
-  } else if (compareUnsignedDecimal(s, max64) <= 0) {
+  } else if (compareUnsignedDecimal(value, max64) <= 0) {
     bits = 64;
-  } else if (compareUnsignedDecimal(s, max128) <= 0) {
+  } else if (compareUnsignedDecimal(value, max128) <= 0) {
     bits = 128;
   } else {
-    Error::diagnostic(expr->token, "unsupported integer bit width");
+    auto dia = ctx.engine.makeDiagnostic(DiagnosticCode::HRD_S117);
+    dia.labels = {
+        {expr->token.span,
+         "this integer literal exceeds the supported i128 range", true},
+    };
+    dia.notes = {
+        "i128 is the largest supported signed integer type",
+    };
+    dia.helps = {
+        "reduce the integer literal value",
+    };
+    ctx.engine.emit(dia);
+    ctx.recover.recover();
   }
 
-  ResolvedLit resolvedLit;
+  ResolvedLit resolved;
 
   switch (bits) {
   case 32:
-    resolvedLit.type = table.getType("i32");
+    resolved.type = ctx.table.getType("i32");
     break;
+
   case 64:
-    resolvedLit.type = table.getType("i64");
+    resolved.type = ctx.table.getType("i64");
     break;
+
   case 128:
-    resolvedLit.type = table.getType("i128");
+    resolved.type = ctx.table.getType("i128");
     break;
+
   default:
     Error::internal(expr->token, "invalid integer literal bit width");
   }
 
-  resolvedLit.value = IntPayload(llvm::APInt(bits, llvm::StringRef(s), 10));
-  return resolvedLit;
+  if (resolved.type == nullptr) {
+    Error::internal(expr->span, "failed to find inferred integer literal type");
+  }
+
+  resolved.value = IntPayload(llvm::APInt(bits, llvm::StringRef(value), 10));
+
+  return resolved;
 }
 
 pair<bool, TypeSymbol *> Helper::checkImplementTraitSig(TypeSymbol *symbol) {
-  if (!symbol) {
-    Error::internal("null type symbol");
+  if (symbol == nullptr) {
+    Error::internal("type symbol is nullptr");
   }
 
   for (auto *traitType : symbol->traits) {
-    if (!traitType || !traitType->decl) {
-      Error::internal("illegal trait type");
+    if (traitType == nullptr || traitType->decl == nullptr) {
+      Error::internal("invalid trait type");
     }
 
     auto *trait = dynamic_cast<TraitDecl *>(traitType->decl);
-    if (!trait) {
-      Error::internal("illegal trait type");
+
+    if (trait == nullptr) {
+      Error::internal("trait type declaration is not TraitDecl");
     }
 
     for (auto &sig : trait->traitSigs) {
-      if (!sig.get() || !sig->symbol) {
-        Error::internal("illegal trait signature");
+      if (sig == nullptr || sig->symbol == nullptr) {
+        Error::internal("invalid trait signature");
       }
 
       if (!Helper::hasMethodInHierarchyWithSameSig(symbol, sig->name,
@@ -287,17 +497,18 @@ pair<bool, TypeSymbol *> Helper::checkImplementTraitSig(TypeSymbol *symbol) {
 bool Helper::hasMethodInHierarchyWithSameSig(TypeSymbol *type,
                                              const std::string &name,
                                              MethodSymbol *sig) {
-  for (auto *cur = type; cur; cur = cur->base) {
-    if (!cur->memberScope) {
+  for (auto *current = type; current != nullptr; current = current->base) {
+    if (current->memberScope == nullptr) {
       continue;
     }
 
-    auto it = cur->memberScope->methodMap.find(name);
-    if (it == cur->memberScope->methodMap.end()) {
+    auto it = current->memberScope->methodMap.find(name);
+
+    if (it == current->memberScope->methodMap.end()) {
       continue;
     }
-    auto vec = it->second;
-    if (Helper::hasSameSig(vec, sig).first) {
+
+    if (Helper::hasSameSig(it->second, sig).first) {
       return true;
     }
   }

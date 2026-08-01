@@ -93,7 +93,7 @@ Ptr Parser::forStmt() {
         {peek().span, "initializer is not allowed here", true},
     };
     engine.emit(dia);
-    recover.recover(ParserRecoveryPoint::Statement);
+    recover.recover();
   }
 
   Expr::Ptr from = expression();
@@ -172,7 +172,7 @@ shared_ptr<Case> Parser::caseStmt(bool isSwtich) {
               {peek().span, "expected case selector after ','", true},
           };
           engine.emit(dia);
-          recover.recover(ParserRecoveryPoint::Statement);
+          recover.recover();
         } else
           advance(); //,처리
       }
@@ -186,13 +186,23 @@ shared_ptr<Case> Parser::caseStmt(bool isSwtich) {
       consume(TKind::LEFT_BRACE, DiagnosticCode::HRD_P043,
               "expect '{' begin case body");
     }
-    // Error::diagnostic(peek(), "expected '{' after '=>'");
 
     auto end = peek();
     return make_shared<Case>(makeSpan(tok, end), values, body);
   } else if (check(TKind::DEFAULT)) {
     if (!isSwtich) {
-      Error::diagnostic(tok, "'default' is not allowed in match expressions");
+      auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_P062);
+      dia.labels = {
+          {tok.span, "'default' is not allowed in match expressions", true},
+      };
+      dia.notes = {
+          "match expressions use wildcard selectors instead of default clauses",
+      };
+      dia.helps = {
+          "replace 'default' with '_' in match expressions",
+      };
+      engine.emit(dia);
+      recover.recover();
     }
     advance(); // default 처리
     consume(TKind::EQAUL_AGNLEBUCKET, DiagnosticCode::HRD_P056,
@@ -216,7 +226,7 @@ shared_ptr<Case> Parser::caseStmt(bool isSwtich) {
            "only 'case' and 'default' declarations are allowed here", true},
       };
       engine.emit(dia);
-      recover.recover(ParserRecoveryPoint::Statement);
+      recover.recover();
     } else {
       auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_P038);
       dia.labels = {
@@ -225,7 +235,7 @@ shared_ptr<Case> Parser::caseStmt(bool isSwtich) {
            true},
       };
       engine.emit(dia);
-      recover.recover(ParserRecoveryPoint::Statement);
+      recover.recover();
     }
   }
   Error::internal("unreachable");

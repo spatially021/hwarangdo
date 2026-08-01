@@ -1,5 +1,6 @@
 #include "hrd/SemanticAnalyzer.h"
 #include "hrd/AST/Program.h"
+#include "hrd/Recover/SementicRecover.h"
 #include "hrd/SemanticAnalyzer/Builder.h"
 #include "hrd/SemanticAnalyzer/Linker.h"
 #include "hrd/SemanticAnalyzer/SymbolTable.h"
@@ -10,7 +11,7 @@
 
 SemanticAnalyzer::SemanticAnalyzer(SemanContext &context)
     : program(context.program), symbolTable(context.table),
-      engine(context.engine) {}
+      engine(context.engine), recover(*this) {}
 
 void SemanticAnalyzer::build() {
   BuilderContext context = {symbolTable, engine};
@@ -74,8 +75,18 @@ void SemanticAnalyzer::fieldIndexing(TypeSymbol *type) {
   }
 
   if (layoutState[type] == LayoutState::Visiting) {
-    Error::diagnostic(type->decl->span, "cyclic inheritance detected");
-    return;
+    auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S123);
+    dia.labels = {
+        {type->decl->span, "cyclic type layout dependency detected here", true},
+    };
+    dia.notes = {
+        "field layout cannot be calculated for cyclic inheritance",
+    };
+    dia.helps = {
+        "remove the cyclic inheritance relationship",
+    };
+    engine.emit(dia);
+    recover.recover();
   }
 
   layoutState[type] = LayoutState::Visiting;

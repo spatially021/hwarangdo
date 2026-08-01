@@ -271,8 +271,8 @@ bool CompilerDriver::runSemantic() {
     rd.debug();
     cout << "=========================" << endl;
   }
-
-  Verifier verifier(storage.program.get());
+  VerifierContext vContext = {storage.program.get(), engine};
+  Verifier verifier(vContext);
 
   try {
     verifier.verify();

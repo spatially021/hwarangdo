@@ -38,6 +38,12 @@ void SemanticAnalyzer::addLog() {
              {symbolTable.getBuilt("bool")});
   addRuntime("log", "info", "hrd_log_info_c8", symbolTable.getType("void"),
              {symbolTable.getBuilt("c8")});
+
+  addRuntime("log", "info", "hrd_log_info_s16", symbolTable.getType("void"),
+             {symbolTable.getBuilt("s16")});
+
+  addRuntime("log", "info", "hrd_log_info_s32", symbolTable.getType("void"),
+             {symbolTable.getBuilt("s32")});
 }
 
 void SemanticAnalyzer::prepareRuntime() { addLog(); }

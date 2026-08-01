@@ -7,7 +7,8 @@ class Linker;
 class LinkerRecover final : public Recover {
 public:
   LinkerRecover(Linker &linker);
-  void recover();
+  ~LinkerRecover() {}
+  void recover() override;
 
 private:
   Linker &linker;

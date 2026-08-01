@@ -22,7 +22,7 @@ Ptr Parser::assignment() { // 대입 연산 처리
           {previous().span, "cannot assign to this expression", true},
       };
       engine.emit(dia);
-      recover.recover(ParserRecoveryPoint::Statement);
+      recover.recover();
     }
     return make_shared<AssignExpr>(makeSpan(left->span, right->span), left, op,
                                    right);
@@ -238,11 +238,19 @@ Ptr Parser::postfix() {
                   "expected ')' to close quit argument");
           auto end = previous();
           return make_shared<QuitExpr>(makeSpan(expr->span, end.span));
-        }
-
-        else {
-          Error::diagnostic(peek(),
-                            "unknown world method '" + peek().text + "'");
+        } else {
+          auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_P060);
+          dia.labels = {
+              {peek().span, "unknown world method '" + peek().text + "'", true},
+          };
+          dia.notes = {
+              "only built-in world methods can be called through 'world'",
+          };
+          dia.helps = {
+              "use 'spawn', 'view', 'destroy', or 'quit'",
+          };
+          engine.emit(dia);
+          recover.recover();
         }
       }
 
@@ -278,7 +286,7 @@ Ptr Parser::postfix() {
             {previous().span, "cannot call this expression", true},
         };
         engine.emit(dia);
-        recover.recover(ParserRecoveryPoint::Statement);
+        recover.recover();
       }
 
     } else if (check(TKind::LEFT_BRACKET)) {
@@ -357,10 +365,22 @@ Ptr Parser::primary() {
       auto end = previous();
 
       if (!c->isDefault && c->values.size() != 1) {
-        Error::diagnostic(makeSpan(t.span, end.span),
-                          "match cases must have exactly one selector value");
+        auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_P061);
+        dia.labels = {
+            {makeSpan(t.span, end.span),
+             "this match case has " + std::to_string(c->values.size()) +
+                 " selector values",
+             true},
+        };
+        dia.notes = {
+            "each match case must contain exactly one selector",
+        };
+        dia.helps = {
+            "split multiple selectors into separate match cases",
+        };
+        engine.emit(dia);
+        recover.recover();
       }
-
       cases.push_back(c);
     }
 
@@ -375,6 +395,6 @@ Ptr Parser::primary() {
       {previous().span, "expected expression here", true},
   };
   engine.emit(dia);
-  recover.recover(ParserRecoveryPoint::Statement);
+  recover.recover();
   return nullptr;
 }

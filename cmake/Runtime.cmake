@@ -18,7 +18,9 @@ target_include_directories(hrd_runtime_headers
 add_library(hrd_runtime STATIC
   ${PROJECT_SOURCE_DIR}/runtime/world/hrd_runtime_world.cpp
   ${PROJECT_SOURCE_DIR}/runtime/log/hrd_runtime_log.cpp
-  ${PROJECT_SOURCE_DIR}/runtime/string/hrd_runtime_string.cpp
+  ${PROJECT_SOURCE_DIR}/runtime/string/hrd_s8.cpp
+  ${PROJECT_SOURCE_DIR}/runtime/string/hrd_s16.cpp
+  ${PROJECT_SOURCE_DIR}/runtime/string/hrd_s32.cpp
 )
 
 # 현재 생성되는 이름:

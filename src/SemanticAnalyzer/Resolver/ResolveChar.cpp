@@ -4,37 +4,48 @@
 #include "hrd/SourceSpan.h"
 #include "hrd/util/Error.h"
 #include <vector>
-
 ResolvedLit Resolver::resolveChar(LiteralExpr *expr) {
-  auto cp = decodeCharLiteral(expr->span, expr->value);
-  TypeSymbol *type;
-  if (cp <= 0xFF) {
+  const uint32_t cp = decodeCharLiteral(expr->span, expr->value);
+
+  TypeSymbol *type = nullptr;
+
+  if (cp <= 0x7F) {
     type = table.getType("c8");
   } else if (cp <= 0xFFFF) {
     type = table.getType("c16");
-  } else
+  } else {
     type = table.getType("c32");
+  }
 
-  ResolvedLit r;
-  r.type = type;
-  r.value = CharPayload(cp);
-  return r;
+  if (type == nullptr) {
+    Error::internal(expr->span, "failed to resolve character literal type");
+  }
+
+  return ResolvedLit{
+      type,
+      CharPayload(cp),
+  };
 }
 
 ResolvedLit Resolver::resolveString(LiteralExpr *expr) {
   const std::string &s = expr->value;
+
   uint32_t maxCp = 0;
-  std::vector<uint32_t> c;
+  std::vector<uint32_t> codePoints;
+
+  // ASCII 문자열에서 재할당을 줄이는 정도의 힌트.
+  codePoints.reserve(s.size());
+
   size_t i = 0;
   while (i < s.size()) {
-    uint32_t cp = decodeOneUtf8CodePoint(expr->span, s, i);
+    const uint32_t cp = decodeOneUtf8CodePoint(expr->span, s, i);
     maxCp = std::max(maxCp, cp);
-    c.push_back(cp);
+    codePoints.push_back(cp);
   }
 
   TypeSymbol *type = nullptr;
 
-  if (maxCp <= 0xFF) {
+  if (maxCp <= 0x7F) {
     type = table.getType("s8");
   } else if (maxCp <= 0xFFFF) {
     type = table.getType("s16");
@@ -43,13 +54,13 @@ ResolvedLit Resolver::resolveString(LiteralExpr *expr) {
   }
 
   if (type == nullptr) {
-    Error::internal(expr->span, "fail to get string");
+    Error::internal(expr->span, "failed to resolve string literal type");
   }
 
-  ResolvedLit r;
-  r.type = type;
-  r.value = StringPayload(c);
-  return r;
+  return ResolvedLit{
+      type,
+      StringPayload(std::move(codePoints)),
+  };
 }
 
 uint32_t Resolver::decodeCharLiteral(const SourceSpan &span, str s) {

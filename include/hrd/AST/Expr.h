@@ -156,7 +156,7 @@ public:
       op = Operator::POW;
       break;
     default:
-      Error::diagnostic(span, "unexpected Token kind in binary "
+      Error::internal(span, "unexpected Token kind in binary "
                               "operator");
     }
   }

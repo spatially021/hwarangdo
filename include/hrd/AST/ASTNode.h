@@ -206,6 +206,14 @@ public:
         type = BuiltInType::C16;
       } else if (size == "c32") {
         type = BuiltInType::C32;
+      } else if (size == "s8") {
+        type = BuiltInType::S8;
+      } else if (size == "s16") {
+        type = BuiltInType::S16;
+      } else if (size == "s32") {
+        type = BuiltInType::S32;
+      } else {
+        Error::internal(t.span, "unknown size");
       }
     }
   }
@@ -253,10 +261,8 @@ public:
       : TypeNode(NKind::GENERIC_TYPE, s), typeArgs(std::move(args)) {
     if (base == "Handle") {
       gKind = GenericKind::HANDLE;
-    }
-
-    else {
-      Error::diagnostic(span, "unknwon genertic type : " + s.text);
+    } else {
+      Error::internal(span, "unknwon genertic type : " + s.text);
     }
   }
   void accept(ASTVisitor *visitor) override { visitor->visit(this); }

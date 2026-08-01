@@ -258,11 +258,11 @@ llvm::Type *llvmCodegen::buildPrimitiveType(PrimtiveType *type) {
         llvm::Type::getInt64Ty(context),    // len
         llvm::Type::getInt64Ty(context),
     });
-    // auto *fn =
-    //     getRuntimeFunc("hrd_destroy_s16",
-    //                    llvm::FunctionType::get(builder.getVoidTy(),
-    //                                            {builder.getPtrTy()}, false));
-    // defaultDestroys.emplace(type, fn);
+    auto *fn =
+        getRuntimeFunc("hrd_destroy_s16",
+                       llvm::FunctionType::get(builder.getVoidTy(),
+                                               {builder.getPtrTy()}, false));
+    defaultDestroys.emplace(type, fn);
     return s;
   }
   case BuiltInType::S32: {
@@ -272,11 +272,11 @@ llvm::Type *llvmCodegen::buildPrimitiveType(PrimtiveType *type) {
         llvm::Type::getInt64Ty(context),    // len
         llvm::Type::getInt64Ty(context),
     });
-    // auto *fn =
-    //     getRuntimeFunc("hrd_destroy_s32",
-    //                    llvm::FunctionType::get(builder.getVoidTy(),
-    //                                            {builder.getPtrTy()}, false));
-    // defaultDestroys.emplace(type, fn);
+    auto *fn =
+        getRuntimeFunc("hrd_destroy_s32",
+                       llvm::FunctionType::get(builder.getVoidTy(),
+                                               {builder.getPtrTy()}, false));
+    defaultDestroys.emplace(type, fn);
     return s;
   }
   case BuiltInType::B:

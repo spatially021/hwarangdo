@@ -24,7 +24,7 @@ const Token &Parser::consume(TKind kind, DiagnosticCode code,
   engine.emit(dia);
   auto &token = stream.makeSyntheticToken();
 
-  recover.recover(ParserRecoveryPoint::TypeMember);
+  recover.recover();
   return token;
 }
 
@@ -121,7 +121,7 @@ bool Parser::isType() {
         {peek().span, "expected type name here", true},
     };
     engine.emit(dia);
-    recover.recover(ParserRecoveryPoint::TypeMember);
+    recover.recover();
     return false;
   }
   return isTypeToken(peek().kind);
@@ -146,7 +146,7 @@ bool Parser::isFunc() {
         {peek().span, "expected type name here", true},
     };
     engine.emit(dia);
-    recover.recover(ParserRecoveryPoint::TypeMember);
+    recover.recover();
     return false;
   }
 
@@ -235,7 +235,7 @@ TypeNode::Ptr Parser::parseType() {
           {peek().span, "invalid use of ':'", true},
       };
       engine.emit(dia);
-      recover.recover(ParserRecoveryPoint::TypeMember);
+      recover.recover();
     }
 
     advance(); // :
@@ -252,7 +252,7 @@ TypeNode::Ptr Parser::parseType() {
              true},
         };
         engine.emit(dia);
-        recover.recover(ParserRecoveryPoint::TypeMember);
+        recover.recover();
       }
       break;
     case TKind::FLOAT:
@@ -263,7 +263,7 @@ TypeNode::Ptr Parser::parseType() {
              true},
         };
         engine.emit(dia);
-        recover.recover(ParserRecoveryPoint::TypeMember);
+        recover.recover();
       }
 
       break;
@@ -277,7 +277,7 @@ TypeNode::Ptr Parser::parseType() {
              true},
         };
         engine.emit(dia);
-        recover.recover(ParserRecoveryPoint::TypeMember);
+        recover.recover();
       }
       break;
     case TKind::STRING:
@@ -288,7 +288,7 @@ TypeNode::Ptr Parser::parseType() {
              true},
         };
         engine.emit(dia);
-        recover.recover(ParserRecoveryPoint::TypeMember);
+        recover.recover();
       }
       break;
     default:
@@ -321,7 +321,7 @@ void Parser::notFunc(DeclPrefix prefix) {
          true},
     };
     engine.emit(dia);
-    recover.recover(ParserRecoveryPoint::TypeMember);
+    recover.recover();
   }
 
   if (prefix.isOverride) {
@@ -331,7 +331,7 @@ void Parser::notFunc(DeclPrefix prefix) {
          true},
     };
     engine.emit(dia);
-    recover.recover(ParserRecoveryPoint::TypeMember);
+    recover.recover();
   }
 
   if (prefix.isAsync) {
@@ -341,7 +341,7 @@ void Parser::notFunc(DeclPrefix prefix) {
          true},
     };
     engine.emit(dia);
-    recover.recover(ParserRecoveryPoint::TypeMember);
+    recover.recover();
   }
 }
 
@@ -352,7 +352,7 @@ void Parser::notVar(DeclPrefix prefix) {
         {previous().span, "'const' is not allowed on this declaration", true},
     };
     engine.emit(dia);
-    recover.recover(ParserRecoveryPoint::TypeMember);
+    recover.recover();
   }
 
   if (prefix.isRoot) {
@@ -361,7 +361,7 @@ void Parser::notVar(DeclPrefix prefix) {
         {previous().span, "'root' is not allowed on this declaration", true},
     };
     engine.emit(dia);
-    recover.recover(ParserRecoveryPoint::TypeMember);
+    recover.recover();
   }
 }
 
@@ -376,7 +376,7 @@ Expr::Ptr Parser::parseCaseValue() {
            "payload case selector must bind exactly one variable", true},
       };
       engine.emit(dia);
-      recover.recover(ParserRecoveryPoint::TypeMember);
+      recover.recover();
     }
 
     if (call->arguments.size() != 1) {
@@ -386,7 +386,7 @@ Expr::Ptr Parser::parseCaseValue() {
            "payload case selector must bind exactly one variable", true},
       };
       engine.emit(dia);
-      recover.recover(ParserRecoveryPoint::TypeMember);
+      recover.recover();
     }
     arg = call->arguments[0];
   }

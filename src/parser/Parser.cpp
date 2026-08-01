@@ -41,7 +41,7 @@ Decl::Ptr Parser::declaration(DeclContext context) {
           {peek().span, "an access modifier was already specified", true},
       };
       engine.emit(dia);
-      recover.recover(ParserRecoveryPoint::Declaration);
+      recover.recover();
     }
     if (context != DeclContext::CLASSBODY) {
       auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_P001);
@@ -49,7 +49,7 @@ Decl::Ptr Parser::declaration(DeclContext context) {
           {peek().span, "only fields may have an access modifier", true},
       };
       engine.emit(dia);
-      recover.recover(ParserRecoveryPoint::Declaration);
+      recover.recover();
     }
     prefix.modi = AModifierConvertor(advance());
     checkAceess = true;
@@ -70,7 +70,7 @@ Decl::Ptr Parser::declaration(DeclContext context) {
             {peek().span, "'const' modifier is already specified", true},
         };
         engine.emit(dia);
-        recover.recover(ParserRecoveryPoint::Declaration);
+        recover.recover();
       }
 
       prefix.isConst = true;
@@ -83,7 +83,7 @@ Decl::Ptr Parser::declaration(DeclContext context) {
             {peek().span, "'root' modifier is already specified", true},
         };
         engine.emit(dia);
-        recover.recover(ParserRecoveryPoint::Declaration);
+        recover.recover();
       }
 
       prefix.isRoot = true;
@@ -96,7 +96,7 @@ Decl::Ptr Parser::declaration(DeclContext context) {
             {peek().span, "'frame' modifier is already specified", true},
         };
         engine.emit(dia);
-        recover.recover(ParserRecoveryPoint::Declaration);
+        recover.recover();
       }
       prefix.isFrame = true;
     }
@@ -108,7 +108,7 @@ Decl::Ptr Parser::declaration(DeclContext context) {
             {peek().span, "'override' modifier is already specified", true},
         };
         engine.emit(dia);
-        recover.recover(ParserRecoveryPoint::Declaration);
+        recover.recover();
       }
       prefix.isOverride = true;
     }
@@ -120,7 +120,7 @@ Decl::Ptr Parser::declaration(DeclContext context) {
             {peek().span, "'async' modifier is already specified", true},
         };
         engine.emit(dia);
-        recover.recover(ParserRecoveryPoint::Declaration);
+        recover.recover();
       }
       prefix.isAsync = true;
     }
@@ -179,7 +179,7 @@ Decl::Ptr Parser::declaration(DeclContext context) {
       {peek().span, "expected a declaration here", true},
   };
   engine.emit(dia);
-  recover.recover(ParserRecoveryPoint::Declaration);
+  recover.recover();
   return nullptr;
 }
 

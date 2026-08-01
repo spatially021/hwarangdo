@@ -15,7 +15,8 @@ enum class ParserRecoveryPoint {
 class ParserRecover final : public Recover {
 public:
   ParserRecover(Parser &parser);
-  void recover(ParserRecoveryPoint point);
+  ~ParserRecover() {}
+  void recover() override;
 
 private:
   Parser &parser;

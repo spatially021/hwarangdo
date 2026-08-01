@@ -23,7 +23,7 @@ void Resolver::visit(LiteralExpr *expr) {
 
   switch (expr->token.kind) {
   case TKind::LIT_INT:
-    r = TypeResolver::resolveLitInt(expr, table);
+    r = TypeResolver::resolveLitInt(expr, typeContext);
     expr->resolvedType = r.type;
     expr->resolvedLit = r;
     break;

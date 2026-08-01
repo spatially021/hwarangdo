@@ -3,9 +3,11 @@
 #include "hrd/AST/Decl.h"
 #include "hrd/AST/Program.h"
 #include "hrd/AST/Visitor.h"
+#include "hrd/Recover/VerifierRecover.h"
+#include "hrd/compiler/CompilerContexts.h"
 #include "hrd/enums/InheritState.h"
+#include "hrd/util/diagnostic/DiagnosticEngine.h"
 #include "string"
-#include <unordered_map>
 
 using std::string;
 
@@ -16,7 +18,8 @@ struct Context {
 class Verifier : public ASTVisitor {
 
 public:
-  Verifier(Program *p) : program(p) {}
+  Verifier(VerifierContext &c)
+      : program(c.program), engine(c.engine), recover(*this) {}
 
   void verify();
   void verifyCycledInherit(ClassDecl *decl);
@@ -32,4 +35,6 @@ private:
 private:
   Context context;
   Program *program;
+  DiagnosticEngine &engine;
+  VerifierRecover recover;
 };

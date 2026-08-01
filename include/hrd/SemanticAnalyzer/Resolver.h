@@ -14,6 +14,7 @@
 #include "hrd/SourceSpan.h"
 #include "hrd/compiler/CompilerContexts.h"
 #include "hrd/util/Error.h"
+#include "hrd/util/TypeResolver.h"
 #include "hrd/util/diagnostic/DiagnosticEngine.h"
 #include <cassert>
 #include <cstddef>
@@ -67,6 +68,7 @@ public:
   Case *currentCase = nullptr;
   DiagnosticEngine &engine;
   ResolverRecover recover;
+  TypeResolverContext typeContext;
 
   Resolver(ResolverContext &context);
 #define AST_NODE(T) void visit(T *node) override;

@@ -65,6 +65,7 @@ Thumbs.db
 *.exe
 *.out
 *.ll
+main
 
 # =========================
 # Coverage

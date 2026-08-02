@@ -149,6 +149,8 @@ enum class TKind {
 
   ERROR,
 
+  IMPORT,
+
 };
 struct Token {
   TKind kind = TKind::EMPTY;

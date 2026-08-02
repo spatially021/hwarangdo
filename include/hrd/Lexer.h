@@ -112,5 +112,6 @@ protected:
       {"init", TKind::INIT},
       {"self", TKind::SELF},
       {"by", TKind::BY},
-      {"onDestroy", TKind::ONDESTROY}};
+      {"onDestroy", TKind::ONDESTROY},
+      {"import", TKind::IMPORT}};
 };

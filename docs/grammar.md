@@ -1556,3 +1556,989 @@ trait을 구현하는 타입은 trait에 선언된 모든 메서드를 구현해
 구현되지 않은 메서드가 존재할 경우 컴파일 오류이다.
 
 ---
+
+## 14. 모듈과 import
+
+본 언어에서 파일은 하나의 독립적인 모듈 단위이자 이름 공간을 구성한다.
+
+`import`는 다른 파일의 내용을 현재 파일에 삽입하는 기능이 아니다.
+`import`는 대상 파일이 공개한 타입 선언을 현재 파일의 이름 탐색 범위에 추가하는 선언이다.
+
+모듈과 import는 다음 목적을 가진다.
+
+1. 파일 간 타입 선언 참조
+2. 프로젝트 내부 코드의 논리적 분리
+3. 외부 모듈 의존성 참조
+4. 동일한 타입 이름 간 충돌 방지
+5. 파일 단위 컴파일 및 링크 의존성 구성
+
+---
+
+## 14.1 용어
+
+### 14.1.1 프로젝트 모듈
+
+프로젝트 모듈은 하나의 컴파일 및 배포 단위를 의미한다.
+
+하나의 프로젝트는 하나의 루트 모듈을 가진다.
+
+외부 라이브러리와 표준 라이브러리 또한 각각 독립된 모듈로 취급한다.
+
+예:
+
+```txt
+game
+physics
+hwarangdo
+```
+
+### 14.1.2 파일 모듈
+
+하나의 소스 파일은 하나의 파일 모듈을 구성한다.
+
+파일 모듈의 경로는 해당 파일이 속한 프로젝트 모듈의 소스 루트를 기준으로 결정된다.
+
+예:
+
+```txt
+src/math/vector.hgm
+```
+
+위 파일의 프로젝트 내부 경로는 다음과 같다.
+
+```txt
+math.vector
+```
+
+프로젝트 모듈 이름이 `game`인 경우 전체 경로는 다음과 같다.
+
+```txt
+game::math.vector
+```
+
+### 14.1.3 모듈 경로
+
+모듈 경로는 다음 요소로 구성된다.
+
+```txt
+[프로젝트 모듈::]디렉터리.파일
+```
+
+프로젝트 모듈 이름과 파일 내부 경로는 `::`로 구분한다.
+
+파일 내부의 디렉터리와 파일 이름은 `.`으로 구분한다.
+
+예:
+
+```txt
+math.vector
+game::math.vector
+physics::collision.shape
+```
+
+---
+
+## 14.2 import 선언 문법
+
+`import` 선언은 다음 형식을 가진다.
+
+```txt
+import <파일 경로>;
+import <파일 경로>.{<타입 목록>};
+```
+
+외부 프로젝트 모듈을 참조하는 경우 다음 형식을 사용한다.
+
+```txt
+import <모듈 이름>::<파일 경로>;
+import <모듈 이름>::<파일 경로>.{<타입 목록>};
+```
+
+문법은 다음과 같다.
+
+```ebnf
+ImportDecl
+    := "import" ImportTarget ";"
+
+ImportTarget
+    := [ModuleName "::"] FilePath [SelectiveImport]
+
+FilePath
+    := Identifier ("." Identifier)*
+
+SelectiveImport
+    := "." "{" TypeNameList "}"
+
+TypeNameList
+    := Identifier ("," Identifier)*
+
+ModuleName
+    := Identifier
+```
+
+예:
+
+```hwarangdo
+import math.vector;
+import math.matrix.{Matrix3, Matrix4};
+
+import physics::collision.shape;
+import physics::collision.collider.{Collider};
+```
+
+---
+
+## 14.3 import 선언 위치
+
+`import`는 파일 최상위에서만 선언할 수 있다.
+
+모든 import 선언은 해당 파일의 타입 선언보다 먼저 위치해야 한다.
+
+허용:
+
+```hwarangdo
+import math.vector;
+import physics::collision.shape.{Circle};
+
+public struct Position {
+}
+```
+
+금지:
+
+```hwarangdo
+public struct Position {
+}
+
+import math.vector;
+```
+
+다음 위치에서는 import를 선언할 수 없다.
+
+* class 내부
+* struct 내부
+* enum 내부
+* trait 내부
+* impl 내부
+* 메서드 내부
+* 블록 내부
+
+---
+
+## 14.4 현재 프로젝트 모듈 참조
+
+모듈 이름이 생략된 import는 현재 프로젝트 모듈을 기준으로 해석한다.
+
+프로젝트 모듈 이름이 `game`인 경우 다음 두 경로는 동일한 파일 모듈을 가리킨다.
+
+```hwarangdo
+import math.vector;
+```
+
+개념적으로는 다음과 같다.
+
+```hwarangdo
+import game::math.vector;
+```
+
+현재 프로젝트 내부의 파일을 import할 때는 프로젝트 모듈 이름을 생략한다.
+
+현재 프로젝트 모듈 이름을 명시적으로 작성하는 것은 허용하지 않는다.
+
+금지:
+
+```hwarangdo
+import game::math.vector;
+```
+
+현재 프로젝트 내부 경로는 다음과 같이 작성해야 한다.
+
+```hwarangdo
+import math.vector;
+```
+
+이는 프로젝트 이름 변경이 프로젝트 내부의 모든 import 선언에 영향을 주는 것을 방지한다.
+
+---
+
+## 14.5 외부 프로젝트 모듈 참조
+
+외부 프로젝트 모듈을 import할 때는 프로젝트 모듈 이름을 반드시 명시한다.
+
+외부 프로젝트 모듈 이름과 내부 파일 경로는 `::`로 구분한다.
+
+```hwarangdo
+import physics::collision.shape;
+```
+
+위 선언은 다음 파일 모듈을 참조한다.
+
+```txt
+프로젝트 모듈: physics
+파일 경로: collision/shape.hgm
+```
+
+외부 프로젝트 모듈은 현재 프로젝트의 의존성 목록에 등록되어 있어야 한다.
+
+의존성으로 등록되지 않은 프로젝트 모듈을 import하는 것은 컴파일 오류이다.
+
+```hwarangdo
+import unknown::utility.math;
+```
+
+`unknown`이 현재 프로젝트의 의존성으로 등록되어 있지 않다면 오류가 발생한다.
+
+---
+
+## 14.6 파일 단위 import
+
+파일 단위 import는 대상 파일 모듈이 공개한 모든 최상위 타입을 현재 파일의 이름 탐색 범위에 추가한다.
+
+```hwarangdo
+import math.vector;
+```
+
+대상 파일:
+
+```hwarangdo
+// math/vector.hgm
+
+public struct Vec2 {
+}
+
+public struct Vec3 {
+}
+
+private struct VectorStorage {
+}
+```
+
+import 이후 현재 파일에서 사용할 수 있는 타입:
+
+```txt
+Vec2
+Vec3
+```
+
+사용할 수 없는 타입:
+
+```txt
+VectorStorage
+```
+
+파일 단위 import는 대상 파일의 `public` 최상위 타입만 가져온다.
+
+---
+
+## 14.7 선택적 타입 import
+
+선택적 타입 import는 대상 파일 모듈이 공개한 타입 중 명시된 타입만 현재 파일의 이름 탐색 범위에 추가한다.
+
+```hwarangdo
+import math.vector.{Vec2};
+```
+
+여러 타입을 동시에 선택할 수 있다.
+
+```hwarangdo
+import math.vector.{Vec2, Vec3};
+```
+
+선택적 import에 명시되는 이름은 대상 파일의 최상위 타입 이름이어야 한다.
+
+다음 선언은 허용되지 않는다.
+
+* 대상 파일에 존재하지 않는 타입
+* `private` 최상위 타입
+* 타입 내부의 멤버
+* 메서드
+* 필드
+* enum variant
+
+예:
+
+```hwarangdo
+import math.vector.{length};
+```
+
+`length`가 메서드인 경우 컴파일 오류이다.
+
+---
+
+## 14.8 import 가능한 선언
+
+import 대상이 될 수 있는 선언은 다음과 같다.
+
+* class
+* struct
+* enum
+* trait
+
+import 대상이 될 수 없는 선언은 다음과 같다.
+
+* 메서드
+* init
+* 필드
+* 지역 변수
+* enum variant
+* impl 블록
+* 실행 문장
+
+`impl`은 독립된 타입 선언이 아니므로 직접 import할 수 없다.
+
+대상 struct가 import되면 해당 struct에 연결된 impl 구현은 컴파일 및 링크 과정에서 함께 연결된다.
+
+---
+
+## 14.9 접근 제한자
+
+다른 파일 모듈에서 import할 수 있는 선언은 `public` 최상위 타입으로 제한한다.
+
+`private` 최상위 타입은 선언된 파일 내부에서만 접근할 수 있다.
+
+`protected`는 상속 관계의 멤버 접근을 위한 접근 제한자이므로 최상위 타입 선언에는 사용할 수 없다.
+
+허용:
+
+```hwarangdo
+public struct Vec2 {
+}
+
+private struct VecStorage {
+}
+```
+
+금지:
+
+```hwarangdo
+protected struct Vec2 {
+}
+```
+
+import 여부는 타입 내부 멤버의 접근 제한을 변경하지 않는다.
+
+예를 들어 public class를 import하더라도 해당 class의 private 멤버에는 접근할 수 없다.
+
+---
+
+## 14.10 이름 탐색
+
+import된 타입은 현재 파일에서 단순 타입 이름으로 참조한다.
+
+```hwarangdo
+import math.vector.{Vec2};
+
+public struct Position {
+    Vec2 value;
+}
+```
+
+import 경로는 표현식이나 타입 이름의 일부로 직접 사용할 수 없다.
+
+금지:
+
+```hwarangdo
+math.vector.Vec2 value;
+```
+
+금지:
+
+```hwarangdo
+physics::collision.shape.Circle value;
+```
+
+모듈 경로는 import 선언에서만 사용한다.
+
+일반 코드에서는 import된 타입의 이름을 사용한다.
+
+---
+
+## 14.11 이름 충돌
+
+서로 다른 파일 모듈에서 동일한 이름의 타입을 import할 수 없다.
+
+예:
+
+```hwarangdo
+import game.player.{State};
+import network.connection.{State};
+```
+
+두 import가 모두 `State`를 현재 파일에 추가하므로 컴파일 오류가 발생한다.
+
+파일 단위 import에서도 동일한 규칙을 적용한다.
+
+```hwarangdo
+import game.player;
+import network.connection;
+```
+
+두 파일이 모두 `public State`를 선언한다면 이름 충돌 오류가 발생한다.
+
+이름 충돌은 실제 타입 사용 여부와 관계없이 import 선언을 처리하는 시점에 진단한다.
+
+현재 버전에서는 다음 기능을 제공하지 않는다.
+
+* import alias
+* 타입 alias
+* qualified type name을 이용한 충돌 해소
+
+이름 충돌은 import 대상을 줄이거나 타입 이름을 변경하여 해결해야 한다.
+
+예:
+
+```hwarangdo
+import game.player.{Player, PlayerState};
+import network.connection.{Connection};
+```
+
+---
+
+## 14.12 중복 import
+
+같은 파일 모듈을 여러 번 import하는 것은 허용한다.
+
+```hwarangdo
+import math.vector;
+import math.vector;
+```
+
+동일한 import는 한 번만 적용된다.
+
+선택적 import가 중복되는 경우에도 한 번만 적용된다.
+
+```hwarangdo
+import math.vector.{Vec2};
+import math.vector.{Vec2};
+```
+
+파일 단위 import와 선택적 import가 함께 선언되는 경우 파일 단위 import가 전체 공개 타입을 이미 포함하므로 선택적 import는 추가 효과를 가지지 않는다.
+
+```hwarangdo
+import math.vector;
+import math.vector.{Vec2};
+```
+
+이 경우 오류는 발생하지 않는다.
+
+컴파일러는 중복 import에 대해 경고를 발생시킬 수 있다.
+
+---
+
+## 14.13 import의 비전이성
+
+import는 다른 파일로 전파되지 않는다.
+
+파일 A:
+
+```hwarangdo
+import math.vector.{Vec2};
+
+public struct Transform {
+    Vec2 position;
+}
+```
+
+파일 B:
+
+```hwarangdo
+import game.transform;
+
+public struct ObjectData {
+    Vec2 position;
+}
+```
+
+파일 B는 파일 A가 import한 `Vec2`를 직접 사용할 수 없다.
+
+파일 B에서 `Vec2`를 사용하려면 직접 import해야 한다.
+
+```hwarangdo
+import game.transform;
+import math.vector.{Vec2};
+```
+
+즉 import는 재수출되지 않으며, 각 파일은 자신이 직접 사용하는 외부 타입을 직접 import해야 한다.
+
+단, 공개 타입의 멤버 시그니처에 포함된 타입 정보는 해당 타입의 구조를 해석하기 위해 컴파일러 내부에서 참조할 수 있다.
+
+이 동작은 해당 타입 이름을 현재 파일의 이름 탐색 범위에 추가하지 않는다.
+
+---
+
+## 14.14 순환 import
+
+파일 모듈 간 순환 import는 허용한다.
+
+파일 A:
+
+```hwarangdo
+import game.b.{B};
+
+public class A {
+    Handle<B> target;
+}
+```
+
+파일 B:
+
+```hwarangdo
+import game.a.{A};
+
+public class B {
+    Handle<A> target;
+}
+```
+
+순환 import는 파일 로드 순서에 영향을 주지 않는다.
+
+컴파일러는 전체 import 그래프의 파일을 먼저 수집한 뒤, 최상위 타입 선언을 등록하고 타입 간 연결을 수행한다.
+
+순환 import 자체는 오류가 아니다.
+
+다음 경우에는 순환 관계와 별개로 오류가 발생할 수 있다.
+
+* 잘못된 상속 순환
+* 무한한 value 타입 포함 관계
+* trait 계약 순환에 의한 불변식 위반
+* 존재하지 않는 타입 참조
+
+---
+
+## 14.15 파일 경로 해석
+
+파일 경로의 각 `.` 구분 요소는 디렉터리 또는 파일 이름을 나타낸다.
+
+마지막 요소는 파일 이름으로 해석한다.
+
+```hwarangdo
+import math.geometry.vector;
+```
+
+위 경로는 다음 파일을 참조한다.
+
+```txt
+math/geometry/vector.hgm
+```
+
+선택적 타입 import에서도 `{}` 앞까지가 파일 경로이다.
+
+```hwarangdo
+import math.geometry.vector.{Vec2};
+```
+
+파일 경로:
+
+```txt
+math/geometry/vector.hgm
+```
+
+타입 이름:
+
+```txt
+Vec2
+```
+
+따라서 파일 이름과 타입 이름의 경계는 `{}` 문법으로 명확하게 구분된다.
+
+컴파일러는 파일 시스템을 탐색하여 마지막 식별자가 파일인지 타입인지 추측하지 않는다.
+
+---
+
+## 14.16 소스 루트
+
+프로젝트 모듈은 하나 이상의 소스 루트를 가질 수 있다.
+
+import 경로는 소스 루트를 제외한 상대 경로로 작성한다.
+
+예:
+
+```txt
+project/
+├── src/
+│   └── math/
+│       └── vector.hgm
+└── project 설정 파일
+```
+
+`src`가 소스 루트인 경우 다음과 같이 import한다.
+
+```hwarangdo
+import math.vector;
+```
+
+다음과 같이 실제 파일 시스템 경로를 직접 작성할 수 없다.
+
+```hwarangdo
+import src.math.vector;
+```
+
+금지되는 경로 표현:
+
+```txt
+./math/vector.hgm
+../common/vector.hgm
+/math/vector.hgm
+C:\project\math\vector.hgm
+```
+
+import는 논리적 모듈 경로만 허용한다.
+
+상대 경로 import는 지원하지 않는다.
+
+---
+
+## 14.17 파일 이름 규칙
+
+import 경로에 사용되는 디렉터리 및 파일 이름은 식별자 규칙을 따라야 한다.
+
+허용:
+
+```txt
+math.vector
+game_object.player_state
+```
+
+허용되지 않는 예:
+
+```txt
+math.2d_vector
+game-object.player
+```
+
+소스 파일 확장자 `.hgm`은 import 선언에 작성하지 않는다.
+
+허용:
+
+```hwarangdo
+import math.vector;
+```
+
+금지:
+
+```hwarangdo
+import math.vector.hgm;
+```
+
+---
+
+## 14.18 대소문자 구분
+
+모듈 이름, 디렉터리 이름, 파일 이름 및 타입 이름은 대소문자를 구분한다.
+
+다음은 서로 다른 경로로 취급한다.
+
+```txt
+math.vector
+Math.vector
+math.Vector
+```
+
+import 경로의 대소문자는 실제 모듈 및 파일 경로와 정확히 일치해야 한다.
+
+대소문자를 구분하지 않는 파일 시스템에서도 컴파일러는 논리적 모듈 경로의 대소문자를 엄격하게 검사한다.
+
+---
+
+## 14.19 파일 로드와 컴파일
+
+컴파일러는 루트 파일에서 시작하여 import된 파일을 재귀적으로 수집한다.
+
+파일 수집은 다음 순서를 따른다.
+
+1. 루트 파일 로드
+2. import 선언 분석
+3. 프로젝트 모듈 및 외부 의존 모듈 확인
+4. 대상 파일 경로 해석
+5. 아직 로드되지 않은 파일 로드
+6. 전체 import 그래프 완성
+7. 최상위 타입 심볼 등록
+8. 타입 간 연결
+9. 본문 분석
+10. HIR 및 이후 단계 진행
+
+동일한 파일 모듈은 전체 컴파일 과정에서 한 번만 파싱하고 분석한다.
+
+import 선언의 순서는 타입 해석 결과에 영향을 주지 않는다.
+
+---
+
+## 14.20 진입점과 import
+
+일반 파일 모듈은 `Main` class를 포함하지 않아도 된다.
+
+실행 파일 생성 시에는 전체 컴파일 대상 모듈에서 유효한 `Main` class를 탐색한다.
+
+진입점 규칙은 다음과 같다.
+
+1. import된 일반 파일에는 `Main`이 없어도 된다.
+2. 전체 프로그램에는 정확히 하나의 유효한 `Main` class가 존재해야 한다.
+3. 둘 이상의 유효한 `Main` class가 존재하면 컴파일 오류이다.
+4. 실행 파일 생성 시 `Main` class가 존재하지 않으면 컴파일 오류이다.
+5. 독립적인 라이브러리 모듈 컴파일에서는 `Main` class를 요구하지 않는다.
+
+`Main` class는 현재 프로젝트 모듈에 선언되어야 한다.
+
+외부 의존 모듈에 선언된 `Main`은 현재 프로그램의 진입점 후보로 취급하지 않는다.
+
+---
+
+## 14.21 외부 모듈 의존성
+
+외부 모듈은 프로젝트 설정에 명시된 의존성만 import할 수 있다.
+
+예:
+
+```hwarangdo
+import physics::collision.shape;
+```
+
+`physics` 모듈이 프로젝트 의존성 목록에 등록되어 있어야 한다.
+
+직접 의존하지 않는 모듈을 간접 의존성을 통해 import할 수 없다.
+
+예:
+
+```txt
+game → physics → math
+```
+
+`game`이 `physics`에만 의존하고 `math`에 직접 의존하지 않는 경우:
+
+```hwarangdo
+import math::vector;
+```
+
+는 허용되지 않는다.
+
+`math`를 사용하려면 현재 프로젝트가 `math`를 직접 의존성으로 선언해야 한다.
+
+이는 import 의존성이 다른 모듈을 통해 암묵적으로 전파되는 것을 방지한다.
+
+---
+
+## 14.22 표준 라이브러리
+
+표준 라이브러리는 독립된 프로젝트 모듈로 취급한다.
+
+표준 라이브러리의 모듈 이름은 별도 명세에서 정의한다.
+
+표준 라이브러리 import도 일반 외부 모듈 import와 동일한 문법을 사용한다.
+
+예:
+
+```hwarangdo
+import hwarangdo::text.string_builder.{StringBuilder};
+```
+
+일부 기본 타입 및 언어 내장 기능은 import 없이 사용할 수 있다.
+
+import 없이 사용할 수 있는 내장 선언의 범위는 표준 라이브러리 명세에서 별도로 정의한다.
+
+---
+
+## 14.23 지원하지 않는 기능
+
+현재 import 문법에서는 다음 기능을 지원하지 않는다.
+
+### wildcard 타입 import
+
+금지:
+
+```hwarangdo
+import math.vector.{*};
+```
+
+파일 전체를 import하려면 파일 단위 import를 사용한다.
+
+```hwarangdo
+import math.vector;
+```
+
+### alias import
+
+금지:
+
+```hwarangdo
+import math.vector.{Vec2 as Vector2};
+```
+
+금지:
+
+```hwarangdo
+import physics::collision.shape as Shape;
+```
+
+### 상대 경로 import
+
+금지:
+
+```hwarangdo
+import ..common.vector;
+```
+
+### qualified type name
+
+금지:
+
+```hwarangdo
+math.vector.Vec2 value;
+```
+
+### import 재수출
+
+금지:
+
+```hwarangdo
+public import math.vector;
+```
+
+### 런타임 동적 import
+
+금지:
+
+```hwarangdo
+import(path);
+```
+
+모든 import 대상은 컴파일 시점에 결정되어야 한다.
+
+---
+
+## 14.24 오류 규칙
+
+다음 경우 컴파일 오류가 발생한다.
+
+1. import 선언이 파일 최상위가 아닌 위치에 존재하는 경우
+2. 타입 선언 이후에 import가 존재하는 경우
+3. 대상 프로젝트 모듈이 존재하지 않는 경우
+4. 대상 프로젝트 모듈이 의존성으로 등록되지 않은 경우
+5. 대상 파일이 존재하지 않는 경우
+6. 선택한 타입이 대상 파일에 존재하지 않는 경우
+7. 선택한 타입이 public이 아닌 경우
+8. 동일한 이름의 타입이 여러 import를 통해 유입되는 경우
+9. import 경로가 식별자 규칙을 위반하는 경우
+10. import 경로에 파일 확장자를 작성한 경우
+11. 현재 프로젝트 모듈 이름을 `::` 앞에 명시한 경우
+12. import 대상이 타입이 아닌 선언인 경우
+13. 같은 선택적 import 목록에 동일한 타입 이름을 중복 작성한 경우
+14. 선택적 import 목록이 비어 있는 경우
+15. import 경로의 대소문자가 실제 경로와 일치하지 않는 경우
+
+---
+
+## 14.25 사용 예시
+
+프로젝트 구조:
+
+```txt
+game/
+├── src/
+│   ├── Main.hgm
+│   ├── math/
+│   │   ├── vector.hgm
+│   │   └── matrix.hgm
+│   ├── entity/
+│   │   ├── player.hgm
+│   │   └── enemy.hgm
+│   └── system/
+│       └── movement.hgm
+└── 프로젝트 설정 파일
+```
+
+`math/vector.hgm`:
+
+```hwarangdo
+public struct Vec2 {
+    float x;
+    float y;
+}
+
+public struct Vec3 {
+    float x;
+    float y;
+    float z;
+}
+
+private struct VectorStorage {
+}
+```
+
+`entity/player.hgm`:
+
+```hwarangdo
+import math.vector.{Vec2};
+
+public class Player {
+    Vec2 position;
+
+    public init(Vec2 position) {
+        this.position = position;
+    }
+}
+```
+
+`system/movement.hgm`:
+
+```hwarangdo
+import math.vector.{Vec2};
+import entity.player.{Player};
+
+public struct Movement {
+    public void move(Player player, Vec2 direction) {
+        player.position += direction;
+    }
+}
+```
+
+`Main.hgm`:
+
+```hwarangdo
+import math.vector.{Vec2};
+import entity.player.{Player};
+import system.movement.{Movement};
+
+public class Main {
+    public init() {
+    }
+
+    public frame void update() {
+    }
+}
+```
+
+외부 모듈 사용:
+
+```hwarangdo
+import physics::collision.shape.{Circle, Rectangle};
+import physics::collision.collider.{Collider};
+```
+
+파일 전체 import:
+
+```hwarangdo
+import math.vector;
+```
+
+선택적 타입 import:
+
+```hwarangdo
+import math.vector.{Vec2, Vec3};
+```
+
+---
+
+## 14.26 핵심 규칙 요약
+
+* 하나의 소스 파일은 하나의 파일 모듈을 구성한다.
+* import는 텍스트 삽입이 아니라 타입 심볼 가시성 선언이다.
+* 현재 프로젝트 내부 import에서는 프로젝트 모듈 이름을 생략한다.
+* 외부 모듈은 `module::path.file` 형식으로 참조한다.
+* 파일 단위 import는 해당 파일의 모든 public 최상위 타입을 가져온다.
+* 선택적 import는 `path.file.{Type}` 형식을 사용한다.
+* 모듈 경로와 일반 타입 이름은 분리된다.
+* import는 다른 파일로 재수출되지 않는다.
+* 직접 사용하는 타입은 각 파일에서 직접 import해야 한다.
+* 순환 import는 허용한다.
+* import alias와 qualified type name은 현재 지원하지 않는다.
+* 파일 모듈에는 Main이 없어도 되며, 실행 프로그램 전체에서만 Main을 검사한다.

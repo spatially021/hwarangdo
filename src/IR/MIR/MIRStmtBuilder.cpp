@@ -193,7 +193,7 @@ void MIRBuilder::lowerForRange(HIRForRangeStmt *stmt) {
   BlockID step_ = makeBlock();
   BlockID join = makeBlock();
 
-  auto type = stmt->indexVar->type->typeSymbol;
+  auto type = stmt->indexVar->type;
   currentBlock = entry;
   auto symbol = stmt->indexVar->symbol;
   currentScope->locals.push_back(symbol);
@@ -263,7 +263,7 @@ void MIRBuilder::lowerContinue(HIRContinueStmt *) {
 }
 
 void MIRBuilder::loewrLocalDecl(HIRLocalDeclStmt *stmt) {
-  auto type = stmt->local->type->typeSymbol;
+  auto type = stmt->local->type;
   if (type == nullptr) {
     Error::internal(stmt->span, "local decl's type is nullptr");
   }
@@ -296,10 +296,9 @@ void MIRBuilder::lowerSwitch(HIRSwitchStmt *stmt) {
   BlockID cleanup = makeBlock();
   BlockID join = makeBlock();
 
-  SwitchData data = {currentBlock, defaultTarget,
-                     cleanup,      join,
-                     switchScope,  stmt->cond.get(),
-                     stmt->cases,  stmt->cond->type->typeSymbol};
+  SwitchData data = {currentBlock, defaultTarget,   cleanup,
+                     join,         switchScope,     stmt->cond.get(),
+                     stmt->cases,  stmt->cond->type};
   makeSwitch(data);
   currentScope = outerScope;
   currentBlock = join;
@@ -317,6 +316,5 @@ void MIRBuilder::lowerValueTransfer(HIRValueTransferStmt *stmt) {
 
 void MIRBuilder::lowerDestroy(HIRDestroyStmt *stmt) {
   unique_ptr<MIRValue> handle = lowerExpr(stmt->handle.get());
-  emit(
-      make_unique<MIRDestroyStmt>(std::move(handle), stmt->entity->typeSymbol));
+  emit(make_unique<MIRDestroyStmt>(std::move(handle), stmt->entity));
 }

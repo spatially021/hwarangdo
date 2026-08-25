@@ -13,11 +13,12 @@ enum class TKind {
   LEFT_BRACKET,  //[
   RIGHT_BRACKET, //]
 
-  SEMICOLON,  //;
-  COLON,      //:
-  COMMA,      //,
-  DOT,        //.
-  DOUBLE_DOT, //..
+  SEMICOLON,    //;
+  DOUBLE_COLON, //::
+  COLON,        //:
+  COMMA,        //,
+  DOT,          //.
+  DOUBLE_DOT,   //..
 
   PLUS,        //+
   MINUS,       //-

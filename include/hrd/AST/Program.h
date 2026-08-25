@@ -1,6 +1,8 @@
 #pragma once
 
 #include "hrd/AST/Decl.h"
+#include "hrd/Inputs.h"
+#include "hrd/SemanticAnalyzer/Module.h"
 #include <memory>
 #include <string>
 #include <utility>
@@ -11,9 +13,11 @@
 class SourceFile {
 public:
   std::string path;
+  SourcePath logicalPath;
   std::vector<Decl::Ptr> decls;
-  SourceFile(const string &p, std::vector<Decl::Ptr> d)
-      : path(p), decls(std::move(d)) {}
+  SourceFile(const string &p, SourcePath l, std::vector<Decl::Ptr> d)
+      : path(p), logicalPath(l), decls(std::move(d)) {}
+  FileContext *fileContext = nullptr;
 };
 
 // 전체 프로그램 단위의 AST 컨테이너를 나타낸다.

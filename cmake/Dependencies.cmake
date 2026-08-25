@@ -33,3 +33,16 @@ target_link_libraries(llvm_interface
   INTERFACE
     LLVM
 )
+include(FetchContent)
+
+# ============================================================
+# toml++
+# ============================================================
+FetchContent_Declare(
+  tomlplusplus
+  GIT_REPOSITORY https://github.com/marzer/tomlplusplus.git
+  GIT_TAG v3.4.0
+  GIT_SHALLOW TRUE
+)
+
+FetchContent_MakeAvailable(tomlplusplus)

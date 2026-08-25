@@ -2,10 +2,10 @@
 
 #include "hrd/AST/Visitor.h"
 #include "hrd/Recover/LinkerRecover.h"
-#include "hrd/SemanticAnalyzer/SymbolTable.h"
+#include "hrd/SemanticAnalyzer/SymbolTable/SymbolTable.h"
 #include "hrd/SemanticAnalyzer/symbol/TypeSymbol.h"
 #include "hrd/compiler/CompilerContexts.h"
-#include "hrd/util/diagnostic/DiagnosticEngine.h"
+#include "hrd/diagnostic/DiagnosticEngine.h"
 
 class Linker : public ASTVisitor {
 

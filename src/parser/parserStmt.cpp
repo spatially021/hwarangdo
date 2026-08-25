@@ -4,8 +4,8 @@
 #include "hrd/Parser.h"
 #include "hrd/SourceSpan.h"
 #include "hrd/Token.h"
+#include "hrd/diagnostic/Diagnostic.h"
 #include "hrd/util/Error.h"
-#include "hrd/util/diagnostic/Diagnostic.h"
 #include <memory>
 #include <optional>
 

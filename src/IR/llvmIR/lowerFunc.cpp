@@ -1,10 +1,12 @@
 #include "hrd/IR/llvmIR/llvmCodegen.h"
+#include "hrd/SemanticAnalyzer/symbol/TypeSymbol.h"
+#include "hrd/util/Error.h"
 
 void llvmCodegen::buildMethods() {
   for (auto &m : program->functions) {
 
     if (m->isDefaultInit) {
-      auto *voidTy = getType(table.getType("void"));
+      auto *voidTy = getType(table.registry.getBuilt("void"));
       auto *selfTy = llvm::PointerType::get(context, 0);
 
       auto *fnType = llvm::FunctionType::get(voidTy, {selfTy}, false);
@@ -80,11 +82,32 @@ void llvmCodegen::buildMethods() {
 }
 
 string llvmCodegen::mangle(MethodSymbol *symbol) {
-  string name = symbol->owner->name + "_" + symbol->name;
+  string name = symbol->module->name;
+  for (auto &p : symbol->path.segments) {
+    name += "_" + p;
+  }
+  name += "_" + symbol->owner->name + "_" + symbol->name;
 
   for (auto *p : symbol->params) {
     name += "_" + p->typeSymbol->name;
   }
+
+  return name;
+}
+
+string llvmCodegen::mangleType(TypeSymbol *type) {
+  if (type->kind == TypeSymbol::TypeKind::BUILTIN)
+    return type->name;
+
+  if (type->module == nullptr) {
+    Error::internal("type's module is nullptr : " + type->name);
+  }
+  string name = type->module->name;
+
+  for (auto &p : type->path.segments)
+    name += "_" + p;
+
+  name += "_" + type->name;
 
   return name;
 }

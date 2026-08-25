@@ -16,6 +16,7 @@ HIRBuilder::HIRBuilder(HIRContext &ctx, HIRSource *s)
       table(ctx.table) {}
 
 void HIRBuilder::build() {
+
   for (auto &d : source->source->decls) {
     d->accept(this);
   }

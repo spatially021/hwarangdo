@@ -7,7 +7,7 @@
 #include <llvm/IR/Type.h>
 
 void llvmCodegen::buildTypes() {
-  for (auto &t : table.types) {
+  for (auto &t : table.registry.getTypes()) {
 
     if (auto p = dynamic_cast<PrimtiveType *>(t)) {
       types.emplace(t, buildPrimitiveType(p));
@@ -37,14 +37,14 @@ void llvmCodegen::buildTypes() {
 
     if (t->kind == TypeSymbol::TypeKind::CLASS ||
         t->kind == TypeSymbol::TypeKind::STRUCT) {
-      auto type = llvm::StructType::create(context, t->name);
+      auto type = llvm::StructType::create(context, mangleType(t));
       types.emplace(t, type);
       auto *fnTy = llvm::FunctionType::get(builder.getVoidTy(),
                                            {builder.getPtrTy()}, false);
 
-      llvm::Function *fn =
-          llvm::Function::Create(fnTy, llvm::Function::ExternalLinkage,
-                                 t->name + "destroy.field", llvmModule.get());
+      llvm::Function *fn = llvm::Function::Create(
+          fnTy, llvm::Function::ExternalLinkage,
+          mangleType(t) + "destroy.field", llvmModule.get());
 
       auto [it, inserted] = defaultDestroys.emplace(t, fn);
 
@@ -55,7 +55,7 @@ void llvmCodegen::buildTypes() {
     }
 
     if (t->kind == TypeSymbol::TypeKind::ENUM) {
-      auto *st = llvm::StructType::create(context, t->name);
+      auto *st = llvm::StructType::create(context, mangleType(t));
       enums.emplace(t, st);
 
       std::vector<llvm::Type *> fields;
@@ -67,27 +67,27 @@ void llvmCodegen::buildTypes() {
       auto *fnTy = llvm::FunctionType::get(builder.getVoidTy(),
                                            {builder.getPtrTy()}, false);
 
-      llvm::Function *fn =
-          llvm::Function::Create(fnTy, llvm::Function::ExternalLinkage,
-                                 t->name + "destroy.field", llvmModule.get());
+      llvm::Function *fn = llvm::Function::Create(
+          fnTy, llvm::Function::ExternalLinkage,
+          mangleType(t) + "destroy.field", llvmModule.get());
 
       defaultDestroys.emplace(t, fn);
     }
   }
 
-  for (auto &t : table.types) {
+  for (auto &t : table.registry.getTypes()) {
     if (auto arr = dynamic_cast<ArrayTypeSymbol *>(t)) {
       buildArrayType(arr);
     }
   }
 
-  for (auto &t : table.types) {
+  for (auto &t : table.registry.getTypes()) {
     if (auto arr = dynamic_cast<ArrayTypeSymbol *>(t)) {
       declareArrayDestroy(arr);
     }
   }
 
-  for (auto &t : table.types) {
+  for (auto &t : table.registry.getTypes()) {
 
     if (dynamic_cast<PrimtiveType *>(t)) {
       continue;
@@ -106,7 +106,9 @@ void llvmCodegen::buildTypes() {
       }
 
       type->setBody(fields);
-      emitDefaultDestroy(t);
+      if (t->module == table.moudle) {
+        emitDefaultDestroy(t);
+      }
       continue;
     }
 
@@ -189,7 +191,7 @@ void llvmCodegen::buildTypes() {
     }
   }
 
-  for (auto &t : table.types) {
+  for (auto &t : table.registry.getTypes()) {
     if (auto arr = dynamic_cast<ArrayTypeSymbol *>(t)) {
       emitArrayDestroy(arr);
     }

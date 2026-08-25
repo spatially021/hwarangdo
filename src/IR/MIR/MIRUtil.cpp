@@ -3,7 +3,7 @@
 #include "hrd/IR/MIR/MIRBuilder.h"
 #include "hrd/IR/MIR/MIRNode.h"
 #include "hrd/IR/MIR/MIRStmt.h"
-#include "hrd/SemanticAnalyzer/SymbolTable.h"
+#include "hrd/SemanticAnalyzer/SymbolTable/SymbolTable.h"
 #include "hrd/SemanticAnalyzer/symbol/TypeSymbol.h"
 #include "hrd/SemanticAnalyzer/symbol/ValueSymbol.h"
 #include <memory>
@@ -31,7 +31,7 @@ ValueSymbol *MIRBuilder::makeTemp(TypeSymbol *type) {
   symbol->name =
       "$tmp" + currentFunc->symbol->name + to_string(currentFunc->nextTemp++);
   auto raw = symbol.get();
-  table.addTemp(std::move(symbol));
+  table.registry.addTemp(std::move(symbol));
   return raw;
 }
 
@@ -71,7 +71,7 @@ void MIRBuilder::makeSwitch(SwitchData &data) {
       }
 
       if (auto *unit = std::get_if<HIRUnitCase>(&selector)) {
-        cases.emplace_back(unit->variant->symbol, id);
+        cases.emplace_back(unit->variant, id);
         continue;
       }
 
@@ -81,14 +81,14 @@ void MIRBuilder::makeSwitch(SwitchData &data) {
         caseScope.locals.push_back(binding);
 
         emit(make_unique<MIRLocalDeclStmt>(
-            payload->binding->type->typeSymbol, binding,
+            payload->binding->type, binding,
             make_unique<MIRPayloadExtractExpr>(
-                payload->variant->symbol,
+                payload->variant,
                 make_unique<MIRLoad>(make_unique<MIRLocalPlace>(temp),
                                      temp->typeSymbol),
                 temp->typeSymbol)));
 
-        cases.emplace_back(payload->variant->symbol, id);
+        cases.emplace_back(payload->variant, id);
       }
     }
 

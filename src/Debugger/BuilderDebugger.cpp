@@ -10,10 +10,7 @@ using std::string;
 
 string BuilderDebugger::ident() { return string(depth * 2, ' '); }
 BuilderDebugger::BuilderDebugger(Scope *s) : toplevel(s) {}
-void BuilderDebugger::debug() {
-  debug(toplevel->parent);
-  debug(toplevel);
-}
+void BuilderDebugger::debug() { debug(toplevel); }
 void BuilderDebugger::debug(Scope *scope) {
   if (scope->id == -1) {
     cout << ident() << "[scope#" << "root" << "]\n";
@@ -42,15 +39,6 @@ void BuilderDebugger::debug(Scope *scope) {
       for (auto &m : map.second) {
         cout << ident() << m->name << "\n";
       }
-    }
-    depth--;
-  }
-
-  if (!scope->type.empty()) {
-    cout << ident() << "<types>\n";
-    depth++;
-    for (auto &t : scope->type) {
-      cout << ident() << t.second->name << "\n";
     }
     depth--;
   }

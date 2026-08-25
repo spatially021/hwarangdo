@@ -5,9 +5,9 @@
 #include "hrd/SemanticAnalyzer/Scope.h"
 #include "hrd/SemanticAnalyzer/symbol/MethodSymbol.h"
 #include "hrd/SemanticAnalyzer/symbol/TypeSymbol.h"
+#include "hrd/diagnostic/Diagnostic.h"
 #include "hrd/util/Error.h"
 #include "hrd/util/Guard.h"
-#include "hrd/util/diagnostic/Diagnostic.h"
 #include <memory>
 
 // Statement Resolver::visitor methods
@@ -24,7 +24,7 @@ void Resolver::visit(BlockStmt *stmt) {
 void Resolver::visit(IfStmt *stmt) {
   stmt->condition->accept(this);
 
-  if (!table.isBool(stmt->condition->resolvedType)) {
+  if (!isa<BoolType>(stmt->condition->resolvedType)) {
     auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S077);
     dia.labels = {
         {stmt->condition->span,
@@ -85,7 +85,7 @@ void Resolver::visit(ForStmt *stmt) {
 void Resolver::visit(WhileStmt *stmt) {
   stmt->condition->accept(this);
 
-  if (!table.isBool(stmt->condition->resolvedType)) {
+  if (!isa<BoolType>(stmt->condition->resolvedType)) {
     auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S077);
     dia.labels = {
         {stmt->condition->span,
@@ -207,7 +207,7 @@ void Resolver::visit(SwitchStmt *stmt) {
 }
 
 void Resolver::visit(Case *stmt) {
-  table.enter(stmt->body->blockScope);
+  table.scopeManger.enter(stmt->body->blockScope);
 
   auto *prev = currentCase;
   currentCase = stmt;
@@ -243,7 +243,7 @@ void Resolver::visit(Case *stmt) {
     }
   }
 
-  table.exit();
+  table.scopeManger.exit();
   stmt->body->accept(this);
 
   if (dynamic_cast<MatchExpr *>(currentSwitch)) {
@@ -312,7 +312,7 @@ void Resolver::visit(Case *stmt) {
 }
 
 void Resolver::visit(ReturnStmt *stmt) {
-  for (Scope *scope = table.getCurrent(); scope != nullptr;
+  for (Scope *scope = table.scopeManger.current(); scope != nullptr;
        scope = scope->parent) {
     if (scope->scopeKind == Scope::ScopeKind::INIT) {
       auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S087);

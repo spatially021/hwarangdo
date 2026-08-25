@@ -131,3 +131,19 @@ extern "C" void hrd_destroy_s32(HrdString32 *s);
 
 extern "C" void hrd_add_s32(HrdString32 *out, const HrdString32 *a,
                             const HrdString32 *b);
+
+// -------------------------
+// String Cast
+// -------------------------
+
+extern "C" void hrd_cast_s8_to_s16(HrdString16 *out, const HrdString8 *src);
+
+extern "C" void hrd_cast_s8_to_s32(HrdString32 *out, const HrdString8 *src);
+
+extern "C" void hrd_cast_s16_to_s8(HrdString8 *out, const HrdString16 *src);
+
+extern "C" void hrd_cast_s16_to_s32(HrdString32 *out, const HrdString16 *src);
+
+extern "C" void hrd_cast_s32_to_s8(HrdString8 *out, const HrdString32 *src);
+
+extern "C" void hrd_cast_s32_to_s16(HrdString16 *out, const HrdString32 *src);

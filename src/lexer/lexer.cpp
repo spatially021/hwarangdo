@@ -1,10 +1,11 @@
 #include "hrd/Lexer.h"
 #include "hrd/AST/TokenStream.h"
 #include "hrd/Recover/LexerRecover.h"
+#include "hrd/SourceSpan.h"
 #include "hrd/Token.h"
 #include "hrd/compiler/CompilerContexts.h"
+#include "hrd/diagnostic/Diagnostic.h"
 #include "hrd/util/Error.h"
-#include "hrd/util/diagnostic/Diagnostic.h"
 #include <cctype>
 #include <sys/types.h>
 #include <utility>
@@ -29,7 +30,7 @@ TokenStream Lexer::lexing() {
     if (t.kind != TKind::EMPTY)
       tokenized.push_back(t);
   }
-  return {path, tokenized, {}};
+  return {path, input.logicalPath, tokenized, {}};
 }
 
 char Lexer::get() {
@@ -100,8 +101,15 @@ Token Lexer::scan() {
   if (c == ';')
     return {
         TKind::SEMICOLON, string(1, get()), {path, tempL, tempC, line, col}};
-  if (c == ':')
-    return {TKind::COLON, string(1, get()), {path, tempL, tempC, line, col}};
+  if (c == ':') {
+    get();
+    if (peek() == ':') {
+      get();
+      return {TKind::DOUBLE_COLON, "::", {path, tempL, tempC, line, col}};
+    }
+    return {TKind::COLON, ":", {path, tempL, tempC, line, col}};
+  }
+
   if (c == ',')
     return {TKind::COMMA, string(1, get()), {path, tempL, tempC, line, col}};
   if (c == '.') {
@@ -325,7 +333,8 @@ Token Lexer::scan() {
       get();
       auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_L001);
       dia.labels = {
-          {{path, tempL, tempC, line, col}, "missing closing '\"'", true},
+          {SourceSpan({path, tempL, tempC, line, col}), "missing closing '\"'",
+           true},
       };
       engine.emit(dia);
       recover.recover();
@@ -346,7 +355,8 @@ Token Lexer::scan() {
       if (!isEscapeChar(esc)) {
         auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_L002);
         dia.labels = {
-            {{path, tempL, tempC, line, col}, "invalid escape sequence", true},
+            {SourceSpan({path, tempL, tempC, line, col}),
+             "invalid escape sequence", true},
         };
         engine.emit(dia);
         recover.recover();
@@ -359,7 +369,8 @@ Token Lexer::scan() {
     if (peek() != '\'') {
       auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_L003);
       dia.labels = {
-          {{path, tempL, tempC, line, col}, "missing closing '\''", true},
+          {SourceSpan({path, tempL, tempC, line, col}), "missing closing '\''",
+           true},
       };
       engine.emit(dia);
       recover.recover();
@@ -386,9 +397,8 @@ Token Lexer::scan() {
       isReal = true;
       if (!isNumber(peek())) {
         auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_L006);
-        dia.labels = {{{path, tempL, tempC, line, col},
-                       "expected digit after decimal point",
-                       true}};
+        dia.labels = {{SourceSpan({path, tempL, tempC, line, col}),
+                       "expected digit after decimal point", true}};
         engine.emit(dia);
         recover.recover();
       }
@@ -405,9 +415,8 @@ Token Lexer::scan() {
 
       if (!isNumber(peek())) {
         auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_L006);
-        dia.labels = {{{path, tempL, tempC, line, col},
-                       "expected digit in exponent",
-                       true}};
+        dia.labels = {{SourceSpan({path, tempL, tempC, line, col}),
+                       "expected digit in exponent", true}};
         engine.emit(dia);
         recover.recover();
       }
@@ -437,7 +446,8 @@ Token Lexer::scan() {
   // 알 수 없는 토큰
   auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_L004);
   dia.labels = {
-      {{path, tempL, tempC, line, col}, "character is not recognized", true},
+      {SourceSpan({path, tempL, tempC, line, col}),
+       "character is not recognized", true},
   };
   engine.emit(dia);
   recover.recover();
@@ -470,9 +480,8 @@ Utf8Scalar Lexer::consumeUtf8Scalar() {
   if (peek() == '\0') {
     auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_L005);
     dia.labels = {
-        {{path, startLine, startColumn, line, col},
-         "expected Unicode scalar value",
-         true},
+        {SourceSpan({path, startLine, startColumn, line, col}),
+         "expected Unicode scalar value", true},
     };
     engine.emit(dia);
     recover.recover();
@@ -503,9 +512,8 @@ Utf8Scalar Lexer::consumeUtf8Scalar() {
   } else {
     auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_L005);
     dia.labels = {
-        {{path, startLine, startColumn, line, col},
-         "invalid UTF-8 leading byte",
-         true},
+        {SourceSpan({path, startLine, startColumn, line, col}),
+         "invalid UTF-8 leading byte", true},
     };
     engine.emit(dia);
     recover.recover();
@@ -518,9 +526,8 @@ Utf8Scalar Lexer::consumeUtf8Scalar() {
     if (peek() == '\0') {
       auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_L005);
       dia.labels = {
-          {{path, startLine, startColumn, line, col},
-           "incomplete UTF-8 sequence",
-           true},
+          {SourceSpan({path, startLine, startColumn, line, col}),
+           "incomplete UTF-8 sequence", true},
       };
       engine.emit(dia);
       recover.recover();
@@ -531,9 +538,8 @@ Utf8Scalar Lexer::consumeUtf8Scalar() {
     if ((byte & 0xC0) != 0x80) {
       auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_L005);
       dia.labels = {
-          {{path, startLine, startColumn, line, col},
-           "expected UTF-8 continuation byte",
-           true},
+          {SourceSpan({path, startLine, startColumn, line, col}),
+           "expected UTF-8 continuation byte", true},
       };
       engine.emit(dia);
       recover.recover();
@@ -546,9 +552,8 @@ Utf8Scalar Lexer::consumeUtf8Scalar() {
   if (value < minimumValue) {
     auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_L005);
     dia.labels = {
-        {{path, startLine, startColumn, line, col},
-         "overlong UTF-8 encoding",
-         true},
+        {SourceSpan({path, startLine, startColumn, line, col}),
+         "overlong UTF-8 encoding", true},
     };
     engine.emit(dia);
     recover.recover();
@@ -557,9 +562,8 @@ Utf8Scalar Lexer::consumeUtf8Scalar() {
   if (value >= 0xD800 && value <= 0xDFFF) {
     auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_L005);
     dia.labels = {
-        {{path, startLine, startColumn, line, col},
-         "surrogate code point is not a Unicode scalar value",
-         true},
+        {SourceSpan({path, startLine, startColumn, line, col}),
+         "surrogate code point is not a Unicode scalar value", true},
     };
     engine.emit(dia);
     recover.recover();
@@ -568,9 +572,8 @@ Utf8Scalar Lexer::consumeUtf8Scalar() {
   if (value > 0x10FFFF) {
     auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_L005);
     dia.labels = {
-        {{path, startLine, startColumn, line, col},
-         "code point is outside the Unicode range",
-         true},
+        {SourceSpan({path, startLine, startColumn, line, col}),
+         "code point is outside the Unicode range", true},
     };
     engine.emit(dia);
     recover.recover();

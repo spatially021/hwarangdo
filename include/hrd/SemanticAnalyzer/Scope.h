@@ -34,7 +34,6 @@ public:
   vector<std::unique_ptr<MethodSymbol>> methodOwn;
   vector<std::unique_ptr<MethodSymbol>> initOwn;
 
-  unordered_map<string, unique_ptr<TypeSymbol>> type;
   unordered_map<string, unique_ptr<ValueSymbol>> value;
   unordered_map<string, vector<MethodSymbol *>> methodMap;
   vector<MethodSymbol *> inits;

@@ -1,12 +1,16 @@
+#include "hrd/IR/MIR/MIRExpr.h"
 #include "hrd/IR/llvmIR/llvmCodegen.h"
+#include "hrd/SemanticAnalyzer/symbol/MethodSymbol.h"
 #include "hrd/SemanticAnalyzer/symbol/TypeSymbol.h"
 #include "hrd/util/Error.h"
+#include <llvm/IR/DerivedTypes.h>
+#include <llvm/IR/Function.h>
 #include <llvm/IR/Type.h>
 #include <llvm/IR/Value.h>
 
-llvm::Value *llvmCodegen::castTo(llvm::Value *value, TypeSymbol *sourceType,
+LoweredValue llvmCodegen::castTo(LoweredValue value, TypeSymbol *sourceType,
                                  TypeSymbol *targetType) {
-  llvm::Type *src = value->getType();
+  llvm::Type *src = value.value->getType();
   llvm::Type *dst = getType(targetType);
 
   if (src == dst) {
@@ -22,8 +26,45 @@ llvm::Value *llvmCodegen::castTo(llvm::Value *value, TypeSymbol *sourceType,
     }
 
     if (src->isPointerTy() && dst->isPointerTy()) {
-      return builder.CreateBitCast(value, dst, "ptrcasttmp");
+      return {builder.CreateBitCast(value.value, dst, "ptrcasttmp"), value.addr,
+              value.category};
     }
+  }
+
+  // string -> string
+  if (isString(sourceType) && isString(targetType)) {
+    const unsigned srcBits = dynamic_cast<StringType *>(sourceType)->bitWidth;
+    const unsigned dstBits = dynamic_cast<StringType *>(targetType)->bitWidth;
+
+    if (srcBits == dstBits) {
+      return value;
+    }
+
+    auto *ptrTy = llvm::PointerType::getUnqual(context);
+    auto *voidTy = builder.getVoidTy();
+
+    auto *srcTy = getType(sourceType);
+    auto *dstTy = getType(targetType);
+
+    auto *srcPtr =
+        builder.CreateAlloca(srcTy, nullptr, sourceType->name + ".cast.source");
+
+    builder.CreateStore(value.value, srcPtr);
+
+    auto *out =
+        builder.CreateAlloca(dstTy, nullptr, targetType->name + ".cast.out");
+
+    auto *fnTy = llvm::FunctionType::get(voidTy, {ptrTy, ptrTy}, false);
+
+    builder.CreateCall(getRuntimeFunc("hrd_cast_" + sourceType->name + "_to_" +
+                                          targetType->name,
+                                      fnTy),
+                       {out, srcPtr});
+
+    auto *result =
+        builder.CreateLoad(dstTy, out, targetType->name + ".cast.result");
+
+    return {result, out, MIRValueCategory::OwnedTemp};
   }
 
   // aggregate는 암묵 캐스팅 대상이 아니다.
@@ -40,16 +81,18 @@ llvm::Value *llvmCodegen::castTo(llvm::Value *value, TypeSymbol *sourceType,
 
     if (srcBits < dstBits) {
       if (isUnsigned(sourceType)) {
-        return builder.CreateZExt(value, dst, "zexttmp");
+        return {builder.CreateZExt(value.value, dst, "zexttmp")};
       }
-      return builder.CreateSExt(value, dst, "sexttmp");
+      return {builder.CreateSExt(value.value, dst, "sexttmp"), value.addr,
+              value.category};
     }
 
     if (srcBits > dstBits) {
-      return builder.CreateTrunc(value, dst, "trunctmp");
+      return {builder.CreateTrunc(value.value, dst, "trunctmp"), value.addr,
+              value.category};
     }
 
-    return value;
+    return {value};
   }
 
   // float -> float
@@ -58,11 +101,13 @@ llvm::Value *llvmCodegen::castTo(llvm::Value *value, TypeSymbol *sourceType,
     uint64_t dstBits = dst->getPrimitiveSizeInBits();
 
     if (srcBits < dstBits) {
-      return builder.CreateFPExt(value, dst, "fpexttmp");
+      return {builder.CreateFPExt(value.value, dst, "fpexttmp"), value.addr,
+              value.category};
     }
 
     if (srcBits > dstBits) {
-      return builder.CreateFPTrunc(value, dst, "fptrunctmp");
+      return {builder.CreateFPTrunc(value.value, dst, "fptrunctmp"), value.addr,
+              value.category};
     }
 
     return value;
@@ -71,22 +116,26 @@ llvm::Value *llvmCodegen::castTo(llvm::Value *value, TypeSymbol *sourceType,
   // int -> float
   if (src->isIntegerTy() && dst->isFloatingPointTy()) {
     if (isUnsigned(sourceType)) {
-      return builder.CreateUIToFP(value, dst, "uitofptmp");
+      return {builder.CreateUIToFP(value.value, dst, "uitofptmp"), value.addr,
+              value.category};
     }
 
-    return builder.CreateSIToFP(value, dst, "sitofptmp");
+    return {builder.CreateSIToFP(value.value, dst, "sitofptmp"), value.addr,
+            value.category};
   }
 
   // float -> int
   if (src->isFloatingPointTy() && dst->isIntegerTy()) {
     if (isUnsigned(targetType)) {
-      return builder.CreateFPToUI(value, dst, "fptouitmp");
+      return {builder.CreateFPToUI(value.value, dst, "fptouitmp"), value.addr,
+              value.category};
     }
 
-    return builder.CreateFPToSI(value, dst, "fptositmp");
+    return {builder.CreateFPToSI(value.value, dst, "fptositmp"), value.addr,
+            value.category};
   }
 
-  Error::internal("invalid implicit cast");
+  Error::internal("invalid cast");
 }
 
 bool llvmCodegen::isUnsigned(TypeSymbol *type) {
@@ -127,7 +176,9 @@ llvm::FunctionCallee llvmCodegen::getOrDeclareMalloc() {
 }
 
 llvm::Type *llvmCodegen::getType(TypeSymbol *t) {
-
+  if (t == nullptr) {
+    Error::internal("typeSymbol is nullptr");
+  }
   if (auto g = dynamic_cast<GenericSymbol *>(t)) {
     if (dynamic_cast<HandleSymbol *>(g->origin)) {
       return getHrdHandleType();
@@ -184,17 +235,46 @@ llvm::Type *llvmCodegen::getHrdHandleType() {
 }
 
 std::string llvmCodegen::getStringSuffix(TypeSymbol *type) {
-  if (type == table.getBuilt("s8")) {
+  if (type == table.registry.getBuilt("s8")) {
     return "s8";
   }
 
-  if (type == table.getBuilt("s16")) {
+  if (type == table.registry.getBuilt("s16")) {
     return "s16";
   }
 
-  if (type == table.getBuilt("s32")) {
+  if (type == table.registry.getBuilt("s32")) {
     return "s32";
   }
 
   Error::internal("invalid string type");
+}
+
+llvm::Function *llvmCodegen::getOrgetOrDeclareFunction(MethodSymbol *method) {
+  auto it = funcs.find(method);
+  if (it != funcs.end()) {
+    return it->second;
+  }
+
+  auto rt = getType(method->returnType);
+  if (rt == nullptr) {
+    Error::internal("null llvm return type: " + method->name);
+  }
+
+  vector<llvm::Type *> params;
+  params.push_back(llvm::PointerType::get(context, 0));
+  for (auto &p : method->params) {
+    auto pt = getType(p->typeSymbol);
+    if (pt == nullptr) {
+      Error::internal("null llvm param type: " + p->name);
+    }
+    params.push_back(pt);
+  }
+  auto fnType = llvm::FunctionType::get(rt, params, false);
+
+  auto *fn = llvm::Function::Create(fnType, llvm::Function::ExternalLinkage,
+                                    mangle(method), llvmModule.get());
+
+  funcs.emplace(method, fn);
+  return fn;
 }

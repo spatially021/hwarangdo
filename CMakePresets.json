@@ -2,55 +2,47 @@
     "version": 6,
     "configurePresets": [
         {
-            "name": "base-debug",
+            "name": "base",
             "hidden": true,
             "generator": "Ninja",
-            "binaryDir": "${sourceDir}/build/${presetName}",
             "cacheVariables": {
                 "CMAKE_CXX_STANDARD": "20",
-                "CMAKE_BUILD_TYPE": "Debug",
-                "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
-                "CMAKE_CXX_FLAGS": "-g3 -O0 -fno-omit-frame-pointer -fno-optimize-sibling-calls",
-                "CMAKE_C_FLAGS": "-g3 -O0 -fno-omit-frame-pointer -fno-optimize-sibling-calls"
+                "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
             }
         },
         {
             "name": "debug",
-            "inherits": "base-debug",
+            "inherits": "base",
+            "binaryDir": "${sourceDir}/build/debug",
             "cacheVariables": {
-                "HGM_BUILD_MODE": "DEBUG"
+                "CMAKE_BUILD_TYPE": "Debug"
             }
         },
         {
             "name": "debug-asan",
-            "inherits": "base-debug",
+            "inherits": "base",
+            "binaryDir": "${sourceDir}/build/debug-asan",
             "cacheVariables": {
-                "CMAKE_CXX_FLAGS": "-g3 -O1 -fsanitize=address,undefined -fno-omit-frame-pointer -fno-optimize-sibling-calls",
-                "CMAKE_C_FLAGS": "-g3 -O1 -fsanitize=address,undefined -fno-omit-frame-pointer -fno-optimize-sibling-calls",
-                "CMAKE_EXE_LINKER_FLAGS": "-fsanitize=address,undefined",
-                "HGM_BUILD_MODE": "ASAN"
+                "CMAKE_BUILD_TYPE": "Debug",
+                "CMAKE_CXX_FLAGS": "-O1 -g3 -fsanitize=address,undefined -fno-omit-frame-pointer -fno-optimize-sibling-calls",
+                "CMAKE_C_FLAGS": "-O1 -g3 -fsanitize=address,undefined -fno-omit-frame-pointer -fno-optimize-sibling-calls",
+                "CMAKE_EXE_LINKER_FLAGS": "-fsanitize=address,undefined"
             }
         },
         {
             "name": "debug-ide",
-            "inherits": "base-debug",
+            "inherits": "base",
+            "binaryDir": "${sourceDir}/build/debug-ide",
             "cacheVariables": {
-                "CMAKE_CXX_FLAGS": "-g3 -O0 -fsanitize=address -fno-omit-frame-pointer",
-                "CMAKE_C_FLAGS": "-g3 -O0 -fsanitize=address -fno-omit-frame-pointer",
-                "CMAKE_EXE_LINKER_FLAGS": "-fsanitize=address",
-                "HGM_BUILD_MODE": "IDE"
+                "CMAKE_BUILD_TYPE": "Debug"
             }
         },
         {
             "name": "release",
-            "generator": "Ninja",
+            "inherits": "base",
             "binaryDir": "${sourceDir}/build/release",
             "cacheVariables": {
-                "CMAKE_BUILD_TYPE": "Release",
-                "CMAKE_CXX_STANDARD": "20",
-                "CMAKE_CXX_FLAGS": "-O3 -DNDEBUG -flto",
-                "CMAKE_C_FLAGS": "-O3 -DNDEBUG -flto",
-                "CMAKE_INTERPROCEDURAL_OPTIMIZATION": "ON"
+                "CMAKE_BUILD_TYPE": "Release"
             }
         }
     ],

@@ -2,8 +2,8 @@
 #include "hrd/AST/Expr.h"
 #include "hrd/Parser.h"
 #include "hrd/Token.h"
+#include "hrd/diagnostic/Diagnostic.h"
 #include "hrd/util/Error.h"
-#include "hrd/util/diagnostic/Diagnostic.h"
 #include <iterator>
 #include <memory>
 #include <stdexcept>
@@ -192,12 +192,14 @@ TypeNode::Ptr Parser::typeNodeConvertor(Token ty, Token size) {
     case TKind::VOID:
       node = make_shared<BuiltinTypeNode>(ty, BuiltinTypeNode::Category::Void);
       break;
+    case TKind::SIZE:
+      node = make_shared<BuiltinTypeNode>(ty);
       // case TKind::FUNC:
       //   node = make_shared<BuiltinTypeNode>(ty,
       //   BuiltinTypeNode::Category::FUNC); break;
-
+      break;
     default: {
-      Error::internal(ty, "unexpect type kind");
+      Error::internal(ty, "unexpect type kind : " + ty.text);
     }
     }
   }

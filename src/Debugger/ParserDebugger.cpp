@@ -290,3 +290,26 @@ void ParserDebugger::visit(OnDestroyDecl *decl) {
   decl->body->accept(this);
   depth--;
 }
+
+void ParserDebugger::visit(ImportDecl *decl) {
+  cout << ident() << "[import] ";
+  if (decl->module.has_value()) {
+    cout << "moudle : " << decl->module->str << ", ";
+  }
+  cout << " path : ";
+  for (auto p : decl->path) {
+    cout << p.str << ".";
+  }
+  if (!decl->types.empty()) {
+    cout << ", types : {";
+    for (auto t : decl->types) {
+      cout << t.origin.str;
+      if (t.usedAlias) {
+        cout << " as " << t.alias.str;
+      }
+      cout << ",";
+    }
+    cout << "}";
+  }
+  cout << "\n";
+}

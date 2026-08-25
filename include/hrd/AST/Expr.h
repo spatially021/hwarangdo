@@ -12,6 +12,7 @@
 #include <string>
 #include <unordered_set>
 #include <utility>
+#include <variant>
 #include <vector>
 
 class ValueSymbol;
@@ -157,7 +158,7 @@ public:
       break;
     default:
       Error::internal(span, "unexpected Token kind in binary "
-                              "operator");
+                            "operator");
     }
   }
 
@@ -493,7 +494,7 @@ public:
 
   Ptr deepCopy() const override { return make_shared<DefaultValueExpr>(span); }
 
-  ValueSymbol *resolve = nullptr;
+  std::variant<std::monostate, LiteralExpr *, CallExpr *> resolved;
 };
 
 class CaseValueExpr : public Expr {

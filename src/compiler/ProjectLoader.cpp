@@ -1,12 +1,11 @@
 #include "hrd/compiler/ProjectLoader.h"
-
+#include "hrd/compiler/CompilerConfig.h"
 #include <algorithm>
 #include <fstream>
 #include <iostream>
 #include <sstream>
+#include <toml++/toml.hpp>
 #include <vector>
-
-namespace fs = std::filesystem;
 
 bool ProjectLoader::readTextFile(const fs::path &path, std::string &output) {
   std::ifstream file(path, std::ios::binary);
@@ -64,7 +63,8 @@ ProjectLoader::findProjectFile(const fs::path &projectRoot) {
 
 std::optional<fs::path>
 ProjectLoader::findSourceDirectory(const fs::path &projectRoot) {
-  const fs::path sourceRoot = projectRoot / "src";
+  const fs::path sourceRoot =
+      fs::absolute(projectRoot / "src").lexically_normal();
 
   if (!fs::exists(sourceRoot) || !fs::is_directory(sourceRoot)) {
     std::cerr << "source directory was not found: " << sourceRoot << '\n';
@@ -78,14 +78,18 @@ bool ProjectLoader::collectSources(const fs::path &sourceRoot,
                                    std::vector<InputSource> &sources) {
   std::vector<fs::path> paths;
 
-  for (const auto &entry : fs::recursive_directory_iterator(sourceRoot)) {
+  const fs::path normalizedSourceRoot =
+      fs::absolute(sourceRoot).lexically_normal();
+
+  for (const auto &entry :
+       fs::recursive_directory_iterator(normalizedSourceRoot)) {
     if (entry.is_regular_file() && isSourceFile(entry.path())) {
-      paths.push_back(entry.path());
+      paths.push_back(entry.path().lexically_normal());
     }
   }
 
   if (paths.empty()) {
-    std::cerr << "no source files found: " << sourceRoot << '\n';
+    std::cerr << "no source files found: " << normalizedSourceRoot << '\n';
     return false;
   }
 
@@ -96,7 +100,9 @@ bool ProjectLoader::collectSources(const fs::path &sourceRoot,
 
   for (const auto &path : paths) {
     InputSource source;
-    source.path = path.lexically_normal().string();
+
+    source.path = path;
+    source.logicalPath = makeSourcePath(path, sourceRoot);
 
     if (!readTextFile(path, source.text)) {
       std::cerr << "failed to read source file: " << path << '\n';
@@ -107,6 +113,20 @@ bool ProjectLoader::collectSources(const fs::path &sourceRoot,
   }
 
   return true;
+}
+
+SourcePath ProjectLoader::makeSourcePath(const fs::path &path,
+                                         const fs::path &sourceRoot) {
+  const fs::path relative =
+      path.lexically_relative(sourceRoot).replace_extension();
+
+  SourcePath result;
+
+  for (const auto &part : relative) {
+    result.segments.push_back(part.string());
+  }
+
+  return result;
 }
 
 std::optional<ProjectInput> ProjectLoader::load(const fs::path &projectRoot) {
@@ -130,6 +150,54 @@ std::optional<ProjectInput> ProjectLoader::load(const fs::path &projectRoot) {
   if (!collectSources(*sourceRoot, input.sources)) {
     return std::nullopt;
   }
-
+  input.config = loadModuleConfig(projectRoot);
   return input;
+}
+
+ModuleConfigResult
+ProjectLoader::loadModuleConfig(const std::filesystem::path &rootPath) {
+  const auto path = rootPath / CompilerConfig::MoudleConfig;
+
+  if (!std::filesystem::exists(path)) {
+    return {
+        ModuleConfigStatus::Missing,
+        "module",
+        "",
+    };
+  }
+
+  try {
+    const toml::table config = toml::parse_file(path.string());
+
+    const auto *module = config["module"].as_table();
+    if (module == nullptr) {
+      return {
+          ModuleConfigStatus::Invalid,
+          "module",
+          "[module] table is missing",
+      };
+    }
+
+    const auto name = (*module)["name"].value<std::string>();
+
+    if (!name || name->empty()) {
+      return {
+          ModuleConfigStatus::Invalid,
+          "module",
+          "module.name is missing",
+      };
+    }
+
+    return {
+        ModuleConfigStatus::Loaded,
+        *name,
+        "",
+    };
+  } catch (const toml::parse_error &error) {
+    return {
+        ModuleConfigStatus::Invalid,
+        "module",
+        std::string(error.description()),
+    };
+  }
 }

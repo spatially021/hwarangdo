@@ -200,7 +200,7 @@ void llvmCodegen::lowerStringCopyAssign(Str type, llvm::Value *dst,
 
 void llvmCodegen::lowerStringMoveAssign(Str type, llvm::Value *dst,
                                         llvm::Value *srcPtr) {
-  auto *s8Ty = getType(table.getBuilt(type));
+  auto *s8Ty = getType(table.registry.getBuilt(type));
 
   auto *v = builder.CreateLoad(s8Ty, srcPtr);
   builder.CreateStore(v, dst);

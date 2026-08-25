@@ -34,6 +34,10 @@ Decl::Ptr Parser::declaration(DeclContext context) {
 
   bool checkAceess = false;
 
+  if (check(TKind::IMPORT)) {
+    return importDecl();
+  }
+
   while (isAccessModifier()) {
     if (checkAceess) {
       auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_P008);
@@ -43,6 +47,7 @@ Decl::Ptr Parser::declaration(DeclContext context) {
       engine.emit(dia);
       recover.recover();
     }
+    endImport = true;
     if (context != DeclContext::CLASSBODY) {
       auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_P001);
       dia.labels = {
@@ -230,6 +235,7 @@ Stmt::Ptr Parser::statement() {
   case TKind::HANDLE:
   case TKind::FRAME:
   case TKind::INIT:
+  case TKind::IMPORT:
     return declStmt();
   case TKind::DOUBLE_ANGLEBUCKET:
     return valueTransferStmt();

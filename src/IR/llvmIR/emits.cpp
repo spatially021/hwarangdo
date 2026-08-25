@@ -4,7 +4,6 @@
 #include <stdexcept>
 
 llvm::Function *llvmCodegen::emitDefaultDestroy(TypeSymbol *ty) {
-
   auto fn = defaultDestroys.at(ty);
   auto *layoutTy = getLayoutType(ty);
   auto *bb = llvm::BasicBlock::Create(context, "entry", fn);

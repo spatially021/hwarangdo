@@ -5,10 +5,6 @@
 #include "hrd/IR/HIR/HIRNode.h"
 #include "hrd/IR/HIR/HIRStmt.h"
 #include "hrd/IR/HIR/HIRSymbol.h"
-#include "hrd/IR/HIR/HIRType.h"
-
-#include "hrd/SemanticAnalyzer/symbol/MethodSymbol.h"
-#include "hrd/SemanticAnalyzer/symbol/TypeSymbol.h"
 #include "hrd/SemanticAnalyzer/symbol/ValueSymbol.h"
 #include "hrd/enums/MethodKind.h"
 #include <memory>
@@ -31,7 +27,7 @@ enum class HIRTypeDeclKind {
 struct HIRTypeDecl : HIRDecl {
   HIRTypeDeclKind typeDeclKind;
   std::string name;
-  HIRType *type = nullptr;
+  TypeSymbol *type = nullptr;
   HIRTypeDecl *base = nullptr;
 
   int nextFieldId = 0;
@@ -39,27 +35,22 @@ struct HIRTypeDecl : HIRDecl {
 
   TypeSymbol *symbol = nullptr;
 
-  std::vector<std::unique_ptr<HIRField>> fields;
-  std::unordered_map<ValueSymbol *, HIRField *> fieldMap;
-
   std::vector<std::unique_ptr<HIRMethodDecl>> methods;
   std::unordered_map<MethodSymbol *, HIRMethodDecl *> methodMap;
   std::unordered_map<MethodSymbol *, HIRMethodDecl *> initMap;
   HIRMethodDecl *onDestroy = nullptr;
 
-  std::unordered_map<HIRField *, Expr *> defaultInit;
+  std::unordered_map<ValueSymbol *, Expr *> defaultInit;
   std::unique_ptr<HIRBlockStmt> defaultInitBlock = nullptr;
-  // enum 전용
-  std::vector<std::unique_ptr<HIREnumVariant>> enumVariants;
 
-  HIRTypeDecl(SourceSpan s, HIRTypeDeclKind dk, std::string n, HIRType *ty,
+  HIRTypeDecl(SourceSpan s, HIRTypeDeclKind dk, std::string n, TypeSymbol *ty,
               TypeSymbol *sym)
       : HIRDecl(s, HIRNodeKind::TypeDecl), typeDeclKind(dk), name(std::move(n)),
         type(ty), symbol(sym) {}
 };
 
 struct HIRMethodDecl : HIRDecl {
-  HIRTypeDecl *owner = nullptr; // nullable for top-level func
+  HIRTypeDecl *owner = nullptr;
   std::unique_ptr<HIRBlockStmt> body = nullptr;
 
   std::vector<unique_ptr<HIRLocal>> locals;
@@ -68,7 +59,7 @@ struct HIRMethodDecl : HIRDecl {
 
   int id = -1;
   std::string name;
-  HIRType *returnType = nullptr;
+  TypeSymbol *returnType = nullptr;
   MethodSymbol *symbol = nullptr;
   std::vector<std::unique_ptr<HIRParam>> params;
   unordered_map<ValueSymbol *, HIRParam *> paramMap;

@@ -1,6 +1,5 @@
 #include "hrd/IR/MIR/MIRBuilder.h"
 #include "hrd/IR/HIR/HIRDecl.h"
-#include "hrd/IR/HIR/HIRType.h"
 #include "hrd/IR/MIR/MIRNode.h"
 #include "hrd/SemanticAnalyzer/symbol/TypeSymbol.h"
 #include "hrd/util/MIRGuard.h"
@@ -10,7 +9,7 @@
 void MIRBuilder::build() {
   for (auto &s : HirProgram->sources) {
     for (auto &d : s->typeDecls) {
-      if (d->type->kind == HIRTypeKind::Enum) {
+      if (d->type->kind == TypeSymbol::TypeKind::ENUM) {
         continue;
       }
       lowerType(d.get());
@@ -21,7 +20,7 @@ void MIRBuilder::build() {
 void MIRBuilder::lowerType(HIRTypeDecl *type) {
 
   unique_ptr<MIRFunction> defaultint =
-      make_unique<MIRFunction>(nullptr, type->type->typeSymbol);
+      make_unique<MIRFunction>(nullptr, type->type);
   auto raw = defaultint.get();
   defaultint->isDefaultInit = true;
   program->functions.push_back(std::move(defaultint));

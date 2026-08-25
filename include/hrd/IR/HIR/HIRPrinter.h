@@ -3,7 +3,6 @@
 #include "hrd/IR/HIR/HIRDecl.h"
 #include "hrd/IR/HIR/HIRProgram.h"
 #include "hrd/IR/HIR/HIRStmt.h"
-#include "hrd/IR/HIR/HIRType.h"
 
 class HIRPrinter {
 public:
@@ -13,7 +12,6 @@ private:
   int depth = 0;
 
   void indent() const;
-  void printType(const HIRType *type);
   void printDecl(const HIRDecl *decl);
   void printStmt(const HIRStmt *stmt);
   void printExpr(const HIRExpr *expr);

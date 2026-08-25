@@ -1,7 +1,7 @@
 #include "hrd/SemanticAnalyzer/Resolver.h"
 #include "hrd/SemanticAnalyzer/symbol/TypeSymbol.h"
+#include "hrd/diagnostic/Diagnostic.h"
 #include "hrd/util/Error.h"
-#include "hrd/util/diagnostic/Diagnostic.h"
 
 void Resolver::visit(BuiltInNameExpr *expr) {
   expr->resolvedType = table.getBuiltName();
@@ -112,7 +112,8 @@ void Resolver::visit(SpawnExpr *expr) {
       expr->spawnType->resolved,
   };
 
-  expr->resolvedType = table.GenericInsGetOrCreate(table.getHandle(), typeArgs);
+  expr->resolvedType =
+      table.registry.getOrCreateGeneric(table.registry.getHandle(), typeArgs);
   expr->resolvedInit = method;
 }
 
@@ -142,7 +143,7 @@ void Resolver::visit(ViewExpr *expr) {
 
   auto *handle = dynamic_cast<GenericSymbol *>(expr->target->resolvedType);
 
-  if (!handle || handle->origin != table.getHandle()) {
+  if (!handle || handle->origin != table.registry.getHandle()) {
     auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S106);
     dia.labels = {
         {expr->target->span, "this expression does not have a handle type",
@@ -210,7 +211,7 @@ void Resolver::visit(DestroyExpr *expr) {
 
   auto *handle = dynamic_cast<GenericSymbol *>(expr->target->resolvedType);
 
-  if (!handle || handle->origin != table.getHandle()) {
+  if (!handle || handle->origin != table.registry.getHandle()) {
     auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S106);
     dia.labels = {
         {expr->target->span, "this expression does not have a handle type",
@@ -247,7 +248,7 @@ void Resolver::visit(DestroyExpr *expr) {
 }
 
 void Resolver::visit(QuitExpr *expr) {
-  for (Scope *scope = table.getCurrent(); scope != nullptr;
+  for (Scope *scope = table.scopeManger.current(); scope != nullptr;
        scope = scope->parent) {
     if (scope->scopeKind == Scope::ScopeKind::INIT) {
       auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S108);

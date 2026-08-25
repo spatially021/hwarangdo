@@ -105,46 +105,45 @@ LoweredValue llvmCodegen::lowerBinaryExpr(MIRBinaryExpr *expr,
 
   auto type = isCompare(expr->op) ? expr->operandType : expr->type;
   auto lhsRaw = lowerValue(expr->lhs.get(), ctx);
-  LoweredValue lhs = {castTo(lhsRaw.value, expr->lhs->type, type), lhsRaw.addr,
-                      lhsRaw.category};
+  LoweredValue lhs = castTo(lhsRaw, expr->lhs->type, type);
 
   auto rawRhs = lowerValue(expr->rhs.get(), ctx);
 
   bool usePowi = expr->op == Operator::POW && isInt(expr->rhs->type) &&
                  isFloat(expr->type);
 
-  LoweredValue rhs = {
-      usePowi ? castTo(rawRhs.value, expr->rhs->type, table.getBuilt("i32"))
-              : castTo(rawRhs.value, expr->rhs->type, type),
-      rawRhs.addr, rawRhs.category};
+  LoweredValue rhs =
+      usePowi ? castTo(rawRhs, expr->rhs->type, table.registry.getBuilt("i32"))
+              : castTo(rawRhs, expr->rhs->type, type);
   switch (expr->op) {
 
   case Operator::ADD:
     if (isString(type)) {
-      auto *s8Ty = getType(expr->type);
+      auto *sTy = getType(expr->type);
+      auto name = expr->type->name;
       auto *ptrTy = llvm::PointerType::getUnqual(context);
       auto *voidTy = builder.getVoidTy();
-      auto *out = builder.CreateAlloca(s8Ty, nullptr, "s8.add.out");
+      auto *out = builder.CreateAlloca(sTy, nullptr, name + ".add.out");
       auto *lhsPtr = lhsRaw.addr;
       if (!lhsPtr) {
-        lhsPtr = builder.CreateAlloca(s8Ty, nullptr, "s8.add.lhs");
+        lhsPtr = builder.CreateAlloca(sTy, nullptr, name + ".add.lhs");
         builder.CreateStore(lhsRaw.value, lhsPtr);
       }
 
       auto *rhsPtr = rhs.addr;
       if (!rhsPtr) {
-        rhsPtr = builder.CreateAlloca(s8Ty, nullptr, "s8.add.rhs");
+        rhsPtr = builder.CreateAlloca(sTy, nullptr, name + ".add.rhs");
         builder.CreateStore(rhs.value, rhsPtr);
       }
 
       auto *fnTy =
           llvm::FunctionType::get(voidTy, {ptrTy, ptrTy, ptrTy}, false);
-      builder.CreateCall(getRuntimeFunc("hrd_add_s8", fnTy),
+      builder.CreateCall(getRuntimeFunc("hrd_add_" + name, fnTy),
                          {out, lhsPtr, rhsPtr});
 
       ctx.cleanupStack.push_back({out, type});
 
-      return {builder.CreateLoad(s8Ty, out, "s8.add"), out,
+      return {builder.CreateLoad(sTy, out, name + ".add"), out,
               expr->valueCategory};
     }
 
@@ -294,12 +293,12 @@ LoweredValue llvmCodegen::lowerBinaryExpr(MIRBinaryExpr *expr,
   }
 
   case Operator::LSH: {
-    llvm::Value *amount = castTo(rhs.value, expr->rhs->type, expr->lhs->type);
+    llvm::Value *amount = castTo(rhs, expr->rhs->type, expr->lhs->type).value;
     return {builder.CreateShl(lhs.value, amount)};
   }
 
   case Operator::RSH: {
-    llvm::Value *amount = castTo(rhs.value, expr->rhs->type, expr->lhs->type);
+    llvm::Value *amount = castTo(rhs, expr->rhs->type, expr->lhs->type).value;
 
     return {isUnsigned(expr->lhs->type)
                 ? builder.CreateLShr(lhs.value, amount)
@@ -435,20 +434,46 @@ LoweredValue llvmCodegen::lowerPayloadExtractExpr(MIRPayloadExtractExpr *expr,
 LoweredValue llvmCodegen::lowerLiteralExpr(MIRLiteralExpr *expr,
                                            FuncContext &ctx) {
   auto lit = expr->literal;
-  llvm::Type *ty = getType(lit.type);
+  llvm::Type *ty = getType(expr->type);
 
   if (lit.isBool()) {
     return {llvm::ConstantInt::getBool(context, lit.asBool())};
   }
 
   if (lit.isInt()) {
-    return {llvm::ConstantInt::get(ty, lit.asInt().value)};
+    auto *intTy = llvm::cast<llvm::IntegerType>(ty);
+
+    auto value = lit.asInt().value;
+
+    if (value.getBitWidth() != intTy->getBitWidth()) {
+      value = value.sextOrTrunc(intTy->getBitWidth());
+    }
+
+    return {llvm::ConstantInt::get(context, value)};
   }
 
   if (lit.isFloat()) {
-    return {llvm::ConstantFP::get(context, lit.asFloat().value)};
-  }
+    auto value = lit.asFloat().value;
 
+    const llvm::fltSemantics *semantics = nullptr;
+
+    if (ty->isHalfTy()) {
+      semantics = &llvm::APFloat::IEEEhalf();
+    } else if (ty->isFloatTy()) {
+      semantics = &llvm::APFloat::IEEEsingle();
+    } else if (ty->isDoubleTy()) {
+      semantics = &llvm::APFloat::IEEEdouble();
+    } else if (ty->isFP128Ty()) {
+      semantics = &llvm::APFloat::IEEEquad();
+    } else {
+      Error::internal("invalid float literal LLVM type");
+    }
+
+    bool losesInfo = false;
+    value.convert(*semantics, llvm::APFloat::rmNearestTiesToEven, &losesInfo);
+
+    return {llvm::ConstantFP::get(context, value)};
+  }
   if (lit.isChar()) {
     return {llvm::ConstantInt::get(ty, lit.asChar().codePoint)};
   }
@@ -483,7 +508,7 @@ LoweredValue llvmCodegen::lowerUnaryExpr(MIRUnaryExpr *expr, FuncContext &ctx) {
 
 LoweredValue llvmCodegen::lowerCastExpr(MIRCastExpr *expr, FuncContext &ctx) {
   auto operand = lowerValue(expr->operrand.get(), ctx);
-  return {castTo(operand.value, expr->from, expr->to)};
+  return castTo(operand, expr->from, expr->to);
 }
 
 LoweredValue llvmCodegen::lowerCallExpr(MIRCallExpr *expr, FuncContext &ctx) {
@@ -531,24 +556,17 @@ LoweredValue llvmCodegen::lowerStructInitExpr(MIRStructInitExpr *expr,
   }
   auto out = lowerArgs(args, values, ctx);
 
-  auto dInit = defaultInits.at(expr->structType);
-  builder.CreateCall(dInit, {tmp});
-  llvm::verifyFunction(*ctx.func, &llvm::errs());
-  // 3. init 호출
-  if (expr->initMethod != nullptr) {
-    auto *initFn = funcs.at(expr->initMethod);
-    builder.CreateCall(initFn, args);
-    llvm::verifyFunction(*ctx.func, &llvm::errs());
+  auto it = defaultInits.find(expr->structType);
+  if (it != defaultInits.end()) {
+    auto dInit = it->second;
+    builder.CreateCall(dInit, {tmp});
   }
 
-  llvm::errs() << "struct init: " << expr->structType->name << "\n";
-  llvm::errs() << "tmp type: ";
-  tmp->getType()->print(llvm::errs());
-  llvm::errs() << "\n";
-
-  llvm::errs() << "dInit: " << dInit->getName() << "\n";
-  dInit->getFunctionType()->print(llvm::errs());
-  llvm::errs() << "\n";
+  // 3. init 호출
+  if (expr->initMethod != nullptr) {
+    auto initFn = getOrgetOrDeclareFunction(expr->initMethod);
+    builder.CreateCall(initFn, args);
+  }
 
   auto load = builder.CreateLoad(structTy, tmp, "struct.init.val");
   for (auto &o : out) {

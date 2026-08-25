@@ -7,23 +7,19 @@
 #include "hrd/IR/HIR/HIRProgram.h"
 #include "hrd/IR/HIR/HIRStmt.h"
 #include "hrd/IR/HIR/HIRSymbol.h"
-#include "hrd/IR/HIR/HIRType.h"
 #include "hrd/Recover/HIRVerifierRecover.h"
 #include "hrd/SemanticAnalyzer/symbol/TypeSymbol.h"
+#include "hrd/SemanticAnalyzer/symbol/ValueSymbol.h"
 #include "hrd/compiler/CompilerContexts.h"
+#include "hrd/diagnostic/Diagnostic.h"
 #include "hrd/enums/InheritState.h"
 #include "hrd/util/Error.h"
-#include "hrd/util/diagnostic/Diagnostic.h"
 #include "magic_enum/magic_enum.hpp"
 #include <cassert>
 #include <llvm/ADT/APInt.h>
-#include <unordered_map>
+#include <llvm/ADT/SmallString.h>
+#include <string>
 #include <vector>
-
-static bool isHandle(HIRType *type);
-static bool isObserver(HIRType *type);
-static InitMap mergeIntersection(const InitMap &a, const InitMap &b);
-static pair<bool, llvm::APInt> tryGetConstIndex(HIRValueExpr *value);
 
 HIRVerifier::HIRVerifier(HIRVerifierContext &ctx)
     : program(ctx.program), engine(ctx.engine), recover(*this) {}
@@ -33,43 +29,11 @@ void HIRVerifier::verify() {
     Error::internal("program is nullptr");
   }
 
-  for (auto &r : program->rootMap) {
-    verifyRoot(r.second);
-    auto root = r.second;
-    initmap.rootStates.emplace(
-        root, InitState(root->isInitialized,
-                        root->isInitialized &&
-                            root->type->kind == HIRTypeKind::Array));
-  }
-
-  for (auto &t : program->typeDeclMap) {
-    for (auto &f : t.second->fields) {
-      linkField(f.get());
-    }
-  }
-
   for (auto &t : program->typeDeclMap) {
     if (inheritStates[t.second] == InheritState::Unvisited) {
+      verifyBlock(t.second->defaultInitBlock.get());
       verifyType(t.second);
     }
-  }
-}
-
-void HIRVerifier::verifyRoot(HIRField *root) {
-  if (root == nullptr) {
-    Error::internal("root is nullptr");
-  }
-  if (root->type == nullptr) {
-    Error::internal("root's type is nullptr");
-  }
-  if (root->type->typeSymbol == nullptr) {
-    Error::internal("root's typeSymbol is nullptr");
-  }
-}
-
-void HIRVerifier::verifyVariant(HIREnumVariant *variant) {
-  if (variant == nullptr) {
-    Error::internal("variant is nullptr");
   }
 }
 
@@ -94,10 +58,6 @@ void HIRVerifier::verifyType(HIRTypeDecl *type) {
     Error::internal(type->span, "hirType is nullptr");
   }
 
-  if (type->type->typeSymbol == nullptr) {
-    Error::internal(type->span, "hirType's typeSymbol is nullptr");
-  }
-
   if (type == nullptr) {
     Error::internal("hirTypeDecl is nullptr");
   }
@@ -107,47 +67,27 @@ void HIRVerifier::verifyType(HIRTypeDecl *type) {
   }
 
   if (type->typeDeclKind == HIRTypeDeclKind::Enum) {
-    for (auto &v : type->enumVariants) {
-      verifyVariant(v.get());
-    }
     return;
   }
 
-  verifyBlock(type->defaultInitBlock.get());
-
-  InitMap base = initmap;
-  vector<InitMap> initmaps;
-
-  for (auto &[sig, init] : type->initMap) {
-    initmap = base;
-
-    verifyMethod(init);
-
-    initmaps.push_back(initmap);
+  for (auto &i : type->initMap) {
+    verifyMethod(i.second, type);
   }
 
-  if (!initmaps.empty()) {
-    InitMap result = initmaps.front();
-    for (size_t idx = 1; idx < initmaps.size(); ++idx) {
-      result = mergeIntersection(result, initmaps[idx]);
-    }
-    initmap = result;
-  }
   for (auto &m : type->methodMap) {
-    verifyMethod(m.second);
+    verifyMethod(m.second, type);
   }
 
   inheritStates[type] = InheritState::Done;
 }
 
-void HIRVerifier::verifyMethod(HIRMethodDecl *method) {
+void HIRVerifier::verifyMethod(HIRMethodDecl *method, HIRTypeDecl *) {
   if (method == nullptr) {
     Error::internal("hirMethodDecl is nullptr");
   }
 
   for (auto &p : method->paramMap) {
     verifyParam(p.second);
-    initmap.paramStates.emplace(p.second, InitState(true, true));
   }
 
   if (method->body == nullptr) {
@@ -158,10 +98,8 @@ void HIRVerifier::verifyMethod(HIRMethodDecl *method) {
   if (method->returnType == nullptr) {
     Error::internal(method->name + "'s return type is nullptr");
   }
-  if (method->returnType->typeSymbol == nullptr) {
-    Error::internal(method->name + "'s return type's symbol is nullptr");
-  }
-  if (method->returnType->typeSymbol->kind != TypeSymbol::TypeKind::VOID &&
+
+  if (method->returnType->kind != TypeSymbol::TypeKind::VOID &&
       !definitelyReturns(method->body.get())) {
     auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_H001);
     dia.labels = {
@@ -217,22 +155,10 @@ void HIRVerifier::verifyLocal(HIRLocal *local) {
   if (local->type == nullptr) {
     Error::internal("local's type is nullptr");
   }
-  if (isObserver(local->type)) {
+  if (local->type->kind == TypeSymbol::TypeKind::CLASS) {
     if (!local->isInitialized) {
       Error::internal("local is observer but not initialized");
     }
-  }
-}
-
-void HIRVerifier::verifyField(HIRField *field) {
-  if (field == nullptr) {
-    Error::internal("field is nullptr");
-  }
-  if (field->type == nullptr) {
-    Error::internal("field's type is nullptr");
-  }
-  if (isObserver(field->type)) {
-    Error::internal("observer declared in field");
   }
 }
 
@@ -269,26 +195,19 @@ void HIRVerifier::verifyStmt(HIRStmt *stmt) {
     if (ifStmt->condition->type == nullptr) {
       Error::internal("ifStmt's condition type is nullptr");
     }
-    if (ifStmt->condition->type != program->getBool()) {
+    if (!isa<BoolType>(ifStmt->condition->type)) {
       Error::internal("ifStmt's condition is not bool type : " +
                       ifStmt->condition->type->name);
     }
 
     verifyExpr(ifStmt->condition.get());
 
-    InitMap before = initmap;
-
     verifyBlock(ifStmt->thenBlock.get());
-    InitMap then = initmap;
-    InitMap else_ = before;
 
     if (ifStmt->elseBlock != nullptr) {
-      initmap = before;
       verifyBlock(ifStmt->elseBlock.get());
-      else_ = initmap;
     }
 
-    initmap = mergeIntersection(then, else_);
     break;
   }
   case HIRNodeKind::WhileStmt: {
@@ -300,17 +219,15 @@ void HIRVerifier::verifyStmt(HIRStmt *stmt) {
     if (whileStmt->body == nullptr) {
       Error::internal("whileStmt's body is nullptr");
     }
-    InitMap before = initmap;
     verifyExpr(whileStmt->condition.get());
     if (whileStmt->condition->type == nullptr) {
       Error::internal("whileStmt's condition type is nullptr");
     }
-    if (whileStmt->condition->type != program->getBool()) {
+    if (isa<BoolType>(whileStmt->condition->type)) {
       Error::internal("whileStmt's condition is not bool type");
     }
 
     verifyBlock(whileStmt->body.get());
-    initmap = before;
     break;
   }
   case HIRNodeKind::ForRangeStmt: {
@@ -331,8 +248,6 @@ void HIRVerifier::verifyStmt(HIRStmt *stmt) {
     if (range->body == nullptr) {
       Error::internal("forRangeStmt's body is nullptr");
     }
-
-    initmap.localStates.emplace(range->indexVar, InitState(true, true));
 
     verifyExpr(range->start.get());
     verifyExpr(range->end.get());
@@ -431,9 +346,6 @@ void HIRVerifier::verifyStmt(HIRStmt *stmt) {
     if (destroy->handle == nullptr) {
       Error::internal("destroyStmt's handle is nullptr");
     }
-    if (!isHandle(destroy->handle->type)) {
-      Error::internal("destroyStmt's handle is not handle type");
-    }
     verifyExpr(destroy->handle.get());
     break;
   }
@@ -441,11 +353,6 @@ void HIRVerifier::verifyStmt(HIRStmt *stmt) {
   case HIRNodeKind::LocalDeclStmt: {
     auto local = expect<HIRLocalDeclStmt>(stmt, HIRNodeKind::LocalDeclStmt);
     verifyLocal(local->local);
-    initmap.localStates.emplace(
-        local->local,
-        InitState(local->local->isInitialized,
-                  local->local->type->kind == HIRTypeKind::Array &&
-                      local->local->isInitialized));
     if (local->init != nullptr) {
       verifyExpr(local->init.get());
     }
@@ -460,14 +367,13 @@ void HIRVerifier::verifyStmt(HIRStmt *stmt) {
     if (assign->lhs == nullptr) {
       Error::internal(assign->span, "assign's lhs is nullptr");
     }
-    if (isObserver(assign->lhs->type)) {
+    if (assign->lhs->type->kind == TypeSymbol::TypeKind::CLASS) {
       Error::internal(assign->span, "observer cannot be assigned");
     }
     if (assign->rhs == nullptr) {
       Error::internal(assign->span, "assign's rhs is nullptr");
     }
     verifyExpr(assign->lhs.get());
-    initialize(assign->lhs.get());
     verifyExpr(assign->rhs.get());
     break;
   }
@@ -477,14 +383,13 @@ void HIRVerifier::verifyStmt(HIRStmt *stmt) {
     if (compound->lhs == nullptr) {
       Error::internal("compoundAssignExpr's lhs is nullptr");
     }
-    if (isObserver(compound->lhs->type)) {
+    if (compound->lhs->type->kind == TypeSymbol::TypeKind::CLASS) {
       Error::internal("observer cannot be assigned");
     }
     if (compound->rhs == nullptr) {
       Error::internal("compoundAssignExpr's rhs is nullptr");
     }
     verifyExpr(compound->lhs.get());
-    initialize(compound->lhs.get());
     verifyExpr(compound->rhs.get());
     break;
   }
@@ -495,7 +400,7 @@ void HIRVerifier::verifyStmt(HIRStmt *stmt) {
   }
 }
 
-void HIRVerifier::verifyExpr(HIRExpr *expr, bool isRead) {
+void HIRVerifier::verifyExpr(HIRExpr *expr, bool) {
   if (expr == nullptr) {
     Error::internal("expr is nullptr");
   }
@@ -516,9 +421,6 @@ void HIRVerifier::verifyExpr(HIRExpr *expr, bool isRead) {
     }
     if (load->place == nullptr) {
       Error::internal("loadExpr's place is nullptr");
-    }
-    if (isRead) {
-      checkInitialize(load->place.get());
     }
     verifyExpr(load->place.get());
     break;
@@ -600,16 +502,9 @@ void HIRVerifier::verifyExpr(HIRExpr *expr, bool isRead) {
     if (spawn->type == nullptr) {
       Error::internal("spawnExpr's type is nullptr");
     }
-    if (!isHandle(spawn->type)) {
-      Error::internal("spawnExpr's result is not handleType");
-    }
 
     if (spawn->entityType == nullptr) {
       Error::internal("spawnExpr's entityType is nullptr");
-    }
-
-    if (dynamic_cast<HIREntityType *>(spawn->entityType) == nullptr) {
-      Error::internal("spawn's entityType is not entity type");
     }
 
     for (auto &a : spawn->args) {
@@ -625,22 +520,15 @@ void HIRVerifier::verifyExpr(HIRExpr *expr, bool isRead) {
     if (view->type == nullptr) {
       Error::internal("viewExpr's type is nullptr");
     }
-    auto ob = dynamic_cast<HIRObserverType *>(view->type);
+    auto ob = view->type;
     if (ob == nullptr) {
       Error::internal("viewExpr's resultType is not oberver type");
     }
     if (view->entityType == nullptr) {
       Error::internal("viewExpr's entityType is nullptr");
     }
-    if (ob->entityType != view->entityType) {
-      Error::internal(
-          "unmatched type with oberver type and entity type in viewExpr");
-    }
     if (view->handle == nullptr) {
       Error::internal("viewExpr's handle is nullptr");
-    }
-    if (!isHandle(view->handle->type)) {
-      Error::internal("viewExpr's handle is not handleType");
     }
     verifyExpr(view->handle.get());
     break;
@@ -680,7 +568,7 @@ void HIRVerifier::verifyExpr(HIRExpr *expr, bool isRead) {
     if (ternary->condition->type == nullptr) {
       Error::internal("ternary's condition type is nullptr");
     }
-    if (ternary->condition->type != program->getBool()) {
+    if (!isa<BoolType>(ternary->condition->type)) {
       Error::internal("ternary's condition is not bool type");
     }
     verifyExpr(ternary->thenExpr.get());
@@ -725,7 +613,6 @@ void HIRVerifier::verifyExpr(HIRExpr *expr, bool isRead) {
       Error::internal("fieldPlaceExpr's field is nullptr");
     }
     verifyExpr(field->receiver.get());
-    verifyField(field->field);
 
     break;
   }
@@ -827,288 +714,6 @@ void HIRVerifier::verifyExpr(HIRExpr *expr, bool isRead) {
   }
 }
 
-static bool isHandle(HIRType *type) {
-  return dynamic_cast<HIRHandleType *>(type) != nullptr;
-}
-
-static bool isObserver(HIRType *type) {
-  return dynamic_cast<HIRObserverType *>(type) != nullptr;
-}
-
-void HIRVerifier::checkInitialize(HIRPlaceExpr *place) {
-  assert(place);
-  if (auto arr = dynamic_cast<HIRArrayAccessPlaceExpr *>(place)) {
-    if (auto load = dynamic_cast<HIRLoadExpr *>(arr->object.get())) {
-      auto &init = getInitState(load->place.get());
-      if (init.initialized || init.fullyInitialized) {
-        return;
-      }
-      auto [res, index] = tryGetConstIndex(arr->index.get());
-      if (res) {
-        auto *arrayType = dynamic_cast<HIRArrayType *>(arr->object->type);
-        if (arrayType == nullptr) {
-          Error::internal(arr->span, "array access object is not array type");
-        }
-
-        if (index.isNegative()) {
-          auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_H007);
-          dia.labels = {
-              {arr->index->span, "array index is negative", true},
-          };
-          dia.notes = {
-              "array indices must be zero or greater",
-          };
-          dia.helps = {
-              "use a non-negative index",
-          };
-          engine.emit(dia);
-          recover.recover();
-        }
-
-        if (index.uge(arrayType->size)) {
-          auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_H003);
-          dia.labels = {
-              {arr->index->span, "this index is outside the array bounds",
-               true},
-          };
-          dia.notes = {
-              "a constant array index must be smaller than the array length",
-          };
-          dia.helps = {
-              "use an index smaller than the array length",
-          };
-          engine.emit(dia);
-          recover.recover();
-        }
-
-        auto it = init.initializedIndices.find(index);
-        if (it == init.initializedIndices.end()) {
-          auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_H004);
-          dia.labels = {
-              {place->span, "this array element may be uninitialized", true},
-          };
-          dia.notes = {
-              "the selected element is not initialized on every reachable path",
-          };
-          dia.helps = {
-              "initialize this element before reading it",
-          };
-          engine.emit(dia);
-          recover.recover();
-        }
-      } else {
-        auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_H005);
-        dia.labels = {
-            {place->span,
-             "a non-constant index reads from a partially initialized array",
-             true},
-        };
-        dia.notes = {
-            "the selected element cannot be proven to be initialized",
-        };
-        dia.helps = {
-            "initialize the entire array before using a non-constant index",
-        };
-        engine.emit(dia);
-        recover.recover();
-      }
-    }
-    return;
-  }
-
-  auto &init = getInitState(place);
-  if (!init.initialized) {
-    auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_H006);
-    dia.labels = {
-        {place->span, "this value may be uninitialized", true},
-    };
-    dia.notes = {
-        "the value is not initialized on every reachable control-flow path",
-    };
-    dia.helps = {
-        "initialize this value before reading it",
-    };
-    engine.emit(dia);
-    recover.recover();
-  }
-}
-
-void HIRVerifier::initialize(HIRPlaceExpr *place) {
-  assert(place);
-  if (auto arr = dynamic_cast<HIRArrayAccessPlaceExpr *>(place)) {
-
-    auto &init = getInitState(arr->object.get());
-    auto [res, index] = tryGetConstIndex(arr->index.get());
-    if (res) {
-      auto *arrayType = dynamic_cast<HIRArrayType *>(arr->object->type);
-      if (arrayType == nullptr) {
-        Error::internal(arr->span, "array access object is not array type");
-      }
-
-      if (index.isNegative()) {
-        auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_H007);
-        dia.labels = {
-            {arr->index->span, "array index is negative", true},
-        };
-        dia.notes = {
-            "array indices must be zero or greater",
-        };
-        dia.helps = {
-            "use a non-negative index",
-        };
-        engine.emit(dia);
-        recover.recover();
-      }
-
-      if (index.uge(arrayType->size)) {
-        llvm::SmallString<32> sizeText;
-        arrayType->size.toString(sizeText, 10, false);
-
-        auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_H003);
-        dia.labels = {
-            {arr->index->span, "this index is outside the array bounds", true},
-        };
-        dia.notes = {
-            "the array length is " + std::string(sizeText),
-        };
-        dia.helps = {
-            "use an index smaller than the array length",
-        };
-        engine.emit(dia);
-        recover.recover();
-      }
-
-      auto it = init.initializedIndices.find(index);
-      if (it == init.initializedIndices.end()) {
-        init.initializedIndices.insert(index);
-      }
-    }
-
-    return;
-  }
-  auto &init = getInitState(place);
-  init.initialized = true;
-}
-
-InitState &HIRVerifier::getInitState(HIRPlaceExpr *place) {
-
-  if (auto local = dynamic_cast<HIRLocalPlaceExpr *>(place)) {
-    auto it = initmap.localStates.find(local->local);
-    if (it == initmap.localStates.end()) {
-      Error::internal(place->span, "local state not found");
-    }
-    return it->second;
-  }
-
-  if (auto field = dynamic_cast<HIRFieldPlaceExpr *>(place)) {
-    if (field->receiver->type == program->rootType) {
-      auto it = initmap.rootStates.find(field->field);
-      if (it == initmap.rootStates.end()) {
-        Error::internal(place->span, "field state not found");
-      }
-      return it->second;
-    }
-
-    auto it = initmap.fieldStates.find(field->field);
-    if (it == initmap.fieldStates.end()) {
-      Error::internal(place->span, "field state not found");
-    }
-    return it->second;
-  }
-
-  if (auto param = dynamic_cast<HIRParamPlaceExpr *>(place)) {
-    auto it = initmap.paramStates.find(param->param);
-    if (it == initmap.paramStates.end()) {
-      Error::internal(place->span, "param state not found");
-    }
-    return it->second;
-  }
-
-  if (auto arr = dynamic_cast<HIRArrayAccessPlaceExpr *>(place)) {
-    return getInitState(arr->object.get());
-  }
-
-  Error::internal(place->span, "fail to find place");
-}
-
-static void mergeInitState(InitState &out, const InitState &other) {
-  out.initialized = out.initialized && other.initialized;
-  out.fullyInitialized = out.fullyInitialized && other.fullyInitialized;
-
-  for (auto it = out.initializedIndices.begin();
-       it != out.initializedIndices.end();) {
-    if (other.initializedIndices.find(*it) == other.initializedIndices.end()) {
-      it = out.initializedIndices.erase(it);
-    } else {
-      ++it;
-    }
-  }
-}
-
-static InitMap mergeIntersection(const InitMap &a, const InitMap &b) {
-  InitMap result = a;
-
-  for (auto &[l, s] : result.localStates) {
-    auto it = b.localStates.find(l);
-    if (it == b.localStates.end()) {
-      s.initialized = false;
-      s.fullyInitialized = false;
-      s.initializedIndices.clear();
-    } else {
-      mergeInitState(s, it->second);
-    }
-  }
-  for (auto &[l, s] : result.fieldStates) {
-    auto it = b.fieldStates.find(l);
-    if (it == b.fieldStates.end()) {
-      s.initialized = false;
-      s.fullyInitialized = false;
-      s.initializedIndices.clear();
-    } else {
-      mergeInitState(s, it->second);
-    }
-  }
-
-  for (auto &[l, s] : result.rootStates) {
-    auto it = b.rootStates.find(l);
-    if (it == b.rootStates.end()) {
-      s.initialized = false;
-      s.fullyInitialized = false;
-      s.initializedIndices.clear();
-    } else {
-      mergeInitState(s, it->second);
-    }
-  }
-  for (auto &[l, s] : result.paramStates) {
-    auto it = b.paramStates.find(l);
-    if (it == b.paramStates.end()) {
-      s.initialized = false;
-      s.fullyInitialized = false;
-      s.initializedIndices.clear();
-    } else {
-      mergeInitState(s, it->second);
-    }
-  }
-
-  return result;
-}
-
-static std::pair<bool, llvm::APInt> tryGetConstIndex(HIRValueExpr *value) {
-  assert(value);
-
-  if (auto lit = dynamic_cast<HIRLiteralExpr *>(value)) {
-    if (!lit->resolvedLit.isInt()) {
-      Error::internal(value->span,
-                      "non-integer literal reached array index verification");
-    }
-
-    llvm::APInt index = lit->resolvedLit.asInt().value;
-    return {true, index.sextOrTrunc(128)};
-  }
-
-  return {false, llvm::APInt(128, 0)};
-}
-
 void HIRVerifier::verifyCasePattern(HIRCasePattern *pattern) {
   std::visit(
       [&](auto &selector) {
@@ -1119,25 +724,20 @@ void HIRVerifier::verifyCasePattern(HIRCasePattern *pattern) {
           verifyExpr(selector.expr.get());
         } else if constexpr (std::is_same_v<T, HIRUnitCase>) {
           // selector.variant 사용
-          verifyVariant(selector.variant);
+          if (selector.variant == nullptr) {
+            Error::internal("variant is nullptr");
+          }
         } else if constexpr (std::is_same_v<T, HIRPayloadCase>) {
           // selector.variant, selector.binding 사용
-          verifyVariant(selector.variant);
+          if (selector.variant == nullptr) {
+            Error::internal("variant is nullptr");
+          }
           verifyLocal(selector.binding);
-          initmap.localStates.emplace(selector.binding, InitState(true));
         } else if constexpr (std::is_same_v<T, HIRWildcardCase>) {
           // wildcard 처리
         }
       },
       pattern->selector);
-}
-
-void HIRVerifier::linkField(HIRField *field) {
-  verifyField(field);
-  initmap.fieldStates.emplace(
-      field, InitState(field->isInitialized,
-                       field->isInitialized &&
-                           field->type->kind == HIRTypeKind::Array));
 }
 
 bool HIRVerifier::definitelyReturns(HIRStmt *stmt) {

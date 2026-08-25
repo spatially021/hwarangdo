@@ -5,8 +5,8 @@
 #include "hrd/AST/Visitor.h"
 #include "hrd/Recover/VerifierRecover.h"
 #include "hrd/compiler/CompilerContexts.h"
+#include "hrd/diagnostic/DiagnosticEngine.h"
 #include "hrd/enums/InheritState.h"
-#include "hrd/util/diagnostic/DiagnosticEngine.h"
 #include "string"
 
 using std::string;
@@ -23,8 +23,10 @@ public:
 
   void verify();
   void verifyCycledInherit(ClassDecl *decl);
+  void verifyCycledField(StructDecl *decl);
 
   unordered_map<ClassDecl *, InheritState> inheritStates;
+  unordered_map<StructDecl *, InheritState> fieldStates;
 
 private:
 #define AST_NODE(T) void visit(T *node) override;

@@ -6,12 +6,13 @@
 #include "hrd/SemanticAnalyzer/symbol/TypeSymbol.h"
 #include "hrd/SourceSpan.h"
 #include "hrd/Token.h"
+#include "hrd/diagnostic/Diagnostic.h"
 #include "hrd/util/Error.h"
-#include "hrd/util/diagnostic/Diagnostic.h"
 #include <cassert>
 #include <memory>
 #include <optional>
 #include <string>
+#include <vector>
 // TODO(parser): Refactor declaration parsing.
 // Current declaration parsing is patched around class/struct/impl-specific
 // cases. Special members such as init exposed duplicated and inconsistent
@@ -41,15 +42,15 @@ Ptr Parser::classDecl(DeclPrefix prefix) {
 
   Token name = consume(TKind::IDENTIFIER, DiagnosticCode::HRD_P041,
                        "expected class name after 'class'");
-  optional<Identifier> base;
+  optional<StringDatum> base;
 
   if (check(TKind::EXTENDS)) {
     advance(); // extends 처리
     auto b = advance();
-    base = Identifier(b.text, b.span);
+    base = StringDatum(b.text, b.span);
   }
 
-  vector<Identifier> traits;
+  vector<StringDatum> traits;
   if (check(TKind::COLON)) {
     advance(); //: 처리
     do {
@@ -58,7 +59,7 @@ Ptr Parser::classDecl(DeclPrefix prefix) {
       }
       auto tok = consume(TKind::IDENTIFIER, DiagnosticCode::HRD_P059,
                          "trait name expected here");
-      traits.push_back(Identifier(tok.text, tok.span));
+      traits.push_back(StringDatum(tok.text, tok.span));
     } while (check(TKind::COMMA) && !isAtEnd());
     if (check(TKind::IDENTIFIER)) {
       auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_P058);
@@ -202,6 +203,15 @@ Ptr Parser::varDecl(DeclPrefix prefix) {
   Token t = prefix.startToken;
 
   TypeNode::Ptr type = parseType();
+  if (type->onlySize) {
+    auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_P069);
+    dia.labels = {{type->span, "type abbreviation used here", true}};
+    dia.notes = {{"type abbreviations can only be used with a primitive type "
+                  "or in a cast "
+                  "expression"}};
+    dia.helps = {{"specify the primitive type, such as 'int:i32', or use the "
+                  "abbreviation in a cast"}};
+  }
   Token name = consume(TKind::IDENTIFIER, DiagnosticCode::HRD_P045,
                        "expected variable name after type");
   Expr::Ptr init = nullptr;
@@ -223,7 +233,7 @@ Ptr Parser::varDecl(DeclPrefix prefix) {
                               prefix.isRoot, modi);
 }
 
-Ptr Parser::functionDecl(DeclPrefix prefix, bool isDynamic) {
+Ptr Parser::functionDecl(DeclPrefix prefix, bool) {
   if (contexts.back() == DeclContext::TOPLEVEL) {
     auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_P007);
     dia.labels = {
@@ -249,10 +259,15 @@ Ptr Parser::functionDecl(DeclPrefix prefix, bool isDynamic) {
 
   TypeNode::Ptr ty = nullptr;
 
-  if (!isDynamic) {
-    ty = parseType();
-  } else {
-    advance(); // func 소비
+  ty = parseType();
+  if (ty->onlySize) {
+    auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_P069);
+    dia.labels = {{ty->span, "type abbreviation used here", true}};
+    dia.notes = {{"type abbreviations can only be used with a primitive type "
+                  "or in a cast "
+                  "expression"}};
+    dia.helps = {{"specify the primitive type, such as 'int:i32', or use the "
+                  "abbreviation in a cast"}};
   }
   Token name = consume(TKind::IDENTIFIER, DiagnosticCode::HRD_P042,
                        "expected method name here");
@@ -331,8 +346,8 @@ Ptr Parser::implDecl(DeclPrefix prefix) {
 
   Token tok = consume(TKind::IDENTIFIER, DiagnosticCode::HRD_P041,
                       "expected type name after 'impl'");
-  Identifier target = Identifier(tok.text, tok.span);
-  vector<Identifier> traits;
+  StringDatum target = StringDatum(tok.text, tok.span);
+  vector<StringDatum> traits;
   unordered_map<TypeSymbol *, SourceSpan> traitSapn;
   if (check(TKind::COLON)) {
     advance(); //: 처리
@@ -342,7 +357,7 @@ Ptr Parser::implDecl(DeclPrefix prefix) {
       }
       auto to = consume(TKind::IDENTIFIER, DiagnosticCode::HRD_P059,
                         "trait name expected here");
-      traits.push_back(Identifier(to.text, to.span));
+      traits.push_back(StringDatum(to.text, to.span));
     } while (check(TKind::COMMA) && !isAtEnd());
     if (check(TKind::IDENTIFIER)) {
       auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_P058);
@@ -747,4 +762,172 @@ Ptr Parser::onDestroyDecl(DeclPrefix prefix) {
   Stmt::Ptr stmt = blockStmt();
   auto end = previous();
   return make_shared<OnDestroyDecl>(makeSpan(t, end), stmt);
+}
+Decl::Ptr Parser::importDecl() {
+  if (endImport) {
+    auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_P063);
+    dia.labels = {
+        {peek().span, "this import appears after a declaration", true},
+    };
+    dia.notes = {
+        "all import declarations must be placed at the beginning of the file",
+    };
+    dia.helps = {
+        "move this import before every non-import declaration",
+    };
+    engine.emit(dia);
+  }
+
+  SourceSpan span = peek().span;
+  advance(); // import
+
+  optional<StringDatum> module;
+  vector<StringDatum> path;
+  vector<ImportedType> types;
+
+  while (!check(TKind::SEMICOLON) && !isAtEnd()) {
+    if (check(TKind::LEFT_BRACE)) {
+      if (path.empty()) {
+        auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_P067);
+        dia.labels = {
+            {peek().span,
+             "a type can only be selected after the complete import path",
+             true},
+        };
+        dia.notes = {
+            "the type selector must appear at the end of an import path",
+        };
+        dia.helps = {
+            "move the type selector after the final path segment",
+        };
+        engine.emit(dia);
+        recover.recover();
+      }
+
+      advance(); // {
+
+      if (check(TKind::RIGHT_BRACE)) {
+        auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_P041);
+        dia.labels = {
+            {peek().span, "expected a type name here", true},
+        };
+        engine.emit(dia);
+        recover.recover();
+      }
+
+      while (!check(TKind::RIGHT_BRACE) && !isAtEnd()) {
+        Token name = consume(TKind::IDENTIFIER, DiagnosticCode::HRD_P041,
+                             "expected type name in import selector");
+
+        if (check(TKind::CAST)) {
+          advance(); // as 처리
+          auto local = consume(TKind::IDENTIFIER, DiagnosticCode::HRD_P041,
+                               "expected alias name in import selector");
+          if (local.text == name.text) {
+            auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_P068);
+            dia.labels = {
+                {local.span,
+                 "this alias is identical to the original type name", true},
+                {name.span, "original type name is declared here", false},
+            };
+            dia.notes = {
+                "an alias must introduce a different local name",
+            };
+            dia.helps = {
+                "choose a different alias or remove the alias declaration",
+            };
+            engine.emit(dia);
+            recover.recover();
+          }
+          types.push_back(
+              {{name.text, name.span}, {local.text, local.span}, true});
+        } else {
+          types.push_back({{name.text, name.span}, {name.text, name.span}});
+        }
+
+        if (check(TKind::COMMA)) {
+          advance();
+
+          if (check(TKind::RIGHT_BRACE)) {
+            auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_P065);
+            dia.labels = {
+                {previous().span, "expected another type after this comma",
+                 true},
+            };
+            dia.notes = {
+                "a comma in a type list must separate two type names",
+            };
+            dia.helps = {
+                "add a type after the comma or remove the trailing comma",
+            };
+            engine.emit(dia);
+            recover.recover();
+          }
+
+          continue;
+        }
+
+        if (!check(TKind::RIGHT_BRACE)) {
+          // 별도 expected ',' or '}' 진단 필요
+          recover.recover();
+        }
+      }
+
+      consume(TKind::RIGHT_BRACE, DiagnosticCode::HRD_P040,
+              "expected '}' after imported types");
+      break;
+    }
+
+    Token name = consume(TKind::IDENTIFIER, DiagnosticCode::HRD_P041,
+                         "expected module name or path after 'import'");
+
+    if (check(TKind::DOUBLE_COLON)) {
+      if (module.has_value()) {
+        auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_P064);
+        dia.labels = {
+            {name.span, "additional module qualifier appears here", true},
+            {module->span, "module qualifier was first specified here", false},
+        };
+        dia.notes = {
+            "an import path can specify only one module name before '::'",
+        };
+        dia.helps = {
+            "remove the additional module qualifier from the import path",
+        };
+        engine.emit(dia);
+        recover.recover();
+      }
+
+      module = StringDatum(name.text, name.span);
+      advance(); // ::
+      continue;
+    }
+
+    path.emplace_back(name.text, name.span);
+
+    if (check(TKind::DOT)) {
+      if (!check(TKind::IDENTIFIER, 1) && !check(TKind::LEFT_BRACE, 1)) {
+        auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_P066);
+        dia.labels = {
+            {peek().span, "expected another path segment after this dot", true},
+        };
+        dia.notes = {
+            "a dot in an import path must separate valid path elements",
+        };
+        dia.helps = {
+            "add a path segment after '.' or remove the trailing dot",
+        };
+        engine.emit(dia);
+        recover.recover();
+      }
+
+      advance(); // .
+    }
+  }
+
+  consume(TKind::SEMICOLON, DiagnosticCode::HRD_P044,
+          "expected ';' after import declaration");
+
+  return make_shared<ImportDecl>(makeSpan(span, previous().span), module, path,
+                                 types);
 }

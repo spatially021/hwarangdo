@@ -3,10 +3,10 @@
   "compilerVersion": "@PROJECT_VERSION@",
   "runtimeVersion": "@PROJECT_VERSION@",
   "llvmVersion": "@LLVM_PACKAGE_VERSION@",
-  "target": "@HGM_TARGET_NAME@",
-  "runtimeLibrary": "@HGM_RUNTIME_LIBRARY_NAME@",
+  "target": "@HRD_TARGET_NAME@",
+  "runtimeLibrary": "@HRD_RUNTIME_LIBRARY_NAME@",
   "paths": {
-    "runtime": "@HGM_INSTALL_TARGET_DIR@",
-    "include": "@HGM_INSTALL_INCLUDE_DIR@"
+    "runtime": "@HRD_INSTALL_TARGET_DIR@",
+    "include": "@HRD_INSTALL_INCLUDE_DIR@"
   }
 }

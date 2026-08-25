@@ -1,0 +1,233 @@
+#include "hrd/MetaData/MetaBuilder.h"
+#include "hrd/AST/Decl.h"
+#include "hrd/AST/Expr.h"
+#include "hrd/AST/Stmt.h"
+#include "hrd/BuiltInType.h"
+#include "hrd/MetaData/MetaData.h"
+#include "hrd/MetaData/TypeRef.h"
+#include "hrd/SemanticAnalyzer/SymbolTable/SymbolTable.h"
+#include "hrd/SemanticAnalyzer/symbol/MethodSymbol.h"
+#include "hrd/SemanticAnalyzer/symbol/TypeSymbol.h"
+#include "hrd/SemanticAnalyzer/symbol/ValueSymbol.h"
+#include "hrd/util/Error.h"
+#include <variant>
+
+MetaBuilder::MetaBuilder(SymbolTable &t) : table(t) {}
+
+ModuleMeta MetaBuilder::build() {
+  ModuleMeta module;
+  for (auto type : table.registry.getDecledTypes()) {
+    if (type->kind == TypeSymbol::TypeKind::TRAIT) {
+      module.traits.push_back(buildTrait(type));
+    }
+    if (type->kind == TypeSymbol::TypeKind::CLASS ||
+        type->kind == TypeSymbol::TypeKind::STRUCT ||
+        type->kind == TypeSymbol::TypeKind::ENUM) {
+      module.types.push_back(buildType(type));
+    }
+  }
+  return module;
+}
+
+TypeMeta MetaBuilder::buildType(const TypeSymbol *type) {
+  TypeMeta meta;
+  meta.name = type->name;
+  meta.path = type->path;
+  if (type->kind == TypeSymbol::TypeKind::CLASS) {
+    meta.kind = TypeKind::Class;
+  } else if (type->kind == TypeSymbol::TypeKind::STRUCT) {
+    meta.kind = TypeKind::Struct;
+  } else if (type->kind == TypeSymbol::TypeKind::ENUM) {
+    meta.kind = TypeKind::Enum;
+  } else {
+    Error::internal("illegal type kind");
+  }
+
+  for (auto f : type->fields) {
+    meta.fields.push_back(buildField(f));
+  }
+
+  for (auto &m : type->memberScope->methodOwn) {
+    meta.methods.push_back(buildMethod(m.get()));
+  }
+
+  for (auto &i : type->memberScope->initOwn) {
+    meta.methods.push_back(buildMethod(i.get()));
+  }
+
+  for (auto &v : type->variants) {
+    meta.variants.push_back(buildVariant(v.get()));
+  }
+
+  if (type->base != nullptr) {
+    meta.parent = buildTypeRef(type->base);
+  }
+
+  for (auto t : type->traits) {
+    meta.traits.push_back(buildTypeRef(t));
+  }
+
+  return meta;
+}
+
+TraitMeta MetaBuilder::buildTrait(const TypeSymbol *type) {
+  TraitMeta meta;
+  meta.name = type->name;
+  meta.path = type->path;
+  for (auto &sig : type->traitSigs) {
+    for (auto m : sig.second) {
+      meta.methods.push_back(buildMethod(m->symbol));
+    }
+  }
+  return meta;
+}
+
+FieldMeta MetaBuilder::buildField(const ValueSymbol *symbol) {
+  FieldMeta meta;
+  meta.name = symbol->name;
+  meta.modifier = symbol->modifier;
+  meta.type = buildTypeRef(symbol->typeSymbol);
+  return meta;
+}
+
+MethodMeta MetaBuilder::buildMethod(const MethodSymbol *symbol) {
+  MethodMeta meta;
+  meta.name = symbol->name;
+  meta.modifier = symbol->modifier;
+  if (auto func = dynamic_cast<FuncDecl *>(symbol->decl)) {
+    for (auto &p : func->params) {
+      meta.params.push_back(buildParam(p.get()));
+    }
+  } else if (auto sig = dynamic_cast<TraitSig *>(symbol->decl)) {
+    for (auto &p : sig->params) {
+      meta.params.push_back(buildParam(p.get()));
+    }
+  } else {
+    Error::internal("illegal ast kind");
+  }
+
+  meta.returnType = buildTypeRef(symbol->returnType);
+  return meta;
+}
+
+ParamMeta MetaBuilder::buildParam(const Param *param) {
+  ParamMeta meta;
+  meta.name = param->name;
+  meta.type = buildTypeRef(param->type->resolved);
+  if (param->defaultValue.has_value()) {
+    meta.defaultValue = buildDefaultValue(param->defaultValue.value().get());
+  }
+
+  return meta;
+}
+
+DefaultValueMeta MetaBuilder::buildDefaultValue(Expr *expr) {
+  DefaultValueMeta meta;
+
+  if (auto lit = dynamic_cast<LiteralExpr *>(expr)) {
+    meta.kind = DefaultValueKind::Literal;
+    meta.literal = lit->resolvedLit;
+    meta.resolvedType = buildTypeRef(expr->resolvedType);
+  } else if (auto init = dynamic_cast<CallExpr *>(expr)) {
+    if (init->callType != CallExpr::CallType::INIT_CALL) {
+      Error::internal("illegal call kind");
+    }
+    meta.kind = DefaultValueKind::StructInit;
+    meta.type = buildTypeRef(init->resolvedType);
+    meta.resolvedType = buildTypeRef(expr->resolvedType);
+    for (auto a : init->arguments) {
+      meta.args.push_back(buildDefaultValue(a.get()));
+    }
+  } else if (auto value = dynamic_cast<DefaultValueExpr *>(expr)) {
+    if (auto l = get_if<LiteralExpr *>(&value->resolved)) {
+      meta.kind = DefaultValueKind::Literal;
+      meta.literal = (*l)->resolvedLit;
+      meta.resolvedType = buildTypeRef((*l)->resolvedType);
+    } else if (auto i = get_if<CallExpr *>(&value->resolved)) {
+      if ((*i)->callType != CallExpr::CallType::INIT_CALL) {
+        Error::internal("illegal call kind");
+      }
+      meta.kind = DefaultValueKind::StructInit;
+      meta.type = buildTypeRef((*i)->resolvedType);
+      meta.resolvedType = buildTypeRef((*i)->resolvedType);
+      for (auto a : (*i)->arguments) {
+        meta.args.push_back(buildDefaultValue(a.get()));
+      }
+    } else {
+      Error::internal("unknown default value kind");
+    }
+  } else {
+    Error::internal("fail to get defaultValue");
+  }
+  return meta;
+}
+
+EnumVariantMeta MetaBuilder::buildVariant(const EnumVariantSymbol *symbol) {
+  EnumVariantMeta meta;
+  meta.name = symbol->name;
+  if (symbol->payloadType) {
+    meta.payload = buildTypeRef(symbol->payloadType);
+  }
+  return meta;
+}
+
+TypeRef MetaBuilder::buildTypeRef(TypeSymbol *symbol) {
+  TypeRef ref;
+  if (symbol == nullptr) {
+    Error::internal("typeSymbol is nullptr");
+  }
+  switch (symbol->kind) {
+
+  case TypeSymbol::TypeKind::CLASS:
+  case TypeSymbol::TypeKind::ENUM:
+  case TypeSymbol::TypeKind::STRUCT:
+  case TypeSymbol::TypeKind::TRAIT: {
+    ref.name = symbol->name;
+    ref.kind = TypeRefKind::Declared;
+    ref.path = symbol->path;
+    break;
+  }
+
+  case TypeSymbol::TypeKind::VOID: {
+    ref.kind = TypeRefKind::BuiltIn;
+    ref.builtIn = BuiltInType::VOID;
+    break;
+  }
+
+  case TypeSymbol::TypeKind::PRIMITIVE:
+  case TypeSymbol::TypeKind::BUILTIN: {
+    ref.kind = TypeRefKind::BuiltIn;
+    auto built = dynamic_cast<PrimtiveType *>(symbol);
+    if (built == nullptr) {
+      Error::internal("illegal type : " + symbol->name);
+    }
+    ref.builtIn = built->builtinType;
+    break;
+  }
+  case TypeSymbol::TypeKind::ARRAY: {
+    ref.kind = TypeRefKind::Array;
+    auto arr = dynamic_cast<ArrayTypeSymbol *>(symbol);
+    ref.arraySize = arr->sizeValue;
+    ref.args.push_back(buildTypeRef(arr->baseType));
+    break;
+  }
+
+  case TypeSymbol::TypeKind::GENERIC: {
+    ref.name = symbol->name;
+    ref.kind = TypeRefKind::Generic;
+    ref.path = symbol->path;
+    auto gen = dynamic_cast<GenericSymbol *>(symbol);
+    ref.args.push_back(buildTypeRef(gen->origin));
+    for (auto a : gen->args) {
+      ref.args.push_back(buildTypeRef(a));
+    }
+    break;
+  }
+
+  default: {
+    Error::internal("unknwon type kind : " + symbol->name);
+  }
+  }
+
+  return ref;
+}

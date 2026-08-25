@@ -1,13 +1,13 @@
 #pragma once
 
-#include "SymbolTable.h"
 #include "hrd/AST/Decl.h"
 #include "hrd/AST/Stmt.h"
 #include "hrd/AST/Visitor.h"
 #include "hrd/Recover/BuilderRecover.h"
+#include "hrd/SemanticAnalyzer/SymbolTable/SymbolTable.h"
 #include "hrd/SourceSpan.h"
 #include "hrd/compiler/CompilerContexts.h"
-#include "hrd/util/diagnostic/DiagnosticEngine.h"
+#include "hrd/diagnostic/DiagnosticEngine.h"
 #include <cassert>
 #include <memory>
 
@@ -23,8 +23,8 @@ public:
 #include "../AST/ASTNodeList.def"
 #undef AST_NODE
 
-  inline void linkRoot() {
-    if (!table.main) {
+  inline void linkRoot(bool isCompile) {
+    if (table.main == nullptr && !isCompile) {
       auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S122);
       dia.labels = {
           {SourceSpan(), "main declaration was not found", true},
@@ -35,8 +35,6 @@ public:
       engine.emit(dia);
       recover.recover();
     }
-
-    table.main->rootScope = std::move(rootScope);
   }
 
 private:

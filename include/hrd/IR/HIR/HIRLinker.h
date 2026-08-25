@@ -4,7 +4,7 @@
 #include "hrd/AST/Program.h"
 #include "hrd/IR/HIR/HIRDecl.h"
 #include "hrd/IR/HIR/HIRProgram.h"
-#include "hrd/SemanticAnalyzer/SymbolTable.h"
+#include "hrd/SemanticAnalyzer/SymbolTable/SymbolTable.h"
 #include "hrd/SourceSpan.h"
 #include "hrd/compiler/CompilerContexts.h"
 #include <memory>

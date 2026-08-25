@@ -3,9 +3,11 @@
 #include "hrd/AST/ASTNode.h"
 #include "hrd/AST/DeclContext.h"
 #include "hrd/AST/Visitor.h"
+#include "hrd/Inputs.h"
 #include "hrd/SourceSpan.h"
 #include "hrd/Token.h"
 #include "hrd/enums/AccessModifier.h"
+#include "hrd/util/Error.h"
 #include <memory>
 #include <optional>
 #include <string>
@@ -16,6 +18,7 @@
 class TypeSymbol;
 class ValueSymbol;
 class EnumVariantSymbol;
+class ParamSymbol;
 class ImplSymbol;
 class MethodSymbol;
 class Expr;
@@ -37,7 +40,9 @@ public:
   Decl(NKind k, SourceSpan t, const string &n = "",
        AModifier modi = AModifier::PUBLIC)
       : ASTNode(k, t), name(n), aModifier(modi) {}
-  virtual void accept(ASTVisitor *visitor) override { visitor->visit(this); }
+  virtual void accept(ASTVisitor *) override {
+    Error::internal("use raw visitor");
+  }
   bool isExtended = false;
 };
 
@@ -101,7 +106,7 @@ public:
       : ASTNode(NKind::PARAM, t->span), name(n), type(std::move(t)),
         defaultValue(d) {}
   void accept(ASTVisitor *visitor) override { visitor->visit(this); }
-  ValueSymbol *symbol = nullptr;
+  ParamSymbol *symbol = nullptr;
 };
 
 // 함수 선언을 표현하는 AST 노드를 나타낸다.
@@ -152,28 +157,29 @@ public:
 // 필드, 메서드, 내부 선언 및 상속/트레이트 정보를 포함한다.
 // 단일 상속과 다중 trait 구현을 지원하며 TypeSymbol과 연결된다.
 
-struct Identifier {
+struct StringDatum {
   string str;
   SourceSpan span;
-  Identifier(const string &s, SourceSpan sp) : str(s), span(sp) {}
+  StringDatum(const string &s, SourceSpan sp) : str(s), span(sp) {}
 };
 
 class ClassDecl : public Decl {
 public:
   vector<shared_ptr<VarDecl>> fields;
   vector<shared_ptr<FuncDecl>> methods;
-  optional<Identifier> baseClass; // 단일 상속 (필요시 벡터로 변경)
-  vector<Identifier> traits;      // trait/interface 목록
+  optional<StringDatum> baseClass; // 단일 상속 (필요시 벡터로 변경)
+  vector<StringDatum> traits;      // trait/interface 목록
 
   ClassDecl(SourceSpan t, const string &n, vector<shared_ptr<VarDecl>> f,
-            vector<shared_ptr<FuncDecl>> m, optional<Identifier> base = nullopt,
-            vector<Identifier> tr = {}, AModifier modi = AModifier::PUBLIC)
+            vector<shared_ptr<FuncDecl>> m,
+            optional<StringDatum> base = nullopt, vector<StringDatum> tr = {},
+            AModifier modi = AModifier::PUBLIC)
       : Decl(NKind::CLASS_DECL, t, n, modi), fields(f), methods(m),
         baseClass(base), traits(std::move(tr)) {
     aModifier = modi;
   }
 
-  void setBaseClass(Identifier b) { baseClass = b; }
+  void setBaseClass(StringDatum b) { baseClass = b; }
   void accept(ASTVisitor *visitor) override { visitor->visit(this); }
   TypeSymbol *symbol = nullptr;
 };
@@ -211,12 +217,12 @@ public:
 // 실제 메서드 바인딩은 이후 단계에서 처리된다.
 class ImplDecl : public Decl {
 public:
-  Identifier target;
-  vector<Identifier> traits;
+  StringDatum target;
+  vector<StringDatum> traits;
   unordered_map<TypeSymbol *, SourceSpan> traitSpan;
   vector<shared_ptr<FuncDecl>> LinkedImplMethods;
 
-  ImplDecl(SourceSpan t, Identifier s, vector<Identifier> tr,
+  ImplDecl(SourceSpan t, StringDatum s, vector<StringDatum> tr,
            vector<shared_ptr<FuncDecl>> m, AModifier modi)
       : Decl(NKind::IMPL_DECL, t, "", modi), target(s), traits(std::move(tr)),
         LinkedImplMethods(std::move(m)) {}
@@ -224,6 +230,7 @@ public:
   void accept(ASTVisitor *visitor) override { visitor->visit(this); }
 
   vector<MethodSymbol *> sigs;
+  TypeSymbol *importTarget = nullptr;
 };
 
 // trait 선언을 표현하는 AST 노드를 나타낸다.
@@ -272,4 +279,23 @@ public:
   OnDestroyDecl(SourceSpan t, StmtPtr b)
       : FuncDecl(t, "onDestroy", vector<shared_ptr<Param>>(), nullptr, b) {}
   void accept(ASTVisitor *visitor) override { visitor->visit(this); }
+};
+
+struct ImportedType {
+  StringDatum origin;
+  StringDatum alias;
+  bool usedAlias = false;
+};
+
+class ImportDecl : public Decl {
+public:
+  optional<StringDatum> module;
+  std::vector<StringDatum> path;
+  std::vector<ImportedType> types;
+  ImportDecl(SourceSpan s, optional<StringDatum> m, vector<StringDatum> p,
+             vector<ImportedType> t)
+      : Decl(NKind::IMPORT_DECL, s), module(m), path(std::move(p)),
+        types(std::move(t)) {}
+  void accept(ASTVisitor *visitor) override { visitor->visit(this); }
+  SourcePath sPath;
 };

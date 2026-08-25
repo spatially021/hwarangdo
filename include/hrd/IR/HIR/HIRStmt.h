@@ -3,9 +3,8 @@
 #include "hrd/IR/HIR/HIRNode.h"
 #include "hrd/IR/HIR/HIRPattern.h"
 #include "hrd/IR/HIR/HIRSymbol.h"
-#include "hrd/IR/HIR/HIRType.h"
-#include "hrd/SemanticAnalyzer/symbol/ValueSymbol.h"
 #include "hrd/SourceSpan.h"
+#include "hrd/enums/Operator.h"
 #include "hrd/enums/StorageKind.h"
 #include <memory>
 #include <unordered_map>
@@ -14,6 +13,7 @@
 
 struct HIRValueExpr;
 struct HIRPlaceExpr;
+class ValueSymbol;
 
 struct HIRStmt : HIRNode {
   explicit HIRStmt(SourceSpan s, HIRNodeKind k) : HIRNode(s, k) {}
@@ -113,8 +113,9 @@ struct HIRCase : HIRStmt {
       selectors; // literal or enum variant
   std::unique_ptr<HIRBlockStmt> body;
   HIRDefaultKind defaultKind = HIRDefaultKind::None;
-  HIRCase(SourceSpan s, vector<std::unique_ptr<HIRCasePattern>> sl,
-          unique_ptr<HIRBlockStmt> b, HIRDefaultKind d = HIRDefaultKind::None)
+  HIRCase(SourceSpan s, std::vector<std::unique_ptr<HIRCasePattern>> sl,
+          std::unique_ptr<HIRBlockStmt> b,
+          HIRDefaultKind d = HIRDefaultKind::None)
       : HIRStmt(s, HIRNodeKind::Case), selectors(std::move(sl)),
         body(std::move(b)), defaultKind(d) {}
 };
@@ -122,23 +123,23 @@ struct HIRCase : HIRStmt {
 struct HIRSwitchStmt : HIRStmt {
   std::unique_ptr<HIRValueExpr> cond;
   std::vector<std::unique_ptr<HIRCase>> cases;
-  HIRSwitchStmt(SourceSpan s, unique_ptr<HIRValueExpr> c,
-                vector<unique_ptr<HIRCase>> ca)
+  HIRSwitchStmt(SourceSpan s, std::unique_ptr<HIRValueExpr> c,
+                std::vector<std::unique_ptr<HIRCase>> ca)
       : HIRStmt(s, HIRNodeKind::SwitchStmt), cond(std::move(c)),
         cases(std::move(ca)) {}
 };
 
 struct HIRValueTransferStmt : HIRStmt {
-  unique_ptr<HIRValueExpr> value;
-  HIRValueTransferStmt(SourceSpan s, unique_ptr<HIRValueExpr> v)
+  std::unique_ptr<HIRValueExpr> value;
+  HIRValueTransferStmt(SourceSpan s, std::unique_ptr<HIRValueExpr> v)
       : HIRStmt(s, HIRNodeKind::ValueTransferStmt), value(std::move(v)) {}
 };
 
 struct HIRDestroyStmt : HIRStmt {
   StorageKind storage;
-  unique_ptr<HIRValueExpr> handle = nullptr;
-  HIREntityType *entity = nullptr;
-  HIRDestroyStmt(SourceSpan s, unique_ptr<HIRValueExpr> h, HIREntityType *e,
+  std::unique_ptr<HIRValueExpr> handle = nullptr;
+  TypeSymbol *entity = nullptr;
+  HIRDestroyStmt(SourceSpan s, std::unique_ptr<HIRValueExpr> h, TypeSymbol *e,
                  StorageKind sk)
       : HIRStmt(s, HIRNodeKind::DestroyStmt), storage(sk), handle(std::move(h)),
         entity(e) {}
@@ -149,22 +150,22 @@ struct HIRQuitStmt : HIRStmt {
 };
 
 struct HIRAssignStmt : HIRStmt {
-  unique_ptr<HIRPlaceExpr> lhs = nullptr;
-  unique_ptr<HIRValueExpr> rhs = nullptr;
+  std::unique_ptr<HIRPlaceExpr> lhs = nullptr;
+  std::unique_ptr<HIRValueExpr> rhs = nullptr;
 
-  HIRAssignStmt(SourceSpan s, unique_ptr<HIRPlaceExpr> l,
-                unique_ptr<HIRValueExpr> r)
+  HIRAssignStmt(SourceSpan s, std::unique_ptr<HIRPlaceExpr> l,
+                std::unique_ptr<HIRValueExpr> r)
       : HIRStmt(s, HIRNodeKind::AssignStmt), lhs(std::move(l)),
         rhs(std::move(r)) {}
 };
 
 struct HIRCompoundAssignStmt : HIRStmt {
-  unique_ptr<HIRPlaceExpr> lhs;
-  unique_ptr<HIRValueExpr> rhs;
+  std::unique_ptr<HIRPlaceExpr> lhs;
+  std::unique_ptr<HIRValueExpr> rhs;
   Operator op;
 
-  HIRCompoundAssignStmt(SourceSpan s, unique_ptr<HIRPlaceExpr> l,
-                        unique_ptr<HIRValueExpr> r, Operator o)
+  HIRCompoundAssignStmt(SourceSpan s, std::unique_ptr<HIRPlaceExpr> l,
+                        std::unique_ptr<HIRValueExpr> r, Operator o)
       : HIRStmt(s, HIRNodeKind::CompoundAssignStmt), lhs(std::move(l)),
         rhs(std::move(r)), op(o) {}
 };

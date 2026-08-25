@@ -2,15 +2,15 @@
 #include "hrd/AST/Decl.h"
 #include "hrd/AST/Expr.h"
 #include "hrd/AST/Stmt.h"
-#include "hrd/IR/HIR/HIRType.h"
 #include "hrd/SemanticAnalyzer/Scope.h"
-#include "hrd/SemanticAnalyzer/SymbolTable.h"
+#include "hrd/SemanticAnalyzer/SymbolTable/SymbolTable.h"
 #include "hrd/SemanticAnalyzer/symbol/MethodSymbol.h"
 #include "hrd/SemanticAnalyzer/symbol/TypeSymbol.h"
 #include "hrd/SemanticAnalyzer/symbol/ValueSymbol.h"
 #include "hrd/compiler/CompilerContexts.h"
 #include "hrd/util/Error.h"
 #include "hrd/util/Guard.h"
+#include "hrd/util/Helper.h"
 #include "hrd/util/TypeResolver.h"
 #include <cassert>
 #include <memory>
@@ -292,11 +292,8 @@ void Linker::visit(EnumDecl *decl) {
   }
 }
 void Linker::visit(ImplDecl *decl) {
-  auto implIt = table.implMap.find(decl);
-  if (implIt == table.implMap.end()) {
-    Error::internal(decl->span, "fail to find impl");
-  }
-  ScopeGuard _(table, implIt->second->memberScope);
+  auto impl = table.registry.getImpl(decl);
+  ScopeGuard _(table, impl->memberScope);
   auto s = decl->target;
 
   if (!table.isType(s.str)) {
@@ -317,6 +314,7 @@ void Linker::visit(ImplDecl *decl) {
     engine.emit(dia);
     recover.recover();
   }
+  decl->importTarget = symbol;
 
   for (auto &c : decl->traits) {
     auto t = table.getType(c.str);
@@ -352,7 +350,6 @@ void Linker::visit(ImplDecl *decl) {
 
   TypeContextGuard __(currentType, symbol);
 
-  ImplSymbol *impl = implIt->second;
   impl->target = symbol;
   if (impl->target == nullptr) {
     Error::internal(decl->span, "impl target is nullptr");
@@ -434,7 +431,7 @@ void Linker::visit(FuncDecl *decl) {
   selfReceiver->name = decl->name + "self";
   auto rawSelf = selfReceiver.get();
 
-  table.selfSymbols.push_back(std::move(selfReceiver));
+  table.registry.addSelf(std::move(selfReceiver));
   raw->selfReceiver = rawSelf;
 
   decl->body->accept(this);
@@ -464,6 +461,17 @@ void Linker::visit(TraitSig *sig) {
 void Linker::visit(Param *param) {
   param->type->accept(this);
   param->symbol->typeSymbol = param->type->resolved;
+  if (param->defaultValue.has_value()) {
+    auto expr = param->defaultValue.value().get();
+
+    if (auto lit = dynamic_cast<LiteralExpr *>(expr)) {
+      param->symbol->defaultValue = lit;
+    } else if (auto call = dynamic_cast<CallExpr *>(expr)) {
+      param->symbol->defaultValue = call;
+    } else {
+      Error::internal(param->span, "illegal defaultValue ast kind");
+    }
+  }
 }
 
 void Linker::visit(InitDecl *decl) {
@@ -481,3 +489,5 @@ void Linker::visit(OnDestroyDecl *decl) {
   ScopeGuard _(table, decl->methodSymbol->scope);
   decl->body->accept(this);
 }
+
+void Linker::visit(ImportDecl *) {}

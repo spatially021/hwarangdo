@@ -8,6 +8,7 @@
 #include "hrd/SemanticAnalyzer/symbol/ValueSymbol.h"
 #include "hrd/SourceSpan.h"
 #include "hrd/util/Error.h"
+#include "hrd/util/Helper.h"
 #include <cstddef>
 #include <string>
 #include <variant>
@@ -25,10 +26,7 @@ Resolver::resolveMethodOverload(SourceSpan span,
       span, bucket, args, [](MethodSymbol *m) { return m->params.size(); },
       [](MethodSymbol *m, size_t i) { return m->params[i]->typeSymbol; },
       [](MethodSymbol *m, size_t i) {
-        auto *func = dynamic_cast<FuncDecl *>(m->decl);
-        if (!func)
-          Error::internal("illegal ast kind");
-        return func->params[i]->defaultValue.has_value();
+        return get_if<std::monostate>(&m->params[i]->defaultValue) == nullptr;
       },
       "no matching method found", "ambiguous method call");
 }
@@ -220,7 +218,12 @@ void Resolver::resolveInit(CallExpr *expr) {
   }
 
   auto *best = resolveMethodOverload(expr->span, bucket, args);
-
+  for (size_t i = 0; i < best->params.size(); ++i) {
+    if (auto value =
+            dynamic_cast<DefaultValueExpr *>(expr->arguments[i].get())) {
+      value->resolved = best->params[i]->defaultValue;
+    }
+  }
   expr->resolved = best;
   expr->resolvedType = type;
 }
@@ -322,6 +325,13 @@ void Resolver::resolveCall(CallExpr *expr, Scope *scope, bool isImplict) {
     Error::internal(expr->span, "methodSymbol's returnType is nullptr");
   }
 
+  for (size_t i = 0; i < best->params.size(); ++i) {
+    if (auto value =
+            dynamic_cast<DefaultValueExpr *>(expr->arguments[i].get())) {
+      value->resolved = best->params[i]->defaultValue;
+    }
+  }
+
   expr->resolvedType = best->returnType;
 }
 
@@ -376,7 +386,7 @@ ArgMatchKind Resolver::matchArgument(Expr *arg, TypeSymbol *param,
     }
 
   } else {
-    if (canImplicitlyConvert(arg->resolvedType, param).first) {
+    if (Helper::canImplicitlyConvert(arg->resolvedType, param).first) {
       return ArgMatchKind::ImplicitCast;
     }
   }
@@ -393,13 +403,12 @@ bool Resolver::tryResolveRuntime(CallExpr *expr) {
     return false;
   }
 
-  auto ns = table.runtimeMap.find(name->name);
-  if (ns == table.runtimeMap.end()) {
+  auto ns = table.registry.getRuntime(name->name);
+  if (!ns.has_value()) {
     return false;
   }
-
-  auto it = ns->second.functions.find(expr->methodName);
-  if (it == ns->second.functions.end()) {
+  auto it = ns.value().functions.find(expr->methodName);
+  if (it == ns.value().functions.end()) {
     auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S026);
     dia.labels = {
         {expr->span, "unknown runtime method called here", true},
@@ -494,7 +503,7 @@ void Resolver::visit(CallExpr *expr) {
     }
 
     if (auto g = dynamic_cast<GenericSymbol *>(ownerType)) {
-      if (g->origin == table.getHandle()) {
+      if (g->origin == table.registry.getHandle()) {
         auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S030);
         dia.labels = {
             {expr->span, "cannot access member of handle type", true},

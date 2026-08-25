@@ -1,5 +1,5 @@
-#include "hrd/util/diagnostic/DiagnosticEngine.h"
-#include "hrd/util/diagnostic/Diagnostic.h"
+#include "hrd/diagnostic/DiagnosticEngine.h"
+#include "hrd/diagnostic/Diagnostic.h"
 
 #include <utility>
 

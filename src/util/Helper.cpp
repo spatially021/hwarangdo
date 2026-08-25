@@ -1,6 +1,7 @@
 #include "hrd/util/Helper.h"
 #include "hrd/AST/ASTNode.h"
-#include "hrd/SemanticAnalyzer/SymbolTable.h"
+#include "hrd/AST/Decl.h"
+#include "hrd/SemanticAnalyzer/SymbolTable/SymbolTable.h"
 #include "hrd/SemanticAnalyzer/symbol/MethodSymbol.h"
 #include "hrd/SemanticAnalyzer/symbol/TypeSymbol.h"
 #include "hrd/SourceSpan.h"
@@ -147,7 +148,7 @@ void TypeResolver::resolveTypeNode(TypeNode *type, TypeResolverContext &ctx) {
     llvm::APInt size = resolveFixedArraySize(array->fixedSize.get(), ctx);
 
     array->resolved =
-        ctx.table.arrayTypeGetOrCreate(array->elementType->resolved, size);
+        ctx.table.registry.getOrCreateArray(array->elementType->resolved, size);
 
     if (array->resolved == nullptr) {
       Error::internal(array->span, "failed to create array type");
@@ -215,7 +216,7 @@ void TypeResolver::resolveTypeNode(TypeNode *type, TypeResolverContext &ctx) {
         ctx.recover.recover();
       }
 
-      origin = ctx.table.getHandle();
+      origin = ctx.table.registry.getHandle();
       break;
     }
 
@@ -236,7 +237,7 @@ void TypeResolver::resolveTypeNode(TypeNode *type, TypeResolverContext &ctx) {
         ctx.recover.recover();
       }
 
-      origin = ctx.table.getOption();
+      origin = ctx.table.registry.getOption();
       break;
     }
 
@@ -273,7 +274,7 @@ void TypeResolver::resolveTypeNode(TypeNode *type, TypeResolverContext &ctx) {
         ctx.recover.recover();
       }
 
-      origin = ctx.table.getResult();
+      origin = ctx.table.registry.getResult();
       break;
     }
     }
@@ -282,7 +283,7 @@ void TypeResolver::resolveTypeNode(TypeNode *type, TypeResolverContext &ctx) {
       Error::internal(generic->span, "generic origin type is nullptr");
     }
 
-    generic->resolved = ctx.table.GenericInsGetOrCreate(origin, args);
+    generic->resolved = ctx.table.registry.getOrCreateGeneric(origin, args);
 
     if (generic->resolved == nullptr) {
       Error::internal(generic->span, "failed to create generic type instance");
@@ -514,4 +515,74 @@ bool Helper::hasMethodInHierarchyWithSameSig(TypeSymbol *type,
   }
 
   return false;
+}
+
+pair<bool, CastingResultKind> Helper::canImplicitlyConvert(TypeSymbol *from,
+                                                           TypeSymbol *to) {
+  if (!from) {
+    Error::internal("source type is nullptr");
+  }
+
+  if (!to) {
+    Error::internal("target type is nullptr");
+  }
+
+  for (auto *type = from; type != nullptr; type = type->base) {
+    if (type == to) {
+      return {true, CastingResultKind::None};
+    }
+  }
+
+  if (from->kind != TypeSymbol::TypeKind::PRIMITIVE ||
+      to->kind != TypeSymbol::TypeKind::PRIMITIVE) {
+    return {false, CastingResultKind::Unmatched};
+  }
+
+  auto *source = static_cast<PrimtiveType *>(from);
+  auto *target = static_cast<PrimtiveType *>(to);
+
+  if (isa<IntType>(source) && isa<IntType>(target)) {
+    auto *sourceInt = static_cast<IntType *>(source);
+    auto *targetInt = static_cast<IntType *>(target);
+
+    if (sourceInt->isSigned == targetInt->isSigned) {
+      return {targetInt->bitWidth >= sourceInt->bitWidth,
+              CastingResultKind::Overflow};
+    }
+
+    if (sourceInt->isSigned && !targetInt->isSigned) {
+      return {false, CastingResultKind::SignToUnsign};
+    }
+
+    if (!sourceInt->isSigned && targetInt->isSigned) {
+      return {targetInt->bitWidth >= sourceInt->bitWidth,
+              CastingResultKind::Overflow};
+    }
+
+    return {targetInt->bitWidth >= sourceInt->bitWidth,
+            CastingResultKind::Overflow};
+  }
+
+  if (isa<FloatType>(source) && isa<FloatType>(target)) {
+    return {static_cast<FloatType *>(target)->bitWidth >=
+                static_cast<FloatType *>(source)->bitWidth,
+            CastingResultKind::Overflow};
+  }
+
+  if (isa<IntType>(source) && isa<FloatType>(target)) {
+    auto *sourceInt = static_cast<IntType *>(source);
+    auto *targetFloat = static_cast<FloatType *>(target);
+
+    if (sourceInt->bitWidth == targetFloat->bitWidth) {
+      return {true, CastingResultKind::PrecisionLoss};
+    }
+
+    if (sourceInt->bitWidth <= targetFloat->precious) {
+      return {true, CastingResultKind::None};
+    }
+
+    return {false, CastingResultKind::Overflow};
+  }
+
+  return {false, CastingResultKind::Unmatched};
 }

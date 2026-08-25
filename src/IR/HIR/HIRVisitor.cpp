@@ -3,17 +3,14 @@
 #include "hrd/AST/Stmt.h"
 #include "hrd/IR/HIR/HIRBuilder.h"
 #include "hrd/IR/HIR/HIRExpr.h"
-#include "hrd/IR/HIR/HIRHelper.h"
 #include "hrd/IR/HIR/HIRProgram.h"
 #include "hrd/IR/HIR/HIRStmt.h"
 #include "hrd/IR/HIR/HIRSymbol.h"
-#include "hrd/IR/HIR/HIRType.h"
-#include "hrd/SemanticAnalyzer/SymbolTable.h"
 #include "hrd/SemanticAnalyzer/symbol/Symbol.h"
 #include "hrd/SemanticAnalyzer/symbol/TypeSymbol.h"
+#include "hrd/diagnostic/Diagnostic.h"
 #include "hrd/util/Error.h"
 #include "hrd/util/Guard.h"
-#include "hrd/util/diagnostic/Diagnostic.h"
 #include <memory>
 #include <utility>
 #include <variant>
@@ -25,7 +22,7 @@ void HIRBuilder::visit(LiteralExpr *expr) { exprResult = lowerLiteral(expr); }
 void HIRBuilder::visit(BinaryExpr *expr) {
   auto left = lowerValue(expr->left.get());
   auto right = lowerValue(expr->right.get());
-  auto type = HIRHelper::lowerType(program, source, expr->resolvedType);
+  auto type = expr->resolvedType;
 
   if (left == nullptr) {
     Error::internal(expr->left->span, "binary left lowering returned nullptr");
@@ -84,7 +81,7 @@ void HIRBuilder::visit(UnaryExpr *expr) {
                     "unary operand lowering returned nullptr");
   }
 
-  auto *type = HIRHelper::lowerType(program, source, expr->resolvedType);
+  auto *type = expr->resolvedType;
   if (type == nullptr) {
     Error::internal(expr->span, "failed to lower unary result type");
   }
@@ -206,11 +203,7 @@ void HIRBuilder::visit(SuperExpr *expr) {
 void HIRBuilder::visit(SelfExpr *) { exprResult = lowerImplictSelf(); }
 
 void HIRBuilder::visit(RootExpr *expr) {
-  if (program->rootType == nullptr) {
-    Error::internal(expr->span, "program root type is nullptr");
-  }
-
-  exprResult = make_unique<HIRRootExpr>(expr->span, program->rootType);
+  exprResult = make_unique<HIRRootExpr>(expr->span, expr->resolvedType);
 }
 
 void HIRBuilder::visit(CastExpr *expr) { exprResult = lowerCast(expr); }
@@ -373,7 +366,7 @@ void HIRBuilder::visit(EnumDecl *) {
 }
 
 void HIRBuilder::visit(ImplDecl *decl) {
-  auto *typeSymbol = table.getType(decl->target.str);
+  auto *typeSymbol = decl->importTarget;
 
   if (typeSymbol == nullptr) {
     Error::internal(decl->span, "failed to find impl target symbol");
@@ -400,12 +393,6 @@ void HIRBuilder::visit(FuncDecl *decl) { bindMethod(decl); }
 
 void HIRBuilder::visit(VarDecl *decl) {
   if (decl->isRoot) {
-    auto it = program->rootMap.find(decl->symbol);
-
-    if (it == program->rootMap.end() || it->second == nullptr) {
-      Error::internal(decl->span, "failed to find linked root: " + decl->name);
-    }
-
     return;
   }
 
@@ -414,13 +401,7 @@ void HIRBuilder::visit(VarDecl *decl) {
       Error::internal(decl->span, "field declaration has no current HIR type");
     }
 
-    auto it = currentType->fieldMap.find(decl->symbol);
-
-    if (it == currentType->fieldMap.end() || it->second == nullptr) {
-      Error::internal(decl->span, "failed to find linked HIR field");
-    }
-
-    auto *field = it->second;
+    auto *field = decl->symbol;
 
     if (decl->init) {
       currentType->defaultInit.emplace(field, decl->init.get());
@@ -437,10 +418,6 @@ void HIRBuilder::visit(VarDecl *decl) {
 
   if (local->type == nullptr) {
     Error::internal(decl->span, "local HIR type is nullptr");
-  }
-
-  if (local->type->typeSymbol == nullptr) {
-    Error::internal(decl->span, "local type symbol is nullptr");
   }
 
   unique_ptr<HIRValueExpr> init = nullptr;
@@ -468,3 +445,4 @@ void HIRBuilder::visit(ASTNode *node) {
 }
 
 void HIRBuilder::visit(Param *) {}
+void HIRBuilder::visit(ImportDecl *) {}

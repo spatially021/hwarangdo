@@ -72,6 +72,7 @@ enum class NKind {
   VAR_DECL,
   ARRAY_DECL,
   INIT_DECL,
+  IMPORT_DECL,
 
   // Types
   TYPE_NODE,
@@ -92,7 +93,7 @@ enum class NKind {
 };
 class ASTVisitor;
 class Expr;
-using ExprPtr = shared_ptr<Expr>;
+using ExprPtr = std::shared_ptr<Expr>;
 
 // AST의 모든 노드가 공통으로 상속하는 기반 클래스를 나타낸다.
 // 노드 종류와 토큰 정보를 보유하며 visitor 패턴을 통한 순회를 지원한다.
@@ -121,6 +122,7 @@ public:
   void accept(ASTVisitor *visitor) override { visitor->visit(this); }
   TypeSymbol *resolved = nullptr;
   bool setSize = false;
+  bool onlySize = false;
 };
 // 내장 타입을 표현하는 AST 노드를 나타낸다.
 // 카테고리와 크기 정보를 기반으로 구체적인 BuiltInType을 결정한다.
@@ -141,6 +143,75 @@ public:
   BuiltInType type = {};
 
   bool isSigned = true;
+
+  BuiltinTypeNode(Token t) : TypeNode(NKind::BUILT_IN_TYPE, t) {
+    auto size = t.text;
+    onlySize = true;
+    setSize = true;
+    if (size == "i8") {
+      category = Category::Int;
+      type = BuiltInType::I8;
+    } else if (size == "i16") {
+      category = Category::Int;
+      type = BuiltInType::I16;
+    } else if (size == "i32") {
+      category = Category::Int;
+      type = BuiltInType::I32;
+    } else if (size == "i64") {
+      category = Category::Int;
+      type = BuiltInType::I64;
+    } else if (size == "i128") {
+      category = Category::Int;
+      type = BuiltInType::I128;
+    } else if (size == "f16") {
+      category = Category::Float;
+      type = BuiltInType::F16;
+    } else if (size == "f32") {
+      category = Category::Float;
+      type = BuiltInType::F32;
+    } else if (size == "f64") {
+      category = Category::Float;
+      type = BuiltInType::F64;
+    } else if (size == "f128") {
+      category = Category::Float;
+      type = BuiltInType::F128;
+    } else if (size == "u8") {
+      category = Category::Int;
+      type = BuiltInType::U8;
+    } else if (size == "u16") {
+      category = Category::Int;
+      type = BuiltInType::U16;
+    } else if (size == "u32") {
+      category = Category::Int;
+      type = BuiltInType::U32;
+    } else if (size == "u64") {
+      category = Category::Int;
+      type = BuiltInType::U64;
+    } else if (size == "u128") {
+      category = Category::Int;
+      type = BuiltInType::U128;
+    } else if (size == "c8") {
+      category = Category::CHAR;
+      type = BuiltInType::C8;
+    } else if (size == "c16") {
+      category = Category::CHAR;
+      type = BuiltInType::C16;
+    } else if (size == "c32") {
+      category = Category::CHAR;
+      type = BuiltInType::C32;
+    } else if (size == "s8") {
+      category = Category::STRING;
+      type = BuiltInType::S8;
+    } else if (size == "s16") {
+      category = Category::STRING;
+      type = BuiltInType::S16;
+    } else if (size == "s32") {
+      category = Category::STRING;
+      type = BuiltInType::S32;
+    } else {
+      Error::internal(t.span, "unknown size");
+    }
+  }
 
   BuiltinTypeNode(Token t, Category c, Token s = {})
       : TypeNode(NKind::BUILT_IN_TYPE, t), category(c) {

@@ -66,14 +66,6 @@ void llvmCodegen::lowerCleanup(MIRCleanupStmt *stmt, FuncContext &ctx) {
     }
     auto *destroy = i->second;
     builder.CreateCall(destroy, {slot});
-
-    // if (isString(sym->typeSymbol)) {
-    //   auto *destroy = defaultDestroys.at(sym->typeSymbol);
-    //   builder.CreateCall(destroy, {slot});
-    // } else if (sym->typeSymbol->kind == TypeSymbol::TypeKind::STRUCT) {
-    //   auto *fieldDestroy = defaultDestroys.at(sym->typeSymbol);
-    //   builder.CreateCall(fieldDestroy, {slot});
-    // }
   }
 }
 

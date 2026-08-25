@@ -3,7 +3,6 @@
 #include "hrd/IR/HIR/HIRBuilder.h"
 #include "hrd/IR/HIR/HIRDecl.h"
 #include "hrd/IR/HIR/HIRExpr.h"
-#include "hrd/IR/HIR/HIRHelper.h"
 #include "hrd/IR/HIR/HIRPattern.h"
 #include "hrd/IR/HIR/HIRStmt.h"
 #include "hrd/IR/HIR/HIRSymbol.h"
@@ -258,14 +257,11 @@ unique_ptr<HIRCasePattern> HIRBuilder::lowerCaseValue(CaseValueExpr *expr) {
                       "failed to find enum HIR type declaration");
     }
 
-    auto variantIt = program->variantMap.find(expr->variant);
-
-    if (variantIt == program->variantMap.end() ||
-        variantIt->second == nullptr) {
-      Error::internal(expr->value->span, "failed to find HIR enum variant");
+    if (expr->variant == nullptr) {
+      Error::internal("expect variant but nullptr");
     }
 
-    HIRUnitCase unit{variantIt->second};
+    HIRUnitCase unit{expr->variant};
 
     return make_unique<HIRCasePattern>(expr->span, unit);
   }
@@ -291,15 +287,10 @@ unique_ptr<HIRCasePattern> HIRBuilder::lowerCaseValue(CaseValueExpr *expr) {
     if (typeIt->second->typeDeclKind != HIRTypeDeclKind::Enum) {
       Error::internal(expr->span, "enum case receiver is not enum type");
     }
-
-    auto variantIt = program->variantMap.find(expr->variant);
-
-    if (variantIt == program->variantMap.end() ||
-        variantIt->second == nullptr) {
-      Error::internal(expr->span, "failed to find HIR enum variant");
+    if (expr->variant == nullptr) {
+      Error::internal("expect variant but nullptr");
     }
-
-    HIRUnitCase unit{variantIt->second};
+    HIRUnitCase unit{expr->variant};
 
     return make_unique<HIRCasePattern>(expr->span, unit);
   }
@@ -311,11 +302,9 @@ unique_ptr<HIRCasePattern> HIRBuilder::lowerCaseValue(CaseValueExpr *expr) {
 
     local->id = allocLocalID();
     local->isInitialized = true;
-    local->isMutable = false;
     local->name = expr->payload->name;
     local->symbol = expr->payload;
-    local->type =
-        HIRHelper::lowerType(program, source, expr->payload->typeSymbol);
+    local->type = expr->payload->typeSymbol;
     local->isCaseValue = true;
 
     if (local->type == nullptr) {
@@ -333,19 +322,15 @@ unique_ptr<HIRCasePattern> HIRBuilder::lowerCaseValue(CaseValueExpr *expr) {
       Error::internal(expr->value->span,
                       "failed to find enum HIR type declaration");
     }
-
-    auto variantIt = program->variantMap.find(expr->variant);
-
-    if (variantIt == program->variantMap.end() ||
-        variantIt->second == nullptr) {
-      Error::internal(expr->value->span, "failed to find HIR enum variant");
+    if (expr->variant == nullptr) {
+      Error::internal("expect variant but nullptr");
     }
 
     if (binding == nullptr) {
       Error::internal(expr->span, "payload case binding local is nullptr");
     }
 
-    HIRPayloadCase payload{variantIt->second, binding};
+    HIRPayloadCase payload{expr->variant, binding};
 
     return make_unique<HIRCasePattern>(expr->span, payload);
   }
@@ -532,22 +517,6 @@ unique_ptr<HIRStmt> HIRBuilder::lowerDestroyStmt(DestroyExpr *expr) {
                     "destroy target lowering returned nullptr");
   }
 
-  auto *handleType = dynamic_cast<HIRHandleType *>(place->type);
-
-  if (handleType == nullptr) {
-    Error::internal(expr->target->span,
-                    "destroy target did not lower to Handle place");
-  }
-
-  if (handleType->storage != storageKind) {
-    Error::internal(expr->target->span, "destroy handle storage kind mismatch");
-  }
-
-  if (handleType->entityType == nullptr) {
-    Error::internal(expr->target->span,
-                    "destroy handle entity type is nullptr");
-  }
-
   auto handle = load(std::move(place));
 
   if (handle == nullptr) {
@@ -555,7 +524,7 @@ unique_ptr<HIRStmt> HIRBuilder::lowerDestroyStmt(DestroyExpr *expr) {
   }
 
   return make_unique<HIRDestroyStmt>(expr->span, std::move(handle),
-                                     handleType->entityType, storageKind);
+                                     expr->resolvedType, storageKind);
 }
 
 unique_ptr<HIRStmt> HIRBuilder::lowerQuitStmt(QuitExpr *expr) {
@@ -603,7 +572,7 @@ unique_ptr<HIRStmt> HIRBuilder::lowerAssign(AssignExpr *expr) {
       Error::internal(expr->target->span, "assignment local is nullptr");
     }
 
-    if (!local->local->isMutable) {
+    if (local->local->symbol->isConst) {
       if (local->local->isCaseValue) {
         auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_H011);
         dia.labels = {
@@ -640,7 +609,7 @@ unique_ptr<HIRStmt> HIRBuilder::lowerAssign(AssignExpr *expr) {
       Error::internal(expr->target->span, "assignment field is nullptr");
     }
 
-    if (!field->field->isMutable) {
+    if (field->field->isConst) {
       auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_H012);
       dia.labels = {
           {expr->target->span, "this field is immutable", true},

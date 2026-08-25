@@ -1,61 +1,27 @@
 #pragma once
 
-#include "SymbolTable.h"
 #include "hrd/AST/ASTNode.h"
 #include "hrd/AST/Expr.h"
 #include "hrd/AST/Visitor.h"
 #include "hrd/Recover/ResolverRecover.h"
 #include "hrd/SemanticAnalyzer/ResolvedLit.h"
 #include "hrd/SemanticAnalyzer/Scope.h"
+#include "hrd/SemanticAnalyzer/SymbolTable/SymbolTable.h"
 #include "hrd/SemanticAnalyzer/symbol/MethodSymbol.h"
 #include "hrd/SemanticAnalyzer/symbol/Symbol.h"
 #include "hrd/SemanticAnalyzer/symbol/TypeSymbol.h"
 #include "hrd/SemanticAnalyzer/symbol/ValueSymbol.h"
 #include "hrd/SourceSpan.h"
 #include "hrd/compiler/CompilerContexts.h"
+#include "hrd/diagnostic/DiagnosticEngine.h"
+#include "hrd/enums/Argument.h"
+#include "hrd/enums/Casting.h"
 #include "hrd/util/Error.h"
 #include "hrd/util/TypeResolver.h"
-#include "hrd/util/diagnostic/DiagnosticEngine.h"
 #include <cassert>
 #include <cstddef>
 
 class SymbolTable;
-
-enum class CastingResultKind {
-  None,
-  // 값 범위 문제
-  Overflow,  // 값 범위 초과
-  Underflow, // 음수 overflow / 너무 작은 값 (선택)
-
-  // 부호 문제
-  SignToUnsign,       // signed -> unsigned 위험
-  NegativeToUnsigned, // 음수를 unsigned로 변환 시도
-
-  // 정밀도 문제
-  PrecisionLoss, // float 축소 / int->float 정확도 손실
-  FractionLoss,  // float -> int 시 소수부 손실
-
-  // 타입 계열 문제
-  Unmatched,       // 완전히 무관한 타입
-  InvalidCategory, // numeric <-> string 같은 계열 자체 불가
-
-  // 언어 정책 문제
-  ExplicitRequired, // 명시적 cast 필요
-  Narrowing,        // 안전하지 않은 축소 변환
-
-  // 특수값
-  NaN,
-  Infinity,
-
-  // 내부 처리용
-  NotImplemented,
-};
-enum class ArgMatchKind {
-  Exact,        // 타입 완전 일치
-  DefaultArg,   // 호출 인자가 '_' 이고 해당 파라미터에 기본값 존재
-  ImplicitCast, // 안전한 암묵 형변환 가능
-  Invalid       // 매칭 불가
-};
 
 class Resolver : public ASTVisitor {
   using str = string const &;
@@ -112,8 +78,8 @@ private:
   vector<TypeSymbol *> getPromotionCandidates(TypeSymbol *left,
                                               TypeSymbol *right);
 
-  pair<bool, CastingResultKind> canImplicitlyConvert(TypeSymbol *from,
-                                                     TypeSymbol *to);
+  // pair<bool, CastingResultKind> canImplicitlyConvert(TypeSymbol *from,
+  //                                                    TypeSymbol *to);
   pair<bool, CastingResultKind> canImplicitlyLiteralConvert(LiteralExpr *from,
                                                             TypeSymbol *to);
   pair<TypeSymbol *, CastingResultKind> implicitCasting(Expr *from,
@@ -206,8 +172,8 @@ private:
 
   inline bool isLit(Expr::Ptr expr) {
     auto t = expr->resolvedType;
-    return table.isInt(t) || table.isFloat(t) || table.isBool(t) ||
-           table.isFixed(t) || table.isString(t) || table.isChar(t);
+    return isa<IntType>(t) || isa<FloatType>(t) || isa<BoolType>(t) ||
+           isa<StringType>(t) || isa<CharType>(t);
   }
 
   ValueSymbol *lookupEnumVariant(TypeSymbol *enumType, const string &name,

@@ -5,19 +5,14 @@
 #include "hrd/IR/HIR/HIRProgram.h"
 #include "hrd/IR/HIR/HIRStmt.h"
 #include "hrd/IR/HIR/HIRSymbol.h"
+#include "hrd/IR/HIR/VerifierStructs.h"
 #include "hrd/Recover/HIRVerifierRecover.h"
 #include "hrd/compiler/CompilerContexts.h"
+#include "hrd/diagnostic/DiagnosticEngine.h"
 #include "hrd/enums/InheritState.h"
-#include "hrd/util/diagnostic/DiagnosticEngine.h"
+
 #include <magic_enum/magic_enum.hpp>
 #include <string>
-
-struct InitMap {
-  std::unordered_map<HIRLocal *, InitState> localStates;
-  std::unordered_map<HIRField *, InitState> fieldStates;
-  std::unordered_map<HIRField *, InitState> rootStates;
-  std::unordered_map<HIRParam *, InitState> paramStates;
-};
 
 template <typename T> T *expect(HIRNode *node, HIRNodeKind expected) {
   if (node == nullptr) {
@@ -43,7 +38,6 @@ template <typename T> T *expect(HIRNode *node, HIRNodeKind expected) {
 class HIRVerifier {
 
 private:
-  InitMap initmap;
   unordered_map<HIRTypeDecl *, InheritState> inheritStates;
 
 public:
@@ -53,22 +47,14 @@ public:
   HIRVerifier(HIRVerifierContext &context);
   void verify();
   void verifyType(HIRTypeDecl *type);
-  void linkField(HIRField *field);
-  void verifyMethod(HIRMethodDecl *method);
+  void verifyMethod(HIRMethodDecl *method, HIRTypeDecl *type);
   void verifyParam(HIRParam *param);
   void verifyLocal(HIRLocal *local);
   void verifyBlock(HIRBlockStmt *stmt);
   void verifyStmt(HIRStmt *stmt);
   void verifyExpr(HIRExpr *expr, bool isRead = true);
   void verifyIf(HIRIfStmt *stmt);
-  void verifyField(HIRField *field);
-  void verifyRoot(HIRField *root);
-  void verifyVariant(HIREnumVariant *variant);
   void verifyCasePattern(HIRCasePattern *pattern);
-
-  void checkInitialize(HIRPlaceExpr *place);
-  void initialize(HIRPlaceExpr *place);
-  InitState &getInitState(HIRPlaceExpr *place);
 
   bool definitelyReturns(HIRStmt *stmt);
 };

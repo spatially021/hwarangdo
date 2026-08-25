@@ -4,12 +4,11 @@
 #include "hrd/IR/HIR/HIRBuilder.h"
 #include "hrd/IR/HIR/HIRDecl.h"
 #include "hrd/IR/HIR/HIRExpr.h"
-#include "hrd/IR/HIR/HIRHelper.h"
 #include "hrd/IR/HIR/HIRProgram.h"
 #include "hrd/IR/HIR/HIRStmt.h"
 #include "hrd/IR/HIR/HIRSymbol.h"
-#include "hrd/IR/HIR/HIRType.h"
 #include "hrd/SemanticAnalyzer/symbol/MethodSymbol.h"
+#include "hrd/SemanticAnalyzer/symbol/TypeSymbol.h"
 #include "hrd/SemanticAnalyzer/symbol/ValueSymbol.h"
 #include "hrd/SourceSpan.h"
 #include "hrd/util/Error.h"
@@ -24,27 +23,12 @@ unique_ptr<HIRSelfExpr> HIRBuilder::lowerImplictSelf() {
 
   auto type = currentType->type;
   SourceSpan span;
-  return make_unique<HIRSelfExpr>(
-      span,
-      type->kind == HIRTypeKind::Struct ? HIRSelfKind::Self : HIRSelfKind::This,
-      type, type, type);
+  return make_unique<HIRSelfExpr>(span,
+                                  type->kind == TypeSymbol::TypeKind::STRUCT
+                                      ? HIRSelfKind::Self
+                                      : HIRSelfKind::This,
+                                  type, type, type);
 }
-
-// HIRLocal *HIRBuilder::makeTemp(HIRType *type) {
-//   auto local = make_unique<HIRLocal>();
-//   local->id = allocLocalID();
-//   local->type = type;
-//   local->symbol = nullptr;
-//   local->kind = HIRLocalKind::Temp;
-//   local->isMutable = false;
-//   local->isInitialized = false;
-//   local->name = "";
-//   auto raw = local.get();
-
-//   currentMethod->locals.push_back(std::move(local));
-
-//   return raw;
-// }
 
 HIRLocal *HIRBuilder::lookUpLocal(ValueSymbol *symbol) {
   assert(currentBlock);
@@ -120,7 +104,7 @@ void HIRBuilder::setDefaultInit(HIRTypeDecl *type) {
     auto place = make_unique<HIRFieldPlaceExpr>(
         span,
         make_unique<HIRSelfExpr>(span,
-                                 ty->kind == HIRTypeKind::Struct
+                                 ty->kind == TypeSymbol::TypeKind::STRUCT
                                      ? HIRSelfKind::Self
                                      : HIRSelfKind::This,
                                  ty, ty, ty),
@@ -174,13 +158,6 @@ void HIRBuilder::bindMethod(FuncDecl *decl) {
   method->body = lowerStmtAsBlock(decl->body.get());
 }
 
-void HIRBuilder::bindField(ValueSymbol *symbol, unique_ptr<HIRField> field) {
-
-  assert(currentType);
-  currentType->fieldMap.emplace(symbol, field.get());
-  currentType->fields.push_back(std::move(field));
-}
-
 pair<bool, HIRLocal *> HIRBuilder::lookupLocal(ValueSymbol *symbol) {
 
   for (auto cb = currentBlock; cb != nullptr; cb = cb->parent) {
@@ -199,31 +176,11 @@ pair<bool, HIRParam *> HIRBuilder::lookupParam(ValueSymbol *symbol) {
   return {b, b ? it->second : nullptr};
 }
 
-pair<bool, HIRField *> HIRBuilder::lookupField(ValueSymbol *symbol) {
-  auto it = currentType->fieldMap.find(symbol);
-  bool b = it != currentType->fieldMap.end();
-  return {b, b ? it->second : nullptr};
-}
-
-pair<bool, HIRField *> HIRBuilder::lookupField(HIRTypeDecl *type,
-                                               ValueSymbol *symbol) {
-  auto it = type->fieldMap.find(symbol);
-  bool b = it != type->fieldMap.end();
-  return {b, b ? it->second : nullptr};
-}
-
 bool HIRBuilder::isTypeReceiver(Expr *expr) {
   if (auto name = dynamic_cast<NameExpr *>(expr)) {
     return name->resolved->type == Symbol::SymbolType::TYPE;
   }
   return false;
-}
-
-pair<bool, HIREnumVariant *>
-HIRBuilder::lookupVariant(EnumVariantSymbol *symbol) {
-  auto it = program->variantMap.find(symbol);
-  auto b = it != program->variantMap.end();
-  return {b, b ? it->second : nullptr};
 }
 
 pair<bool, HIRMethodDecl *> HIRBuilder::lookupMethod(HIRTypeDecl *type,
@@ -238,32 +195,4 @@ pair<bool, HIRMethodDecl *> HIRBuilder::lookupInit(HIRTypeDecl *type,
   auto it = type->initMap.find(symbol);
   bool b = it != type->initMap.end();
   return {b, b ? it->second : nullptr};
-}
-
-void HIRHelper::linkRoot(HIRProgram *program) {
-  for (auto &s : program->rootScope->value) {
-    auto decl = dynamic_cast<VarDecl *>(s.second->node);
-    if (decl == nullptr) {
-      Error::internal("root decl but not varDecl");
-    }
-
-    unique_ptr<HIRField> field = make_unique<HIRField>();
-    field->symbol = decl->symbol;
-    field->name = decl->name;
-    field->isInitialized = (decl->init != nullptr);
-    field->isMutable = decl->isMutable;
-    auto it = program->typeCache.find(decl->type->resolved);
-    if (it == program->typeCache.end()) {
-      Error::internal("unknown type");
-    }
-    auto type = it->second;
-    if (type == nullptr) {
-      Error::internal("type is nullptr");
-    }
-    field->type = type;
-    field->id = program->nextRootId++;
-    auto raw = field.get();
-    program->roots.push_back(std::move(field));
-    program->rootMap.emplace(decl->symbol, raw);
-  }
 }

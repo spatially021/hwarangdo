@@ -1,10 +1,11 @@
 #include "hrd/SemanticAnalyzer/Resolver.h"
-#include "hrd/util/diagnostic/Diagnostic.h"
+#include "hrd/SemanticAnalyzer/symbol/TypeSymbol.h"
+#include "hrd/diagnostic/Diagnostic.h"
 
 void Resolver::visit(ArrayAccessExpr *expr) {
   expr->object->accept(this);
   expr->index->accept(this);
-  if (!table.isInt(expr->index->resolvedType)) {
+  if (!isa<IntType>(expr->index->resolvedType)) {
     auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S048);
     dia.labels = {{expr->index->span,
                    "array index has type '" + expr->index->resolvedType->name +
@@ -62,8 +63,8 @@ void Resolver::visit(SuperExpr *expr) {
 }
 
 void Resolver::visit(RootExpr *expr) {
-  expr->resolved = table.main;
-  expr->resolvedType = table.main;
+  expr->resolved = table.registry.getRoot();
+  expr->resolvedType = table.registry.getRoot();
 }
 void Resolver::visit(SelfExpr *expr) {
   assert(currentType);

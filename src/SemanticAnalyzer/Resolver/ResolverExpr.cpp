@@ -10,9 +10,9 @@
 #include "hrd/SemanticAnalyzer/symbol/TypeSymbol.h"
 #include "hrd/SemanticAnalyzer/symbol/ValueSymbol.h"
 #include "hrd/Token.h"
+#include "hrd/diagnostic/Diagnostic.h"
 #include "hrd/util/Error.h"
 #include "hrd/util/TypeResolver.h"
-#include "hrd/util/diagnostic/Diagnostic.h"
 #include <cassert>
 #include <memory>
 #include <string>
@@ -51,8 +51,8 @@ void Resolver::visit(LiteralExpr *expr) {
     break;
 
   case TKind::LIT_BOOL:
-    expr->resolvedType = table.getBool();
-    r.type = table.getBool();
+    expr->resolvedType = table.registry.getBool();
+    r.type = table.registry.getBool();
     r.value = expr->value == "true";
     expr->resolvedLit = r;
     break;
@@ -289,6 +289,7 @@ void Resolver::visit(MemberExpr *expr) {
 
 void Resolver::visit(CastExpr *expr) {
   expr->left->accept(this);
+
   expr->type->accept(this);
 
   if (expr->type->resolved == nullptr) {

@@ -5,7 +5,7 @@
 #include "hrd/IR/MIR/MIRProgram.h"
 #include "hrd/IR/MIR/MIRStmt.h"
 #include "hrd/SemanticAnalyzer/ResolvedLit.h"
-#include "hrd/SemanticAnalyzer/SymbolTable.h"
+#include "hrd/SemanticAnalyzer/SymbolTable/SymbolTable.h"
 #include "hrd/SemanticAnalyzer/symbol/MethodSymbol.h"
 #include "hrd/SemanticAnalyzer/symbol/RuntimeSymbol.h"
 #include "hrd/SemanticAnalyzer/symbol/TypeSymbol.h"
@@ -32,8 +32,6 @@ using BlockMap = unordered_map<BlockID, llvm::BasicBlock *>;
 using localMap = unordered_map<ValueSymbol *, llvm::AllocaInst *>;
 using ParamMap = unordered_map<ValueSymbol *, llvm::Value *>;
 
-using Str = const string &;
-
 struct Cleanup {
   llvm::Value *addr = nullptr;
   TypeSymbol *type = nullptr;
@@ -55,6 +53,7 @@ struct LoweredValue {
 };
 
 class llvmCodegen {
+  using Str = const string &;
 
 public:
   llvm::LLVMContext context;
@@ -73,8 +72,11 @@ public:
 
   llvmCodegen(CodegenContext &context);
   void generate();
+  bool emitObject(const std::filesystem::path &outputPath);
 
 private:
+  bool isCompile;
+
 private:
   llvm::GlobalVariable *rootGlobal = nullptr;
   llvm::StructType *hrdHandleTy = nullptr;
@@ -127,6 +129,7 @@ private:
 
   void emitFuncBody(MIRFunction *func);
   string mangle(MethodSymbol *symbol);
+  string mangleType(TypeSymbol *type);
 
   LoweredValue lowerBinaryExpr(MIRBinaryExpr *expr, FuncContext &ctx);
   LoweredValue lowerLoad(MIRLoad *expr, FuncContext &ctx);
@@ -163,7 +166,7 @@ private:
   llvm::Value *lowerRootPlace(MIRRootPlace *place, FuncContext &ctx);
   LoweredValue lowerRuntime(MIRRuntimeCallExpr *expr, FuncContext &ctx);
   llvm::Function *getOrDeclareRuntimeFunction(RuntimeSymbol *rt);
-
+  llvm::Function *getOrgetOrDeclareFunction(MethodSymbol *method);
   llvm::AllocaInst *createEntryAlloca(llvm::Function *fn, llvm::Type *ty,
                                       llvm::StringRef name);
 
@@ -177,7 +180,7 @@ private:
   std::string getArrayDestroyName(ArrayTypeSymbol *arr);
 
   llvm::Type *buildPrimitiveType(PrimtiveType *type);
-  llvm::Value *castTo(llvm::Value *v, TypeSymbol *from, TypeSymbol *to);
+  LoweredValue castTo(LoweredValue value, TypeSymbol *from, TypeSymbol *to);
 
   void lowerStructInitTo(MIRStructInitExpr *expr, llvm::Value *dst,
                          FuncContext &ctx);

@@ -1,11 +1,13 @@
 #pragma once
 
+#include "hrd/Inputs.h"
 #include "hrd/Token.h"
 #include <memory>
 #include <string>
 #include <vector>
 struct TokenStream {
   std::string path;
+  SourcePath locgicalPath;
   std::vector<Token> tokens;
   std::vector<std::unique_ptr<Token>> syntheticTokens;
   const Token &makeSyntheticToken() {

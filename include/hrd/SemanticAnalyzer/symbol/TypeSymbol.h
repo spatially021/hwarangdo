@@ -3,7 +3,7 @@
 #include "Symbol.h"
 #include "hrd/AST/Decl.h"
 #include "hrd/BuiltInType.h"
-#include "hrd/IR/HIR/HIRType.h"
+#include "hrd/Inputs.h"
 #include "hrd/SemanticAnalyzer/symbol/MethodSymbol.h"
 #include "hrd/SourceSpan.h"
 #include "hrd/enums/StorageKind.h"
@@ -16,6 +16,7 @@
 #include <vector>
 
 class Scope;
+struct Module;
 
 class TypeSymbol : public Symbol {
 public:
@@ -37,6 +38,8 @@ public:
     BUILTIN,
     DEFAULT_VALUE,
     ARRAY,
+    GENERIC,
+    ROOT,
   } kind;
 
   Decl *decl = nullptr;
@@ -44,6 +47,8 @@ public:
   optional<string> baseName = nullopt;
   unordered_set<TypeSymbol *> traits;
   unordered_map<TypeSymbol *, SourceSpan> traitSpan;
+  Module *module = nullptr;
+  SourcePath path;
 
   // class/struct
   Scope *memberScope = nullptr;
@@ -69,6 +74,14 @@ protected:
   void _anchor() override {};
 };
 
+class RootSymbol : public TypeSymbol {
+public:
+  RootSymbol() { kind = TypeKind::ROOT; }
+
+protected:
+  void _anchor() override {};
+};
+
 class ErrorType : public TypeSymbol {
 public:
 protected:
@@ -78,7 +91,6 @@ protected:
 class MainSymbol : public TypeSymbol {
 public:
   Decl *decl = nullptr;
-  unique_ptr<Scope> rootScope;
   MethodSymbol *update = nullptr;
   MethodSymbol *init = nullptr;
   MainSymbol();
@@ -102,10 +114,15 @@ class PrimtiveType : public TypeSymbol {
 public:
   BuiltinCategory builtinCategory;
   BuiltInType builtinType;
+
   PrimtiveType(enum BuiltinCategory pk, BuiltInType ty) : builtinType(ty) {
     kind = TypeSymbol::TypeKind::PRIMITIVE;
     builtinCategory = pk;
     isReserved = true;
+  }
+
+  static bool classof(const TypeSymbol *type) {
+    return type->kind == TypeSymbol::TypeKind::PRIMITIVE;
   }
 
 protected:
@@ -116,6 +133,7 @@ class IntType : public PrimtiveType {
 public:
   unsigned int bitWidth = 32;
   bool isSigned = true;
+
   IntType(BuiltInType t = {}) : PrimtiveType(BuiltinCategory::Int, t) {
     switch (t) {
     case BuiltInType::I8:
@@ -125,57 +143,56 @@ public:
     case BuiltInType::I16:
       bitWidth = 16;
       name = "i16";
-
       break;
     case BuiltInType::I32:
       bitWidth = 32;
       name = "i32";
-
       break;
     case BuiltInType::I64:
       bitWidth = 64;
       name = "i64";
-
       break;
     case BuiltInType::I128:
       bitWidth = 128;
       name = "i128";
-
       break;
     case BuiltInType::U8:
       isSigned = false;
-
       bitWidth = 8;
       name = "u8";
-
       break;
     case BuiltInType::U16:
       isSigned = false;
       bitWidth = 16;
       name = "u16";
-
       break;
     case BuiltInType::U32:
       isSigned = false;
       bitWidth = 32;
       name = "u32";
-
       break;
     case BuiltInType::U64:
       isSigned = false;
       bitWidth = 64;
       name = "u64";
-
       break;
     case BuiltInType::U128:
       isSigned = false;
       bitWidth = 128;
       name = "u128";
-
       break;
     default:
       Error::internal("unmatched size in ineteger type");
     }
+  }
+
+  static bool classof(const TypeSymbol *type) {
+    if (!PrimtiveType::classof(type)) {
+      return false;
+    }
+
+    return static_cast<const PrimtiveType *>(type)->builtinCategory ==
+           BuiltinCategory::Int;
   }
 };
 
@@ -212,6 +229,14 @@ public:
       break;
     }
   }
+  static bool classof(const TypeSymbol *type) {
+    if (!PrimtiveType::classof(type)) {
+      return false;
+    }
+
+    return static_cast<const PrimtiveType *>(type)->builtinCategory ==
+           BuiltinCategory::Float;
+  }
 };
 
 class BoolType : public PrimtiveType {
@@ -219,11 +244,19 @@ public:
   BoolType() : PrimtiveType(BuiltinCategory::Bool, BuiltInType::B) {
     name = "bool";
   }
+  static bool classof(const TypeSymbol *type) {
+    if (!PrimtiveType::classof(type)) {
+      return false;
+    }
+
+    return static_cast<const PrimtiveType *>(type)->builtinCategory ==
+           BuiltinCategory::Bool;
+  }
 };
 
 class CharType : public PrimtiveType {
 public:
-  int bitWidth = 8;
+  unsigned int bitWidth = 8;
   CharType(BuiltInType t = {}) : PrimtiveType(BuiltinCategory::Char, t) {
     switch (t) {
 
@@ -243,11 +276,19 @@ public:
       Error::internal("unmatched size in char type");
     }
   }
+  static bool classof(const TypeSymbol *type) {
+    if (!PrimtiveType::classof(type)) {
+      return false;
+    }
+
+    return static_cast<const PrimtiveType *>(type)->builtinCategory ==
+           BuiltinCategory::Char;
+  }
 };
 
 class StringType : public PrimtiveType {
 public:
-  int bitWidth = 8;
+  unsigned int bitWidth = 8;
   StringType(BuiltInType t = {}) : PrimtiveType(BuiltinCategory::String, t) {
     switch (t) {
     case BuiltInType::S8:
@@ -266,14 +307,27 @@ public:
       Error::internal("unmatched size in string type");
     }
   }
+  static bool classof(const TypeSymbol *type) {
+    if (!PrimtiveType::classof(type)) {
+      return false;
+    }
+
+    return static_cast<const PrimtiveType *>(type)->builtinCategory ==
+           BuiltinCategory::String;
+  }
 };
 
 class HandleSymbol : public TypeSymbol {
 public:
   StorageKind storage = StorageKind::World;
+
   HandleSymbol() {
     isReserved = true;
     kind = TypeSymbol::TypeKind::HANDLE;
+  }
+
+  static bool classof(const TypeSymbol *type) {
+    return type->kind == TypeSymbol::TypeKind::HANDLE;
   }
 };
 
@@ -283,6 +337,10 @@ public:
     isReserved = true;
     kind = TypeSymbol::TypeKind::RESULT;
   }
+
+  static bool classof(const TypeSymbol *type) {
+    return type->kind == TypeSymbol::TypeKind::RESULT;
+  }
 };
 
 class OptionSymbol : public TypeSymbol {
@@ -291,22 +349,71 @@ public:
     isReserved = true;
     kind = TypeSymbol::TypeKind::OPTION;
   }
+
+  static bool classof(const TypeSymbol *type) {
+    return type->kind == TypeSymbol::TypeKind::OPTION;
+  }
 };
 
 class GenericSymbol : public TypeSymbol {
 public:
   TypeSymbol *origin = nullptr;
   std::vector<TypeSymbol *> args;
+
   GenericSymbol(TypeSymbol *o, std::vector<TypeSymbol *> a);
   ~GenericSymbol();
+
+  static bool classof(const TypeSymbol *type) {
+    return type->kind == TypeSymbol::TypeKind::GENERIC;
+  }
 };
 
 class ArrayTypeSymbol : public TypeSymbol {
 public:
   TypeSymbol *baseType = nullptr;
   llvm::APInt sizeValue;
+
   ArrayTypeSymbol(TypeSymbol *b, llvm::APInt s)
-      : TypeSymbol(), baseType(b), sizeValue(s) {
+      : TypeSymbol(), baseType(b), sizeValue(std::move(s)) {
     kind = TypeSymbol::TypeKind::ARRAY;
   }
+
+  static bool classof(const TypeSymbol *type) {
+    return type->kind == TypeSymbol::TypeKind::ARRAY;
+  }
 };
+
+template <typename T> bool isa(const TypeSymbol *type) {
+  return type != nullptr && T::classof(type);
+}
+
+template <TypeSymbol::TypeKind K> bool isKind(const TypeSymbol *type) {
+  return type != nullptr && type->kind == K;
+}
+
+template <BuiltInType B> bool isBuiltin(const TypeSymbol *type) {
+  if (!type || type->kind != TypeSymbol::TypeKind::PRIMITIVE) {
+    return false;
+  }
+
+  const auto *primitive = static_cast<const PrimtiveType *>(type);
+  return primitive->builtinType == B;
+}
+
+template <typename T> T *cast(TypeSymbol *type) {
+  assert(isa<T>(type));
+  return static_cast<T *>(type);
+}
+
+template <typename T> const T *cast(const TypeSymbol *type) {
+  assert(isa<T>(type));
+  return static_cast<const T *>(type);
+}
+
+template <typename T> T *dyn_cast(TypeSymbol *type) {
+  return isa<T>(type) ? static_cast<T *>(type) : nullptr;
+}
+
+template <typename T> const T *dyn_cast(const TypeSymbol *type) {
+  return isa<T>(type) ? static_cast<const T *>(type) : nullptr;
+}

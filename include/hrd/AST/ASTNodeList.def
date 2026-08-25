@@ -50,6 +50,7 @@ AST_NODE(FuncDecl)
 AST_NODE(VarDecl)
 AST_NODE(InitDecl)
 AST_NODE(OnDestroyDecl)
+AST_NODE(ImportDecl)
 
 // Other
 AST_NODE(TypeNode)

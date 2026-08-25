@@ -18,12 +18,6 @@ void ResolverDebugger::debug() {
     return;
   }
 
-  if (toplevel->parent) {
-    debug(toplevel->parent);
-  } else {
-    cout << "<null toplevel parent>\n";
-  }
-
   debug(toplevel);
 }
 
@@ -126,32 +120,6 @@ void ResolverDebugger::debug(Scope *scope) {
 
         cout << "\n";
       }
-    }
-
-    depth--;
-  }
-
-  if (!scope->type.empty()) {
-    cout << ident() << "<types>\n";
-    depth++;
-
-    for (auto &t : scope->type) {
-      TypeSymbol *type = t.second.get();
-
-      if (!type) {
-        cout << ident() << "<null type symbol>\n";
-        continue;
-      }
-
-      cout << ident();
-
-      if (type->name.empty()) {
-        cout << magic_enum::enum_name(type->kind);
-      } else {
-        cout << type->name;
-      }
-
-      cout << "\n";
     }
 
     depth--;

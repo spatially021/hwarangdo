@@ -2,15 +2,17 @@
 #include "hrd/AST/Expr.h"
 #include "hrd/SemanticAnalyzer/Resolver.h"
 #include "hrd/SemanticAnalyzer/symbol/MethodSymbol.h"
+#include "hrd/SemanticAnalyzer/symbol/SymbolHelper.h"
 #include "hrd/SemanticAnalyzer/symbol/TypeSymbol.h"
 #include "hrd/SemanticAnalyzer/symbol/ValueSymbol.h"
 #include "hrd/SourceSpan.h"
+#include "hrd/diagnostic/Diagnostic.h"
 #include "hrd/util/Error.h"
-#include "hrd/util/diagnostic/Diagnostic.h"
+#include "hrd/util/Helper.h"
 #include <cassert>
 
 ValueSymbol *Resolver::resolveValue(str name) {
-  if (auto *value = table.getValue(name)) {
+  if (auto *value = table.scopeManger.getValue(name)) {
     return value;
   }
 
@@ -34,7 +36,7 @@ ValueSymbol *Resolver::lookLocalValue(str name, Scope *localScope) {
 }
 
 bool Resolver::isAssignable(TypeSymbol *from, TypeSymbol *to) {
-  return canImplicitlyConvert(from, to).first;
+  return Helper::canImplicitlyConvert(from, to).first;
 }
 
 bool Resolver::isBinaryOperatalbe(Operator op, TypeSymbol *left,
@@ -48,14 +50,14 @@ bool Resolver::isBinaryOperatalbe(Operator op, TypeSymbol *left,
   case Operator::B_XOR:
   case Operator::LSH:
   case Operator::RSH:
-    return table.isInt(left) && table.isInt(right);
+    return isa<IntType>(left) && isa<IntType>(right);
 
   case Operator::ADD:
-    if (table.isString(left) && table.isString(right)) {
+    if (isa<StringType>(left) && isa<StringType>(right)) {
       return true;
     }
 
-    return table.isNumberic(left) && table.isNumberic(right);
+    return SymbolHelper::isNumberic(left) && SymbolHelper::isNumberic(right);
 
   case Operator::LS:
   case Operator::LSE:
@@ -66,11 +68,11 @@ bool Resolver::isBinaryOperatalbe(Operator op, TypeSymbol *left,
   case Operator::DIV:
   case Operator::REM:
   case Operator::POW:
-    return table.isNumberic(left) && table.isNumberic(right);
+    return SymbolHelper::isNumberic(left) && SymbolHelper::isNumberic(right);
 
   case Operator::AND:
   case Operator::OR:
-    return table.isBool(left) && table.isBool(right);
+    return isa<BoolType>(left) && isa<BoolType>(right);
 
   case Operator::EQ:
   case Operator::NT:
@@ -92,11 +94,11 @@ bool Resolver::isCmpable(TypeSymbol *left, TypeSymbol *right) {
     return false;
   }
 
-  if (table.isNumberic(left) && table.isNumberic(right)) {
+  if (SymbolHelper::isNumberic(left) && SymbolHelper::isNumberic(right)) {
     return true;
   }
 
-  if (table.isBool(left) && table.isBool(right)) {
+  if (isa<BoolType>(left) && isa<BoolType>(right)) {
     return true;
   }
 
@@ -141,7 +143,7 @@ Resolver::binaryResult(Operator op, TypeSymbol *left, TypeSymbol *right) {
   case Operator::OR:
   case Operator::EQ:
   case Operator::NT:
-    return {table.getBuilt("bool"), CastingResultKind::None};
+    return {table.registry.getBuilt("bool"), CastingResultKind::None};
 
   case Operator::L_NOT:
   case Operator::B_NOT:
@@ -175,8 +177,8 @@ Resolver::binaryCasting(TypeSymbol *left, TypeSymbol *right) {
   vector<TypeSymbol *> candidates = getPromotionCandidates(left, right);
 
   for (auto *candidate : candidates) {
-    auto leftResult = canImplicitlyConvert(left, candidate);
-    auto rightResult = canImplicitlyConvert(right, candidate);
+    auto leftResult = Helper::canImplicitlyConvert(left, candidate);
+    auto rightResult = Helper::canImplicitlyConvert(right, candidate);
 
     if (leftResult.first && rightResult.first) {
       if (leftResult.second == CastingResultKind::PrecisionLoss) {
@@ -202,19 +204,19 @@ vector<TypeSymbol *> Resolver::getPromotionCandidates(TypeSymbol *left,
   auto *leftPrimitive = static_cast<PrimtiveType *>(left);
   auto *rightPrimitive = static_cast<PrimtiveType *>(right);
 
-  if (table.isFloat(leftPrimitive) || table.isFloat(rightPrimitive)) {
-    if (table.isFloat(leftPrimitive)) {
+  if (isa<FloatType>(leftPrimitive) || isa<FloatType>(rightPrimitive)) {
+    if (isa<FloatType>(leftPrimitive)) {
       result.push_back(left);
     }
 
-    if (table.isFloat(rightPrimitive)) {
+    if (isa<FloatType>(rightPrimitive)) {
       result.push_back(right);
     }
 
     return result;
   }
 
-  if (table.isInt(leftPrimitive) && table.isInt(rightPrimitive)) {
+  if (isa<IntType>(leftPrimitive) && isa<IntType>(rightPrimitive)) {
     auto *bigger = static_cast<IntType *>(leftPrimitive)->bitWidth >=
                            static_cast<IntType *>(rightPrimitive)->bitWidth
                        ? left
@@ -227,7 +229,7 @@ vector<TypeSymbol *> Resolver::getPromotionCandidates(TypeSymbol *left,
     return result;
   }
 
-  if (table.isString(leftPrimitive) && table.isString(rightPrimitive)) {
+  if (isa<StringType>(leftPrimitive) && isa<StringType>(rightPrimitive)) {
     auto *bigger = static_cast<StringType *>(leftPrimitive)->bitWidth >=
                            static_cast<StringType *>(rightPrimitive)->bitWidth
                        ? left
@@ -241,76 +243,6 @@ vector<TypeSymbol *> Resolver::getPromotionCandidates(TypeSymbol *left,
   }
 
   return result;
-}
-
-pair<bool, CastingResultKind> Resolver::canImplicitlyConvert(TypeSymbol *from,
-                                                             TypeSymbol *to) {
-  if (!from) {
-    Error::internal("source type is nullptr");
-  }
-
-  if (!to) {
-    Error::internal("target type is nullptr");
-  }
-
-  for (auto *type = from; type != nullptr; type = type->base) {
-    if (type == to) {
-      return {true, CastingResultKind::None};
-    }
-  }
-
-  if (from->kind != TypeSymbol::TypeKind::PRIMITIVE ||
-      to->kind != TypeSymbol::TypeKind::PRIMITIVE) {
-    return {false, CastingResultKind::Unmatched};
-  }
-
-  auto *source = static_cast<PrimtiveType *>(from);
-  auto *target = static_cast<PrimtiveType *>(to);
-
-  if (table.isInt(source) && table.isInt(target)) {
-    auto *sourceInt = static_cast<IntType *>(source);
-    auto *targetInt = static_cast<IntType *>(target);
-
-    if (sourceInt->isSigned == targetInt->isSigned) {
-      return {targetInt->bitWidth >= sourceInt->bitWidth,
-              CastingResultKind::Overflow};
-    }
-
-    if (sourceInt->isSigned && !targetInt->isSigned) {
-      return {false, CastingResultKind::SignToUnsign};
-    }
-
-    if (!sourceInt->isSigned && targetInt->isSigned) {
-      return {targetInt->bitWidth >= sourceInt->bitWidth,
-              CastingResultKind::Overflow};
-    }
-
-    return {targetInt->bitWidth >= sourceInt->bitWidth,
-            CastingResultKind::Overflow};
-  }
-
-  if (table.isFloat(source) && table.isFloat(target)) {
-    return {static_cast<FloatType *>(target)->bitWidth >=
-                static_cast<FloatType *>(source)->bitWidth,
-            CastingResultKind::Overflow};
-  }
-
-  if (table.isInt(source) && table.isFloat(target)) {
-    auto *sourceInt = static_cast<IntType *>(source);
-    auto *targetFloat = static_cast<FloatType *>(target);
-
-    if (sourceInt->bitWidth == targetFloat->bitWidth) {
-      return {true, CastingResultKind::PrecisionLoss};
-    }
-
-    if (sourceInt->bitWidth <= targetFloat->precious) {
-      return {true, CastingResultKind::None};
-    }
-
-    return {false, CastingResultKind::Overflow};
-  }
-
-  return {false, CastingResultKind::Unmatched};
 }
 
 const static llvm::fltSemantics &getFloatSemantics(FloatType *type) {
@@ -349,13 +281,13 @@ Resolver::canImplicitlyLiteralConvert(LiteralExpr *from, TypeSymbol *to) {
 
   switch (from->token.kind) {
   case TKind::LIT_INT: {
-    if (!table.isInt(target) && !table.isFloat(target)) {
+    if (!isa<IntType>(target) && !isa<FloatType>(target)) {
       return {false, CastingResultKind::InvalidCategory};
     }
 
     const auto &value = from->resolvedLit.asInt().value;
 
-    if (table.isInt(target)) {
+    if (isa<IntType>(target)) {
       auto *targetInt = static_cast<IntType *>(target);
 
       if (targetInt->isSigned) {
@@ -371,7 +303,7 @@ Resolver::canImplicitlyLiteralConvert(LiteralExpr *from, TypeSymbol *to) {
               CastingResultKind::Overflow};
     }
 
-    if (table.isFloat(target)) {
+    if (isa<FloatType>(target)) {
       auto *targetFloat = static_cast<FloatType *>(target);
 
       return {value.getSignificantBits() <= targetFloat->precious,
@@ -382,7 +314,7 @@ Resolver::canImplicitlyLiteralConvert(LiteralExpr *from, TypeSymbol *to) {
   }
 
   case TKind::LIT_FLOAT: {
-    if (!table.isFloat(target)) {
+    if (!isa<FloatType>(target)) {
       return {false, CastingResultKind::Unmatched};
     }
 
@@ -399,7 +331,7 @@ Resolver::canImplicitlyLiteralConvert(LiteralExpr *from, TypeSymbol *to) {
   }
 
   case TKind::LIT_CHARACTER: {
-    if (!table.isChar(target)) {
+    if (!isa<CharType>(target)) {
       return {false, CastingResultKind::Unmatched};
     }
 
@@ -422,7 +354,7 @@ Resolver::canImplicitlyLiteralConvert(LiteralExpr *from, TypeSymbol *to) {
   }
 
   case TKind::LIT_STRING: {
-    if (!table.isString(target)) {
+    if (!isa<StringType>(target)) {
       return {false, CastingResultKind::Unmatched};
     }
 
@@ -457,7 +389,7 @@ Resolver::canImplicitlyLiteralConvert(LiteralExpr *from, TypeSymbol *to) {
   }
 
   case TKind::LIT_BOOL:
-    return {to == table.getBool(), CastingResultKind::Unmatched};
+    return {to == table.registry.getBool(), CastingResultKind::Unmatched};
 
   default:
     return {false, CastingResultKind::NotImplemented};
@@ -476,7 +408,7 @@ Resolver::implicitCasting(Expr *from, TypeSymbol *to) {
     return {nullptr, kind};
   }
 
-  auto [result, kind] = canImplicitlyConvert(from->resolvedType, to);
+  auto [result, kind] = Helper::canImplicitlyConvert(from->resolvedType, to);
 
   if (result) {
     return {to, kind};
@@ -705,17 +637,17 @@ void Resolver::inferencePrim(TypeNode *decl, TypeSymbol *init) {
 
     if (auto *initialType = dynamic_cast<IntType *>(init)) {
       if (initialType->bitWidth <= 24) {
-        decl->resolved = table.getBuilt("f32");
+        decl->resolved = table.registry.getBuilt("f32");
         return;
       }
 
       if (initialType->bitWidth <= 53) {
-        decl->resolved = table.getBuilt("f64");
+        decl->resolved = table.registry.getBuilt("f64");
         return;
       }
 
       if (initialType->bitWidth <= 113) {
-        decl->resolved = table.getBuilt("f128");
+        decl->resolved = table.registry.getBuilt("f128");
         return;
       }
 

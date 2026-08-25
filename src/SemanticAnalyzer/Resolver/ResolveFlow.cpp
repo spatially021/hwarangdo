@@ -1,11 +1,12 @@
 #include "hrd/AST/Stmt.h"
 #include "hrd/SemanticAnalyzer/Resolver.h"
+#include "hrd/SemanticAnalyzer/symbol/TypeSymbol.h"
+#include "hrd/diagnostic/Diagnostic.h"
 #include "hrd/util/Guard.h"
-#include "hrd/util/diagnostic/Diagnostic.h"
 
 void Resolver::visit(Range *expr) {
   expr->from->accept(this);
-  if (!table.isInt(expr->from->resolvedType)) {
+  if (!isa<IntType>(expr->from->resolvedType)) {
     auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S054);
     dia.labels = {
         {expr->from->span,
@@ -22,7 +23,7 @@ void Resolver::visit(Range *expr) {
   }
 
   expr->to->accept(this);
-  if (!table.isInt(expr->to->resolvedType)) {
+  if (!isa<IntType>(expr->to->resolvedType)) {
     auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S054);
     dia.labels = {
         {expr->to->span,
@@ -47,7 +48,7 @@ void Resolver::visit(Range *expr) {
   }
 
   expr->step->accept(this);
-  if (!table.isInt(expr->step->resolvedType)) {
+  if (!isa<IntType>(expr->step->resolvedType)) {
     auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S055);
     dia.labels = {
         {expr->step->span,
@@ -239,7 +240,7 @@ void Resolver::visit(CaseValueExpr *expr) {
       symbol->isPayload = true;
       symbol->isRoot = false;
       symbol->kind = ValueSymbol::Kind::VAR;
-      symbol->owner = table.getCurrent();
+      symbol->owner = table.scopeManger.current();
       symbol->name = n->name;
 
       expr->payloadType = it->second->payloadType;
@@ -247,9 +248,9 @@ void Resolver::visit(CaseValueExpr *expr) {
       auto raw = symbol.get();
       expr->payload = raw;
 
-      auto iter = table.getCurrent()->value.find(n->name);
-      if (iter == table.getCurrent()->value.end()) {
-        table.getCurrent()->value.emplace(n->name, std::move(symbol));
+      auto iter = table.scopeManger.current()->value.find(n->name);
+      if (iter == table.scopeManger.current()->value.end()) {
+        table.scopeManger.current()->value.emplace(n->name, std::move(symbol));
       } else {
         auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S060);
         dia.labels = {

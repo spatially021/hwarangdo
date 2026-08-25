@@ -2,6 +2,7 @@
 #include "hrd/SemanticAnalyzer/Scope.h"
 #include "hrd/SemanticAnalyzer/symbol/MethodSymbol.h"
 #include "hrd/SourceSpan.h"
+#include "hrd/util/Helper.h"
 #include <vector>
 
 TypeSymbol::TypeSymbol() {
@@ -24,12 +25,12 @@ pair<bool, SourceSpan> TypeSymbol::addMethod(MethodSymbol *symbol) {
 MainSymbol::MainSymbol() {
   type = Symbol::SymbolType::MAIN;
   kind = TypeSymbol::TypeKind::CLASS;
-  rootScope = make_unique<Scope>();
 }
 MainSymbol::~MainSymbol() = default;
+
 GenericSymbol::GenericSymbol(TypeSymbol *o, std::vector<TypeSymbol *> a)
     : origin(o), args(std::move(a)) {
-  kind = o->kind;
+  kind = TypeSymbol::TypeKind::GENERIC;
 
   name = origin->name + "<";
 

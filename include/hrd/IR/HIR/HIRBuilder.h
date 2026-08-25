@@ -9,15 +9,14 @@
 #include "hrd/IR/HIR/HIRProgram.h"
 #include "hrd/IR/HIR/HIRStmt.h"
 #include "hrd/IR/HIR/HIRSymbol.h"
-#include "hrd/IR/HIR/HIRType.h"
 #include "hrd/Recover/HIRReover.h"
-#include "hrd/SemanticAnalyzer/SymbolTable.h"
+#include "hrd/SemanticAnalyzer/SymbolTable/SymbolTable.h"
 #include "hrd/SemanticAnalyzer/symbol/MethodSymbol.h"
 #include "hrd/SemanticAnalyzer/symbol/TypeSymbol.h"
 #include "hrd/SemanticAnalyzer/symbol/ValueSymbol.h"
 #include "hrd/compiler/CompilerContexts.h"
+#include "hrd/diagnostic/DiagnosticEngine.h"
 #include "hrd/util/Error.h"
-#include "hrd/util/diagnostic/DiagnosticEngine.h"
 #include <cassert>
 #include <memory>
 #include <utility>
@@ -54,14 +53,11 @@ private:
   void setDefaultInit(HIRTypeDecl *typeDecl);
 
   // type
-  HIRStructType *lowerStructType(TypeSymbol *symbol);
-  HIREnumType *lowerEnumType(TypeSymbol *symbol);
-  HIRObserverType *getOrCreateObserverType(HIREntityType *entity,
-                                           StorageKind storage);
+  TypeSymbol *lowerStructType(TypeSymbol *symbol);
+  TypeSymbol *lowerEnumType(TypeSymbol *symbol);
 
   // decl
   HIRLocal *lowerLocal(VarDecl *decl);
-  HIRField *lowerField(VarDecl *decl);
   unique_ptr<HIRParam> lowerParam(Param *param);
 
   // stmt
@@ -99,12 +95,13 @@ private:
   std::unique_ptr<HIRValueExpr> lowerVariantValue(MemberExpr *expr);
   std::unique_ptr<HIRFieldPlaceExpr> lowerMember(MemberExpr *expr);
   std::unique_ptr<HIRPlaceExpr> lowerArrayAccess(ArrayAccessExpr *expr);
-  std::unique_ptr<HIRValueExpr> lowerCallArg(Expr *arg, Param *param);
+  std::unique_ptr<HIRValueExpr> lowerCallArg(Expr *arg, ParamSymbol *param);
   std::unique_ptr<HIRCasePattern> lowerCaseValue(CaseValueExpr *epxr);
 
   // helper
   std::unique_ptr<HIRExpr>
-  insertImplicitCastIfNeeded(std::unique_ptr<HIRExpr> expr, HIRType *expected);
+  insertImplicitCastIfNeeded(std::unique_ptr<HIRExpr> expr,
+                             TypeSymbol *expected);
   // HIRLocal *makeTemp(HIRType *type);
   HIRLocal *lookUpLocal(ValueSymbol *);
   unique_ptr<HIRValueExpr> lowerValue(Expr *expr);
@@ -144,20 +141,16 @@ private:
   int allocRootID();
 
   void bindLocal(ValueSymbol *symbol, unique_ptr<HIRLocal> local);
-  void bindField(ValueSymbol *symbol, unique_ptr<HIRField> field);
   void bindMethod(FuncDecl *decl);
 
   pair<bool, HIRLocal *> lookupLocal(ValueSymbol *symbol);
   pair<bool, HIRParam *> lookupParam(ValueSymbol *symbol);
-  pair<bool, HIRField *> lookupField(ValueSymbol *symbol);
-  pair<bool, HIRField *> lookupField(HIRTypeDecl *type, ValueSymbol *symbol);
   pair<bool, HIRMethodDecl *> lookupMethod(HIRTypeDecl *decl,
                                            MethodSymbol *symbol);
   pair<bool, HIRMethodDecl *> lookupInit(HIRTypeDecl *deck,
                                          MethodSymbol *symbol);
 
   bool isTypeReceiver(Expr *expr);
-  pair<bool, HIREnumVariant *> lookupVariant(EnumVariantSymbol *symbol);
 
   inline std::unique_ptr<HIRLoadExpr>
   load(std::unique_ptr<HIRPlaceExpr> place) {

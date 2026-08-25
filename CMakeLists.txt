@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.21)
 
-project(HwaranGeom VERSION 0.0.0 LANGUAGES C CXX)
+project(HwarangDo VERSION 0.0.0 LANGUAGES C CXX)
 
 # GNU 표준 설치 디렉토리:
 # CMAKE_INSTALL_BINDIR, LIBDIR, INCLUDEDIR, DATADIR 등을 정의한다.

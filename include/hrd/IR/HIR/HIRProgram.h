@@ -5,16 +5,12 @@
 #include "hrd/IR/HIR/HIRDecl.h"
 #include "hrd/IR/HIR/HIRNode.h"
 #include "hrd/IR/HIR/HIRSymbol.h"
-#include "hrd/IR/HIR/HIRType.h"
 #include "hrd/SemanticAnalyzer/Scope.h"
-#include "hrd/SemanticAnalyzer/SymbolTable.h"
+#include "hrd/SemanticAnalyzer/SymbolTable/SymbolTable.h"
 #include "hrd/SemanticAnalyzer/symbol/TypeSymbol.h"
-#include "hrd/SemanticAnalyzer/symbol/ValueSymbol.h"
 #include "hrd/SourceSpan.h"
-#include "hrd/util/Error.h"
 #include <memory>
 #include <string>
-#include <utility>
 #include <vector>
 
 // HIR 단위의 최상위 소스 컨테이너를 나타낸다.
@@ -25,9 +21,9 @@ struct HIRSource : HIRNode {
 
   std::vector<std::unique_ptr<HIRMethodDecl>> methodDecls;
   std::vector<std::unique_ptr<HIRTypeDecl>> typeDecls;
-  std::vector<std::unique_ptr<HIRType>> types;
-  vector<unique_ptr<HIRHandleType>> handles;
-  vector<unique_ptr<HIRObserverType>> observers;
+  std::vector<std::unique_ptr<TypeSymbol>> types;
+  vector<unique_ptr<TypeSymbol>> handles;
+  vector<unique_ptr<TypeSymbol>> observers;
   SourceFile *source = nullptr;
   HIRSource(SourceSpan sp, SourceFile *s)
       : HIRNode(sp, HIRNodeKind::Source), source(s) {}
@@ -41,70 +37,14 @@ struct HIRProgram : HIRNode {
 
   std::vector<unique_ptr<HIRSource>> sources;
 
-  unordered_map<TypeSymbol *, HIRType *> typeCache;
   unordered_map<TypeSymbol *, HIRTypeDecl *> typeDeclMap;
-  unordered_map<EnumVariantSymbol *, HIREnumVariant *> variantMap;
-  unordered_map<HIREntityType *, HIRHandleType *> handleCache;
-  unordered_map<HIREntityType *, HIRObserverType *> observerCache;
-
-  std::vector<unique_ptr<HIRField>> roots;
-  unordered_map<ValueSymbol *, HIRField *> rootMap;
 
   Scope *rootScope = nullptr;
 
-  HIRVoidType *voidType = nullptr;
-  HIRErrorType *errorType = nullptr;
-  HIRDefaultType *defaultType = nullptr;
-
-  HIRType *rootType = nullptr;
-
-  std::vector<unique_ptr<HIRType>> builtIn;
-
   int nextRootId = 0;
 
-  SymbolTable *table = nullptr;
+  SymbolTable &table;
 
-  HIRProgram(SourceSpan s, SymbolTable *t)
-      : HIRNode(s, HIRNodeKind::Program), table(t) {
-    for (const auto &entry : builtinEntries) {
-      std::unique_ptr<HIRBuiltinType> symbol = std::make_unique<HIRBuiltinType>(
-          entry.name, entry.category, table->getBuilt(entry.name));
-      if (!symbol) {
-        Error::internal("failed to create builtin type symbol");
-      }
-      if (symbol->name.empty()) {
-        Error::internal("builtin type symbol has empty name");
-      }
-      auto raw = symbol.get();
-      builtIn.push_back(std::move(symbol));
-      typeCache.emplace(table->getBuilt(entry.name), raw);
-    }
-
-    unique_ptr<HIRVoidType> vt = make_unique<HIRVoidType>();
-    vt->typeSymbol = t->getBuilt("void");
-    voidType = vt.get();
-    builtIn.push_back(std::move(vt));
-    typeCache.emplace(table->getBuilt("void"), voidType);
-
-    unique_ptr<HIRErrorType> et = make_unique<HIRErrorType>();
-    errorType = et.get();
-    builtIn.push_back(std::move(et));
-
-    unique_ptr<HIRDefaultType> dt = make_unique<HIRDefaultType>();
-    defaultType = dt.get();
-    builtIn.push_back(std::move(dt));
-
-    rootScope = table->rootScope.get();
-    auto rt = make_unique<HIRType>(HIRTypeKind::Root, "root");
-    rootType = rt.get();
-    builtIn.push_back(std::move(rt));
-  }
-
-  HIRType *getBool() {
-    auto it = typeCache.find(table->getBool());
-    if (it == typeCache.end()) {
-      Error::internal("cannot find bool Type");
-    }
-    return it->second;
-  }
+  HIRProgram(SourceSpan s, SymbolTable &t)
+      : HIRNode(s, HIRNodeKind::Program), table(t) {}
 };

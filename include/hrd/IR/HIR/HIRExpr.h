@@ -3,10 +3,10 @@
 #include "hrd/IR/HIR/HIRNode.h"
 #include "hrd/IR/HIR/HIRStmt.h"
 #include "hrd/IR/HIR/HIRSymbol.h"
-#include "hrd/IR/HIR/HIRType.h"
 #include "hrd/SemanticAnalyzer/ResolvedLit.h"
+#include "hrd/SemanticAnalyzer/symbol/MethodSymbol.h"
 #include "hrd/SemanticAnalyzer/symbol/RuntimeSymbol.h"
-#include "hrd/SemanticAnalyzer/symbol/TypeSymbol.h"
+#include "hrd/SemanticAnalyzer/symbol/ValueSymbol.h"
 #include "hrd/SourceSpan.h"
 #include "hrd/enums/Operator.h"
 #include "vector"
@@ -18,39 +18,35 @@ struct HIRMethodDecl;
 
 using std::unique_ptr;
 
-struct HIRMethodDecl;
-
-using std::unique_ptr;
-
 enum class HIRExprCategory {
   Value,
   Place,
 };
 
 struct HIRExpr : HIRNode {
-  HIRType *type = nullptr;
+  TypeSymbol *type = nullptr;
   HIRExprCategory category = HIRExprCategory::Value;
 
-  HIRExpr(SourceSpan s, HIRNodeKind k, HIRType *ty, HIRExprCategory c)
+  HIRExpr(SourceSpan s, HIRNodeKind k, TypeSymbol *ty, HIRExprCategory c)
       : HIRNode(s, k), type(ty), category(c) {}
   virtual ~HIRExpr() = default;
 };
 
 struct HIRPlaceExpr : HIRExpr {
-  HIRPlaceExpr(SourceSpan s, HIRNodeKind k, HIRType *ty)
+  HIRPlaceExpr(SourceSpan s, HIRNodeKind k, TypeSymbol *ty)
       : HIRExpr(s, k, ty, HIRExprCategory::Place) {}
 };
 
 struct HIRValueExpr : HIRExpr {
-  HIRValueExpr(SourceSpan s, HIRNodeKind k, HIRType *ty)
+  HIRValueExpr(SourceSpan s, HIRNodeKind k, TypeSymbol *ty)
       : HIRExpr(s, k, ty, HIRExprCategory::Value) {}
 };
 
 struct HIRVariantValueExpr : HIRValueExpr {
 
-  HIREnumVariant *varaint = nullptr;
+  EnumVariantSymbol *varaint = nullptr;
   std::unique_ptr<HIRExpr> payload = nullptr;
-  HIRVariantValueExpr(SourceSpan s, HIRType *t, HIREnumVariant *v,
+  HIRVariantValueExpr(SourceSpan s, TypeSymbol *t, EnumVariantSymbol *v,
                       std::unique_ptr<HIRExpr> p = nullptr)
       : HIRValueExpr(s, HIRNodeKind::EnumVariantValue, t), varaint(v),
         payload(std::move(p)) {}
@@ -73,10 +69,10 @@ struct HIRParamPlaceExpr : HIRPlaceExpr {
 struct HIRArrayAccessPlaceExpr : HIRPlaceExpr {
   unique_ptr<HIRPlaceExpr> object = nullptr;
   unique_ptr<HIRValueExpr> index = nullptr;
-  HIRType *elementType = nullptr;
+  TypeSymbol *elementType = nullptr;
 
   HIRArrayAccessPlaceExpr(SourceSpan s, unique_ptr<HIRPlaceExpr> o,
-                          unique_ptr<HIRValueExpr> i, HIRType *et)
+                          unique_ptr<HIRValueExpr> i, TypeSymbol *et)
       : HIRPlaceExpr(s, HIRNodeKind::ArrayAccessExpr, et), object(std::move(o)),
         index(std::move(i)), elementType(et) {}
 };
@@ -85,26 +81,26 @@ enum class HIRSelfKind { This, Super, Self };
 
 struct HIRSelfExpr : HIRValueExpr {
   HIRSelfKind selfKind;
-  HIRType *ownerType = nullptr;
-  HIRType *accessType = nullptr;
+  TypeSymbol *ownerType = nullptr;
+  TypeSymbol *accessType = nullptr;
 
-  HIRSelfExpr(SourceSpan s, HIRSelfKind k, HIRType *exprType, HIRType *owner,
-              HIRType *access)
+  HIRSelfExpr(SourceSpan s, HIRSelfKind k, TypeSymbol *exprType,
+              TypeSymbol *owner, TypeSymbol *access)
       : HIRValueExpr(s, HIRNodeKind::SelfExpr, exprType), selfKind(k),
         ownerType(owner), accessType(access) {}
 };
 
 struct HIRRootExpr : HIRValueExpr {
-  HIRRootExpr(SourceSpan s, HIRType *t)
+  HIRRootExpr(SourceSpan s, TypeSymbol *t)
       : HIRValueExpr(s, HIRNodeKind::RootExpr, t) {}
 };
 
 struct HIRFieldPlaceExpr : HIRPlaceExpr {
   unique_ptr<HIRValueExpr> receiver = nullptr; // value or observer or root
-  HIRField *field = nullptr;
+  ValueSymbol *field = nullptr;
 
-  HIRFieldPlaceExpr(SourceSpan s, unique_ptr<HIRValueExpr> obj, HIRField *f)
-      : HIRPlaceExpr(s, HIRNodeKind::FieldPlaceExpr, f->type),
+  HIRFieldPlaceExpr(SourceSpan s, unique_ptr<HIRValueExpr> obj, ValueSymbol *f)
+      : HIRPlaceExpr(s, HIRNodeKind::FieldPlaceExpr, f->typeSymbol),
         receiver(std::move(obj)), field(f) {}
 };
 
@@ -113,7 +109,7 @@ struct HIRRecieverExpr : HIRPlaceExpr {};
 struct HIRLiteralExpr : HIRValueExpr {
   ResolvedLit resolvedLit;
 
-  HIRLiteralExpr(SourceSpan s, HIRType *ty, ResolvedLit rl)
+  HIRLiteralExpr(SourceSpan s, TypeSymbol *ty, ResolvedLit rl)
       : HIRValueExpr(s, HIRNodeKind::LiteralExpr, ty), resolvedLit(rl) {}
 };
 
@@ -128,7 +124,7 @@ struct HIRUnaryExpr : HIRValueExpr {
   Operator op;
   unique_ptr<HIRExpr> operand = nullptr;
 
-  HIRUnaryExpr(SourceSpan s, HIRType *ty, Operator o, unique_ptr<HIRExpr> in)
+  HIRUnaryExpr(SourceSpan s, TypeSymbol *ty, Operator o, unique_ptr<HIRExpr> in)
       : HIRValueExpr(s, HIRNodeKind::UnaryExpr, ty), op(o),
         operand(std::move(in)) {}
 };
@@ -138,7 +134,7 @@ struct HIRBinaryExpr : HIRValueExpr {
   unique_ptr<HIRValueExpr> left = nullptr;
   unique_ptr<HIRValueExpr> right = nullptr;
   TypeSymbol *operand = nullptr;
-  HIRBinaryExpr(SourceSpan s, HIRType *ty, Operator o,
+  HIRBinaryExpr(SourceSpan s, TypeSymbol *ty, Operator o,
                 unique_ptr<HIRValueExpr> l, unique_ptr<HIRValueExpr> r,
                 TypeSymbol *ope)
       : HIRValueExpr(s, HIRNodeKind::BinaryExpr, ty), op(o), left(std::move(l)),
@@ -152,7 +148,7 @@ struct HIRTernaryExpr : HIRValueExpr {
 
   HIRTernaryExpr(SourceSpan s, std::unique_ptr<HIRValueExpr> cond,
                  std::unique_ptr<HIRValueExpr> thenE,
-                 std::unique_ptr<HIRValueExpr> elseE, HIRType *resultType)
+                 std::unique_ptr<HIRValueExpr> elseE, TypeSymbol *resultType)
       : HIRValueExpr(s, HIRNodeKind::TernaryExpr, resultType),
         condition(std::move(cond)), thenExpr(std::move(thenE)),
         elseExpr(std::move(elseE)) {}
@@ -160,23 +156,23 @@ struct HIRTernaryExpr : HIRValueExpr {
 
 struct HIRCastExpr : HIRValueExpr {
   unique_ptr<HIRValueExpr> operand = nullptr;
-  HIRType *fromType = nullptr;
-  HIRType *toType = nullptr;
+  TypeSymbol *fromType = nullptr;
+  TypeSymbol *toType = nullptr;
 
-  HIRCastExpr(SourceSpan s, unique_ptr<HIRValueExpr> o, HIRType *from,
-              HIRType *to)
+  HIRCastExpr(SourceSpan s, unique_ptr<HIRValueExpr> o, TypeSymbol *from,
+              TypeSymbol *to)
       : HIRValueExpr(s, HIRNodeKind::CastExpr, to), operand(std::move(o)),
         fromType(from), toType(to) {}
 };
 
 struct HIRMethodCallExpr : HIRValueExpr {
   unique_ptr<HIRValueExpr> receiver = nullptr;
-  HIRMethodDecl *method = nullptr;
+  MethodSymbol *method = nullptr;
   std::vector<std::unique_ptr<HIRExpr>> args;
 
   HIRMethodCallExpr(SourceSpan s, unique_ptr<HIRValueExpr> recv,
-                    HIRMethodDecl *m, std::vector<std::unique_ptr<HIRExpr>> a,
-                    HIRType *r)
+                    MethodSymbol *m, std::vector<std::unique_ptr<HIRExpr>> a,
+                    TypeSymbol *r)
       : HIRValueExpr(s, HIRNodeKind::MethodCallExpr, r),
         receiver(std::move(recv)), method(m), args(std::move(a)) {}
 };
@@ -185,31 +181,30 @@ struct HIRRuntimeCall : HIRValueExpr {
   RuntimeSymbol *symbol = nullptr;
   vector<unique_ptr<HIRExpr>> args;
   HIRRuntimeCall(SourceSpan s, RuntimeSymbol *r, vector<unique_ptr<HIRExpr>> a,
-                 HIRType *t)
+                 TypeSymbol *t)
       : HIRValueExpr(s, HIRNodeKind::RuntimeCallExpr, t), symbol(r),
         args(std::move(a)) {}
 };
 
 struct HIRStructInitExpr : HIRValueExpr {
-  HIRMethodDecl *method = nullptr;
+  MethodSymbol *method = nullptr;
   std::vector<std::unique_ptr<HIRExpr>> args;
   bool isDefault = false;
-  HIRBlockStmt *defaultInit = nullptr;
-  HIRStructInitExpr(SourceSpan s, HIRMethodDecl *m,
-                    std::vector<std::unique_ptr<HIRExpr>> a, HIRType *r,
-                    HIRBlockStmt *de, bool d = false)
+  HIRStructInitExpr(SourceSpan s, MethodSymbol *m,
+                    std::vector<std::unique_ptr<HIRExpr>> a, TypeSymbol *r,
+                    bool d = false)
       : HIRValueExpr(s, HIRNodeKind::StructInitExpr, r), method(m),
-        args(std::move(a)), isDefault(d), defaultInit(de) {}
+        args(std::move(a)), isDefault(d) {}
 };
 
 struct HIRSpawnExpr : HIRValueExpr {
   StorageKind storage = StorageKind::World;
-  HIREntityType *entityType = nullptr;
+  TypeSymbol *entityType = nullptr;
   HIRMethodDecl *initMethod = nullptr; // 없으면 기본 생성 의미
   std::vector<unique_ptr<HIRExpr>> args;
 
-  HIRSpawnExpr(SourceSpan s, HIRHandleType *outType, StorageKind st,
-               HIREntityType *ent, HIRMethodDecl *init,
+  HIRSpawnExpr(SourceSpan s, TypeSymbol *outType, StorageKind st,
+               TypeSymbol *ent, HIRMethodDecl *init,
                std::vector<unique_ptr<HIRExpr>> a)
       : HIRValueExpr(s, HIRNodeKind::SpawnExpr, outType), storage(st),
         entityType(ent), initMethod(init), args(std::move(a)) {}
@@ -218,10 +213,10 @@ struct HIRSpawnExpr : HIRValueExpr {
 struct HIRViewExpr : HIRValueExpr {
   StorageKind storage = StorageKind::World;
   unique_ptr<HIRValueExpr> handle = nullptr;
-  HIREntityType *entityType = nullptr;
+  TypeSymbol *entityType = nullptr;
 
-  HIRViewExpr(SourceSpan s, HIRObserverType *outType, StorageKind st,
-              unique_ptr<HIRValueExpr> h, HIREntityType *ent)
+  HIRViewExpr(SourceSpan s, TypeSymbol *outType, StorageKind st,
+              unique_ptr<HIRValueExpr> h, TypeSymbol *ent)
       : HIRValueExpr(s, HIRNodeKind::ViewExpr, outType), storage(st),
         handle(std::move(h)), entityType(ent) {}
 };
@@ -230,13 +225,13 @@ struct HIRMatchExpr : HIRValueExpr {
   unique_ptr<HIRValueExpr> cond = nullptr;
   vector<unique_ptr<HIRCase>> cases;
 
-  HIRMatchExpr(SourceSpan s, HIRType *ty, unique_ptr<HIRValueExpr> c,
+  HIRMatchExpr(SourceSpan s, TypeSymbol *ty, unique_ptr<HIRValueExpr> c,
                vector<unique_ptr<HIRCase>> ca)
       : HIRValueExpr(s, HIRNodeKind::MatchExpr, ty), cond(std::move(c)),
         cases(std::move(ca)) {}
 };
 
 struct HIRDefaultValueExpr : HIRValueExpr {
-  HIRDefaultValueExpr(SourceSpan s, HIRType *ty)
+  HIRDefaultValueExpr(SourceSpan s, TypeSymbol *ty)
       : HIRValueExpr(s, HIRNodeKind::DefaultValueExpr, ty) {}
 };

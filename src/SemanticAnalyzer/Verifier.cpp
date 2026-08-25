@@ -2,10 +2,11 @@
 #include "hrd/AST/Decl.h"
 #include "hrd/AST/Expr.h"
 #include "hrd/AST/Stmt.h"
-#include "hrd/SemanticAnalyzer/symbol//MethodSymbol.h"
-#include "hrd/SemanticAnalyzer/symbol//TypeSymbol.h"
+#include "hrd/SemanticAnalyzer/symbol/MethodSymbol.h"
 #include "hrd/SemanticAnalyzer/symbol/RuntimeSymbol.h"
+#include "hrd/SemanticAnalyzer/symbol/TypeSymbol.h"
 #include "hrd/SemanticAnalyzer/symbol/ValueSymbol.h"
+#include "hrd/diagnostic/Diagnostic.h"
 #include "hrd/enums/InheritState.h"
 #include "hrd/util/Error.h"
 #include <variant>
@@ -17,6 +18,9 @@ void Verifier::verify() {
       if (auto c = dynamic_cast<ClassDecl *>(d.get())) {
         inheritStates.emplace(c, i);
       }
+      if (auto st = dynamic_cast<StructDecl *>(d.get())) {
+        fieldStates.emplace(st, i);
+      }
       d->accept(this);
     }
   }
@@ -24,6 +28,12 @@ void Verifier::verify() {
   for (auto &d : inheritStates) {
     if (d.second == InheritState::Unvisited) {
       verifyCycledInherit(d.first);
+    }
+  }
+
+  for (auto &d : fieldStates) {
+    if (d.second == InheritState::Unvisited) {
+      verifyCycledField(d.first);
     }
   }
 }
@@ -66,6 +76,37 @@ void Verifier::verifyCycledInherit(ClassDecl *decl) {
   }
 
   inheritStates[decl] = InheritState::Done;
+}
+
+void Verifier::verifyCycledField(StructDecl *decl) {
+  if (fieldStates[decl] == InheritState::Done)
+    return;
+
+  if (fieldStates[decl] == InheritState::Visiting) {
+    auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S123);
+    dia.labels = {
+        {decl->span, "cyclic type layout dependency detected here", true},
+    };
+    dia.notes = {
+        "field layout cannot be calculated for cyclic inheritance",
+    };
+    dia.helps = {
+        "remove the cyclic inheritance relationship",
+    };
+    engine.emit(dia);
+    recover.recover();
+  }
+
+  fieldStates[decl] = InheritState::Visiting;
+
+  for (auto f : decl->fields) {
+    auto d = f->type->resolved->decl;
+    if (auto s = dynamic_cast<StructDecl *>(d)) {
+      verifyCycledField(s);
+    }
+  }
+
+  fieldStates[decl] = InheritState::Done;
 }
 
 void Verifier::visit(LiteralExpr *expr) {
@@ -186,7 +227,11 @@ void Verifier::visit(DestroyExpr *expr) {
 }
 
 void Verifier::visit(QuitExpr *) {}
-void Verifier::visit(DefaultValueExpr *) {}
+void Verifier::visit(DefaultValueExpr *expr) {
+  if (get_if<std::monostate>(&expr->resolved)) {
+    unresolved(expr, "defaultValueExpr is unresolved");
+  }
+}
 void Verifier::visit(Range *expr) {
   expr->from->accept(this);
   expr->to->accept(this);
@@ -283,6 +328,9 @@ void Verifier::visit(EmptyStmt *) {}
 void Verifier::visit(ClassDecl *decl) {
   if (decl->symbol == nullptr)
     unresolved(decl, "ClassDecl is unresolved");
+  if (decl->symbol->module == nullptr) {
+    unresolved(decl, "class's module is unresolved");
+  }
   for (auto &a : decl->fields) {
     a->accept(this);
   }
@@ -293,6 +341,9 @@ void Verifier::visit(ClassDecl *decl) {
 void Verifier::visit(StructDecl *decl) {
   if (decl->symbol == nullptr)
     unresolved(decl, "structDecl is unresolved");
+  if (decl->symbol->module == nullptr) {
+    unresolved(decl, "struct's module is unresolved");
+  }
   for (auto &f : decl->fields) {
     f->accept(this);
   }
@@ -300,8 +351,14 @@ void Verifier::visit(StructDecl *decl) {
 void Verifier::visit(EnumDecl *decl) {
   if (decl->symbol == nullptr)
     unresolved(decl, "EnumDecl is unresolved");
+  if (decl->symbol->module == nullptr) {
+    unresolved(decl, "enum's module is unresolved");
+  }
 }
 void Verifier::visit(ImplDecl *decl) {
+  if (decl->importTarget == nullptr) {
+    Error::internal(decl->span, "import target is nullptr");
+  }
   for (auto &m : decl->LinkedImplMethods) {
     m->accept(this);
   }
@@ -327,8 +384,12 @@ void Verifier::visit(FuncDecl *decl) {
   if (decl->methodSymbol->returnType == nullptr) {
     unresolved(decl, "funcDecl's retrunType is nullptr");
   }
-  for (auto &p : decl->params)
+  if (decl->methodSymbol->module == nullptr) {
+    unresolved(decl, "method's module is unresolved");
+  }
+  for (auto &p : decl->params) {
     p->accept(this);
+  }
   decl->body->accept(this);
 }
 void Verifier::visit(VarDecl *decl) {
@@ -341,11 +402,17 @@ void Verifier::visit(ASTNode *) {}
 void Verifier::visit(Param *param) {
   if (param->symbol == nullptr)
     unresolved(param, "param is unresolved");
+  if (param->defaultValue.has_value()) {
+    param->defaultValue.value()->accept(this);
+  }
 }
 
 void Verifier::visit(InitDecl *decl) {
   if (decl->methodSymbol == nullptr) {
     unresolved(decl, "init is unresolved");
+  }
+  if (decl->methodSymbol->module == nullptr) {
+    unresolved(decl, "init's module is unresolved");
   }
   for (auto &p : decl->params)
     p->accept(this);
@@ -356,9 +423,14 @@ void Verifier::visit(OnDestroyDecl *decl) {
   if (decl->methodSymbol == nullptr) {
     unresolved(decl, "onDestroy is unresolved");
   }
+  if (decl->methodSymbol->module == nullptr) {
+    unresolved(decl, "onDestroy's module is unresolved");
+  }
   decl->body->accept(this);
 }
 
 void Verifier::unresolved(ASTNode *node, const string &msg) {
   Error::internal(node->span, msg);
 }
+
+void Verifier::visit(ImportDecl *) {}

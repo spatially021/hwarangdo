@@ -1,8 +1,6 @@
 #include "hrd/IR/HIR/HIRLinker.h"
 #include "hrd/AST/Decl.h"
 #include "hrd/IR/HIR/HIRDecl.h"
-#include "hrd/IR/HIR/HIRHelper.h"
-#include "hrd/IR/HIR/HIRType.h"
 #include "hrd/SemanticAnalyzer/symbol/MethodSymbol.h"
 #include "hrd/SemanticAnalyzer/symbol/TypeSymbol.h"
 #include "hrd/util/Error.h"
@@ -17,6 +15,9 @@ unique_ptr<HIRSource> HIRLinker::link() {
     if (dynamic_cast<ImplDecl *>(d.get())) {
       continue;
     }
+    if (dynamic_cast<ImportDecl *>(d.get())) {
+      continue;
+    }
     lowerTypeShell(d.get());
   }
   for (auto &d : source->decls) {
@@ -28,12 +29,9 @@ unique_ptr<HIRSource> HIRLinker::link() {
       for (auto &m : c->methods) {
         lowerMethodDeclShell(m.get(), it->second);
       }
-      for (auto &f : c->fields) {
-        lowerField(f.get(), it->second);
-      }
     }
     if (auto *i = dynamic_cast<ImplDecl *>(d.get())) {
-      auto symbol = table.getType(i->target.str);
+      auto symbol = i->importTarget;
       auto it = program->typeDeclMap.find(symbol);
       if (it == program->typeDeclMap.end()) {
         Error::internal(i->span, "fail to find impl target type");
@@ -46,9 +44,6 @@ unique_ptr<HIRSource> HIRLinker::link() {
       auto it = program->typeDeclMap.find(s->symbol);
       if (it == program->typeDeclMap.end()) {
         Error::internal(d->span, "fail to get method's owner type");
-      }
-      for (auto &f : s->fields) {
-        lowerField(f.get(), it->second);
       }
       for (auto &i : s->inits) {
         lowerMethodDeclShell(i.get(), it->second);
@@ -85,10 +80,17 @@ TypeSymbol *HIRLinker::getTypeSymbolFromDecl(Decl *decl,
   if (dynamic_cast<ImplDecl *>(decl)) {
     return nullptr;
   }
+  if (dynamic_cast<ImportDecl *>(decl)) {
+    return nullptr;
+  }
   Error::internal(decl->span, "unmatched decl type");
 }
 
 void HIRLinker::lowerTypeShell(Decl *decl) {
+
+  if (dynamic_cast<ImportDecl *>(decl)) {
+    return;
+  }
 
   HIRTypeDeclKind kind;
   TypeSymbol *typeSymbol = getTypeSymbolFromDecl(decl, kind);
@@ -100,13 +102,8 @@ void HIRLinker::lowerTypeShell(Decl *decl) {
     return;
   }
 
-  HIRType *type = HIRHelper::lowerType(program, hirSource.get(), typeSymbol);
-  if (type == nullptr) {
-    Error::internal(decl->span, "lowerType returned nullptr");
-  }
-
-  auto ty = make_unique<HIRTypeDecl>(decl->span, kind, typeSymbol->name, type,
-                                     typeSymbol);
+  auto ty = make_unique<HIRTypeDecl>(decl->span, kind, typeSymbol->name,
+                                     typeSymbol, typeSymbol);
 
   auto *raw = ty.get();
   auto [it, inserted] = program->typeDeclMap.emplace(typeSymbol, raw);
@@ -115,17 +112,6 @@ void HIRLinker::lowerTypeShell(Decl *decl) {
   }
 
   hirSource->typeDecls.push_back(std::move(ty));
-}
-
-void HIRLinker::lowerField(VarDecl *decl, HIRTypeDecl *type) {
-  unique_ptr<HIRField> field = make_unique<HIRField>();
-  field->symbol = decl->symbol;
-  field->name = decl->name;
-  field->isMutable = decl->isMutable;
-  field->id = type->nextFieldId++;
-  auto raw = field.get();
-  type->fieldMap.emplace(decl->symbol, raw);
-  type->fields.push_back(std::move(field));
 }
 
 void HIRLinker::lowerMethodDeclShell(FuncDecl *decl, HIRTypeDecl *currentType) {
@@ -140,8 +126,7 @@ void HIRLinker::lowerMethodDeclShell(FuncDecl *decl, HIRTypeDecl *currentType) {
 
   method->isAsync = false;
   method->methodKind = decl->methodSymbol->methodKind;
-  method->returnType = HIRHelper::lowerType(program, hirSource.get(),
-                                            decl->methodSymbol->returnType);
+  method->returnType = decl->methodSymbol->returnType;
   vector<unique_ptr<HIRParam>> params;
 
   {
@@ -171,7 +156,6 @@ unique_ptr<HIRParam> HIRLinker::lowerParam(Param *decl) {
   param->symbol = decl->symbol;
   param->name = decl->symbol->name;
   param->id = currentMethod->nextParamID++;
-  param->type =
-      HIRHelper::lowerType(program, hirSource.get(), decl->symbol->typeSymbol);
+  param->type = decl->symbol->typeSymbol;
   return param;
 }

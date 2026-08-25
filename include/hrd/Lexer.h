@@ -4,7 +4,7 @@
 #include "Token.h"
 #include "hrd/Recover/LexerRecover.h"
 #include "hrd/compiler/CompilerContexts.h"
-#include "hrd/util/diagnostic/DiagnosticEngine.h"
+#include "hrd/diagnostic/DiagnosticEngine.h"
 #include <string>
 #include <unordered_map>
 

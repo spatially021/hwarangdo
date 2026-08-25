@@ -16,10 +16,9 @@ LoweredValue llvmCodegen::lowerSpawnExpr(MIRSpawnExpr *expr, FuncContext &ctx) {
                        size, llvm::MaybeAlign(8));
 
   auto initFieldIt = defaultInits.find(entityType);
-  if (initFieldIt == defaultInits.end()) {
-    throw std::runtime_error("fail to find entity default init");
+  if (initFieldIt != defaultInits.end()) {
+    builder.CreateCall(initFieldIt->second, {obj});
   }
-  builder.CreateCall(initFieldIt->second, {obj});
 
   if (expr->initMethod != nullptr) {
     llvm::Function *initFn = funcs.at(expr->initMethod);

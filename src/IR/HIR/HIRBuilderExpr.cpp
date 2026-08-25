@@ -3,12 +3,11 @@
 #include "hrd/IR/HIR/HIRBuilder.h"
 #include "hrd/IR/HIR/HIRDecl.h"
 #include "hrd/IR/HIR/HIRExpr.h"
-#include "hrd/IR/HIR/HIRHelper.h"
 #include "hrd/IR/HIR/HIRStmt.h"
 #include "hrd/IR/HIR/HIRSymbol.h"
-#include "hrd/IR/HIR/HIRType.h"
 #include "hrd/SemanticAnalyzer/symbol/MethodSymbol.h"
 #include "hrd/SemanticAnalyzer/symbol/Symbol.h"
+#include "hrd/SemanticAnalyzer/symbol/TypeSymbol.h"
 #include "hrd/util/Error.h"
 #include <cassert>
 #include <cstddef>
@@ -34,13 +33,10 @@ unique_ptr<HIRExpr> HIRBuilder::lowerImplictCall(CallExpr *expr) {
   if (receiver == nullptr) {
     Error::internal(expr->span, "fail to lower implict self");
   }
-  HIRMethodDecl *methodDecl = nullptr;
+  MethodSymbol *methodDecl = nullptr;
   if (auto method = get_if<MethodSymbol *>(&expr->resolved)) {
-    auto it = currentType->methodMap.find(*method);
-    if (it == currentType->methodMap.end()) {
-      Error::internal(expr->span, "fail to find methodDecl");
-    }
-    methodDecl = it->second;
+
+    methodDecl = *method;
   } else {
     Error::internal(expr->span, "method call but not methodSymbol");
   }
@@ -52,19 +48,14 @@ unique_ptr<HIRExpr> HIRBuilder::lowerImplictCall(CallExpr *expr) {
     if (symbol == nullptr) {
       Error::internal(expr->span, "illegal symbol kind");
     }
-    auto decl = dynamic_cast<FuncDecl *>((*symbol)->decl);
 
     args.push_back(
-        lowerCallArg(expr->arguments[i].get(), decl->params[i].get()));
-  }
-  auto it = program->typeCache.find(expr->resolvedType);
-
-  if (it == program->typeCache.end()) {
-    Error::internal("fail to find return type");
+        lowerCallArg(expr->arguments[i].get(), (*symbol)->params[i]));
   }
 
-  return make_unique<HIRMethodCallExpr>(
-      expr->span, std::move(receiver), methodDecl, std::move(args), it->second);
+  return make_unique<HIRMethodCallExpr>(expr->span, std::move(receiver),
+                                        methodDecl, std::move(args),
+                                        expr->resolvedType);
 }
 
 std::unique_ptr<HIRExpr> HIRBuilder::lowerCall(CallExpr *expr) {
@@ -73,17 +64,10 @@ std::unique_ptr<HIRExpr> HIRBuilder::lowerCall(CallExpr *expr) {
   if (receiver == nullptr) {
     Error::internal(expr->span, "fail to lower receiver");
   }
-  HIRMethodDecl *methodDecl = nullptr;
+  MethodSymbol *methodDecl = nullptr;
   if (auto method = get_if<MethodSymbol *>(&expr->resolved)) {
-    auto typeIt = program->typeDeclMap.find(expr->receiver->resolvedType);
-    if (typeIt == program->typeDeclMap.end()) {
-      Error::internal(expr->span, "fail to get receiver's typeDecl");
-    }
-    auto it = typeIt->second->methodMap.find(*method);
-    if (it == currentType->methodMap.end()) {
-      Error::internal(expr->span, "fail to find methodDecl");
-    }
-    methodDecl = it->second;
+
+    methodDecl = *method;
   } else {
     Error::internal(expr->span, "method call but not methodSymbol");
   }
@@ -94,38 +78,37 @@ std::unique_ptr<HIRExpr> HIRBuilder::lowerCall(CallExpr *expr) {
     if (symbol == nullptr) {
       Error::internal(expr->span, "illegal symbol kind");
     }
-    auto decl = dynamic_cast<FuncDecl *>((*symbol)->decl);
 
     args.push_back(
-        lowerCallArg(expr->arguments[i].get(), decl->params[i].get()));
+        lowerCallArg(expr->arguments[i].get(), (*symbol)->params[i]));
   }
 
   if (expr->resolvedType == nullptr) {
     Error::internal(expr->span, "resolvedType is nullptr");
   }
 
-  auto it = program->typeCache.find(expr->resolvedType);
-
-  if (it == program->typeCache.end()) {
-    Error::internal(expr->span,
-                    "fail to find return type : " + expr->resolvedType->name);
-  }
-
-  auto rType = it->second;
+  auto rType = expr->resolvedType;
 
   return make_unique<HIRMethodCallExpr>(expr->span, std::move(receiver),
                                         methodDecl, std::move(args), rType);
 }
 
-unique_ptr<HIRValueExpr> HIRBuilder::lowerCallArg(Expr *expr, Param *param) {
+unique_ptr<HIRValueExpr> HIRBuilder::lowerCallArg(Expr *expr,
+                                                  ParamSymbol *param) {
 
   assert(expr);
 
   if (dynamic_cast<DefaultValueExpr *>(expr)) {
-    if (!param->defaultValue.has_value()) {
+    if (get_if<std::monostate>(&param->defaultValue)) {
       Error::internal(expr->span, "parameter has no default value");
     }
-    return lowerValue(param->defaultValue.value().get());
+    if (auto lit = get_if<LiteralExpr *>(&param->defaultValue)) {
+      return lowerValue(*lit);
+    }
+    if (auto call = get_if<CallExpr *>(&param->defaultValue)) {
+      return lowerValue(*call);
+    }
+    Error::internal(expr->span, "unknown default value");
   }
 
   return lowerValue(expr);
@@ -140,7 +123,7 @@ unique_ptr<HIRExpr> HIRBuilder::lowerTernary(TernaryExpr *expr) {
 
   // typeSymbol->hirType
   // nullptr not allowed
-  auto type = HIRHelper::lowerType(program, source, expr->resolvedType);
+  auto type = expr->resolvedType;
 
   return make_unique<HIRTernaryExpr>(expr->span, std::move(cond),
                                      std::move(then), std::move(else_), type);
@@ -148,8 +131,8 @@ unique_ptr<HIRExpr> HIRBuilder::lowerTernary(TernaryExpr *expr) {
 
 unique_ptr<HIRExpr> HIRBuilder::lowerCast(CastExpr *expr) {
   auto operand = lowerValue(expr->left.get());
-  auto from = HIRHelper::lowerType(program, source, expr->left->resolvedType);
-  auto to = HIRHelper::lowerType(program, source, expr->resolvedType);
+  auto from = expr->left->resolvedType;
+  auto to = expr->resolvedType;
   return make_unique<HIRCastExpr>(expr->span, std::move(operand), from, to);
 }
 
@@ -159,7 +142,7 @@ unique_ptr<HIRExpr> HIRBuilder::lowerMatch(MatchExpr *expr) {
   for (auto &c : expr->cases) {
     cases.push_back(lowerCase(c.get()));
   }
-  HIRType *type = HIRHelper::lowerType(program, source, expr->resolvedType);
+  TypeSymbol *type = expr->resolvedType;
   return make_unique<HIRMatchExpr>(expr->span, type, std::move(cond),
                                    std::move(cases));
 }
@@ -181,13 +164,11 @@ unique_ptr<HIRExpr> HIRBuilder::lowerSpawn(SpawnExpr *expr) {
 
   // typeSymbol->hirEntityType
   // nullptr not allowed
-  HIREntityType *entity =
-      HIRHelper::lowerEntityType(program, source, expr->spawnType->resolved);
+  TypeSymbol *entity = expr->spawnType->resolved;
 
   // make handle with entity and stoagekind
   // nullptr not allowed
-  HIRHandleType *handle = HIRHelper::getOrCreateHandleType(
-      program, source, entity, expr->resolvedType, storageKind);
+  TypeSymbol *handle = expr->resolvedType;
 
   vector<unique_ptr<HIRExpr>> args;
   for (auto &a : expr->args) {
@@ -232,10 +213,9 @@ unique_ptr<HIRExpr> HIRBuilder::lowerView(ViewExpr *expr) {
     Error::internal(expr->span, "unknown storage kind");
   };
 
-  HIREntityType *entity =
-      HIRHelper::lowerEntityType(program, source, expr->resolvedType);
+  TypeSymbol *entity = expr->resolvedType;
   auto handle = lowerValue(expr->target.get());
-  HIRObserverType *observer = getOrCreateObserverType(entity, storageKind);
+  TypeSymbol *observer = entity;
 
   return make_unique<HIRViewExpr>(expr->span, observer, storageKind,
                                   std::move(handle), entity);
@@ -243,27 +223,11 @@ unique_ptr<HIRExpr> HIRBuilder::lowerView(ViewExpr *expr) {
 
 unique_ptr<HIRExpr> HIRBuilder::lowerInitCall(CallExpr *expr) {
   assert(expr);
-  HIRBlockStmt *defaultInit = nullptr;
-  auto type = table.getType(expr->methodName);
-  if (type == nullptr) {
-    Error::internal(expr->span, "fail to get typeSymbol");
-  }
-  auto typeIt = program->typeDeclMap.find(type);
-  if (typeIt == program->typeDeclMap.end()) {
-    Error::internal(expr->span, "fail to get receiver's typeDecl");
-  }
-  defaultInit = typeIt->second->defaultInitBlock.get();
-
   if (!holds_alternative<std::monostate>(expr->resolved)) {
-    HIRMethodDecl *methodDecl = nullptr;
+    MethodSymbol *methodDecl = nullptr;
 
     if (auto method = get_if<MethodSymbol *>(&expr->resolved)) {
-
-      auto it = typeIt->second->initMap.find(*method);
-      if (it == currentType->initMap.end()) {
-        Error::internal(expr->span, "fail to find methodDecl");
-      }
-      methodDecl = it->second;
+      methodDecl = *method;
     } else {
       Error::internal(expr->span, "method call but not methodSymbol");
     }
@@ -274,43 +238,24 @@ unique_ptr<HIRExpr> HIRBuilder::lowerInitCall(CallExpr *expr) {
       if (symbol == nullptr) {
         Error::internal(expr->span, "illegal symbol kind");
       }
-      auto decl = dynamic_cast<FuncDecl *>((*symbol)->decl);
 
-      // auto decl = dynamic_cast<FuncDecl *>(
-      //     dynamic_cast<MethodSymbol *>(expr->resolved)->decl);
       args.push_back(
-          lowerCallArg(expr->arguments[i].get(), decl->params[i].get()));
+          lowerCallArg(expr->arguments[i].get(), (*symbol)->params[i]));
     }
 
     if (expr->resolvedType == nullptr) {
       Error::internal(expr->span, "resolvedType is nullptr");
     }
 
-    auto it = program->typeCache.find(expr->resolvedType);
-
-    if (it == program->typeCache.end()) {
-      Error::internal(expr->span,
-                      "fail to find return type : " + expr->resolvedType->name);
-    }
-
-    auto rType = it->second;
-
-    return make_unique<HIRStructInitExpr>(expr->span, methodDecl,
-                                          std::move(args), rType, defaultInit);
+    return make_unique<HIRStructInitExpr>(
+        expr->span, methodDecl, std::move(args), expr->resolvedType, true);
   }
   vector<unique_ptr<HIRExpr>> args;
 
-  auto it = program->typeCache.find(expr->resolvedType);
-
-  if (it == program->typeCache.end()) {
-    Error::internal(expr->span,
-                    "fail to find return type : " + expr->resolvedType->name);
-  }
-
-  auto rType = it->second;
+  auto rType = expr->resolvedType;
 
   return make_unique<HIRStructInitExpr>(expr->span, nullptr, std::move(args),
-                                        rType, defaultInit, true);
+                                        rType, true);
 }
 
 unique_ptr<HIRExpr> HIRBuilder::lowerLiteral(LiteralExpr *expr) {
@@ -318,7 +263,7 @@ unique_ptr<HIRExpr> HIRBuilder::lowerLiteral(LiteralExpr *expr) {
     Error::internal(expr->span, "literal has no resolved type");
   }
 
-  auto *ty = HIRHelper::lowerType(program, source, expr->resolvedType);
+  auto *ty = expr->resolvedType;
 
   return std::make_unique<HIRLiteralExpr>(expr->span, ty, expr->resolvedLit);
 }
@@ -328,7 +273,7 @@ unique_ptr<HIRExpr> HIRBuilder::lowerRuntime(CallExpr *expr) {
     Error::internal(expr->span, "runtimeCall has no resolved type");
   }
 
-  auto ty = HIRHelper::lowerType(program, source, expr->resolvedType);
+  auto ty = expr->resolvedType;
   auto runtime = get_if<RuntimeSymbol *>(&expr->resolved);
   if (runtime == nullptr) {
     Error::internal(expr->span, "fail to get runtimeSymbol");

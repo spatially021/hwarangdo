@@ -1,12 +1,31 @@
 #pragma once
 
-#include "hrd/AST/Program.h"
-#include "hrd/AST/TokenStream.h"
-#include "hrd/IR/HIR/HIRProgram.h"
-#include "hrd/IR/MIR/MIRProgram.h"
-#include "hrd/Inputs.h"
-#include "hrd/SemanticAnalyzer/SymbolTable.h"
-#include "hrd/util/diagnostic/DiagnosticEngine.h"
+#include <memory>
+#include <vector>
+
+// AST
+class Program;
+class TokenStream;
+class Expr;
+
+// IR
+class HIRProgram;
+class MIRProgram;
+
+// Compiler
+class InputSource;
+
+// Metadata
+struct ModuleMeta;
+
+// Semantic Analyzer
+class Module;
+class SymbolTable;
+class SymbolRegistry;
+struct Scope;
+
+// Diagnostic
+class DiagnosticEngine;
 
 struct LexerContext {
   const InputSource &source;
@@ -18,10 +37,19 @@ struct ParserContext {
   DiagnosticEngine &engine;
 };
 
+struct ImportedContext {
+  ModuleMeta &meta;
+  Module *module;
+  SymbolTable &table;
+  std::vector<std::shared_ptr<Expr>> &imported;
+  Scope *scope;
+};
+
 struct SemanContext {
   Program *program = nullptr;
   SymbolTable &table;
   DiagnosticEngine &engine;
+  bool isCompile;
 };
 
 struct BuilderContext {
@@ -64,4 +92,5 @@ struct MIRContext {
 struct CodegenContext {
   MIRProgram *program = nullptr;
   SymbolTable &table;
+  bool isCompile;
 };

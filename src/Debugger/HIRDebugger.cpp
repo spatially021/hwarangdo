@@ -29,20 +29,10 @@ void HIRDebugger::debugType(HIRTypeDecl *type) {
   cout << type->name;
   cout << "\n";
   depth++;
-  for (auto &f : type->fields) {
-    debugField(f.get());
-  }
   for (auto &m : type->methods) {
     debugMethod(m.get());
   }
   depth--;
-}
-
-void HIRDebugger::debugField(HIRField *field) {
-  cout << ident();
-  cout << "field " << field->name;
-  cout << " : " << field->type->name;
-  cout << "\n";
 }
 
 void HIRDebugger::debugMethod(HIRMethodDecl *method) {
@@ -135,7 +125,7 @@ void HIRDebugger::debugLocal(HIRLocal *local) {
 
   cout << " [id=" << local->id << "]";
 
-  if (!local->isMutable)
+  if (local->symbol->isConst)
     cout << " const";
 
   if (local->isInitialized)
@@ -526,7 +516,7 @@ void HIRDebugger::debugExpr(HIRExpr *expr) {
     auto *e = static_cast<HIRFieldPlaceExpr *>(expr);
     cout << ident() << "FieldPlace ";
     if (e->field != nullptr)
-      cout << e->field->name << " : " << e->field->type->name;
+      cout << e->field->name << " : " << e->field->typeSymbol->name;
     else
       cout << "<null-field>";
     cout << "\n";

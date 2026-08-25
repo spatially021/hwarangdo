@@ -3,6 +3,7 @@
 #include "hrd/AST/Decl.h"
 #include "hrd/AST/DeclContext.h"
 #include "hrd/AST/Expr.h"
+#include "hrd/Inputs.h"
 #include "hrd/Recover/BuilderRecover.h"
 #include "hrd/SemanticAnalyzer/Scope.h"
 #include "hrd/SemanticAnalyzer/symbol/MethodSymbol.h"
@@ -92,8 +93,8 @@ void Builder::visit(CaseValueExpr *expr) {
 }
 void Builder::visit(MatchExpr *expr) {
   ScopeGuard _(table);
-  table.getCurrent()->scopeKind = Scope::ScopeKind::BLOCK;
-  expr->blockScope = table.getCurrent();
+  table.scopeManger.current()->scopeKind = Scope::ScopeKind::BLOCK;
+  expr->blockScope = table.scopeManger.current();
   for (auto &c : expr->cases) {
     c->accept(this);
   }
@@ -102,8 +103,8 @@ void Builder::visit(MatchExpr *expr) {
 void Builder::visit(ExprStmt *stmt) { stmt->expr->accept(this); }
 void Builder::visit(BlockStmt *stmt) {
   ScopeGuard _(table);
-  stmt->blockScope = table.getCurrent();
-  table.getCurrent()->scopeKind = Scope::ScopeKind::BLOCK;
+  stmt->blockScope = table.scopeManger.current();
+  table.scopeManger.current()->scopeKind = Scope::ScopeKind::BLOCK;
   for (auto &s : stmt->statements) {
     s->accept(this);
   }
@@ -115,9 +116,9 @@ void Builder::visit(IfStmt *stmt) {
 }
 void Builder::visit(ForStmt *stmt) {
   ScopeGuard _(table);
-  stmt->blockScope = table.getCurrent();
+  stmt->blockScope = table.scopeManger.current();
   stmt->initializer->accept(this);
-  table.getCurrent()->scopeKind = Scope::ScopeKind::BLOCK;
+  table.scopeManger.current()->scopeKind = Scope::ScopeKind::BLOCK;
   stmt->body->accept(this);
 }
 
@@ -125,8 +126,8 @@ void Builder::visit(WhileStmt *stmt) { stmt->body->accept(this); }
 
 void Builder::visit(SwitchStmt *stmt) {
   ScopeGuard _(table);
-  table.getCurrent()->scopeKind = Scope::ScopeKind::BLOCK;
-  stmt->blockScope = table.getCurrent();
+  table.scopeManger.current()->scopeKind = Scope::ScopeKind::BLOCK;
+  stmt->blockScope = table.scopeManger.current();
 
   for (auto &c : stmt->clauses) {
     c->accept(this);
@@ -152,7 +153,8 @@ void Builder::buildMain(ClassDecl *decl) {
   auto symbol = make_unique<MainSymbol>();
   symbol->name = decl->name;
   symbol->decl = decl;
-
+  symbol->path = table.registry.getCurrentFile()->path;
+  symbol->module = table.moudle;
   auto raw = symbol.get();
 
   auto result = table.add(std::move(symbol));
@@ -189,8 +191,8 @@ void Builder::buildMain(ClassDecl *decl) {
   TypeContextGuard _(currentType, raw);
   ScopeGuard __(table);
 
-  raw->memberScope = table.getCurrent();
-  table.getCurrent()->scopeKind = Scope::ScopeKind::FIELD;
+  raw->memberScope = table.scopeManger.current();
+  table.scopeManger.current()->scopeKind = Scope::ScopeKind::FIELD;
   for (auto &a : decl->fields) {
     a->accept(this);
     raw->fields.push_back(a->symbol);
@@ -214,6 +216,8 @@ void Builder::visit(ClassDecl *decl) {
       decl->baseClass.has_value()
           ? std::optional<std::string>(decl->baseClass.value().str)
           : nullopt;
+  symbol->path = table.registry.getCurrentFile()->path;
+  symbol->module = table.moudle;
   auto raw = symbol.get();
 
   auto result = table.add(std::move(symbol));
@@ -259,8 +263,8 @@ void Builder::visit(ClassDecl *decl) {
 
   TypeContextGuard _(currentType, raw);
   ScopeGuard __(table);
-  table.getCurrent()->scopeKind = Scope::ScopeKind::FIELD;
-  raw->memberScope = table.getCurrent();
+  table.scopeManger.current()->scopeKind = Scope::ScopeKind::FIELD;
+  raw->memberScope = table.scopeManger.current();
   for (auto &a : decl->fields) {
     a->accept(this);
     raw->fields.push_back(a->symbol);
@@ -275,7 +279,8 @@ void Builder::visit(StructDecl *decl) {
   symbol->name = decl->name;
   symbol->decl = decl;
   symbol->kind = TypeSymbol::TypeKind::STRUCT;
-
+  symbol->path = table.registry.getCurrentFile()->path;
+  symbol->module = table.moudle;
   auto raw = symbol.get();
 
   auto result = table.add(std::move(symbol));
@@ -321,8 +326,8 @@ void Builder::visit(StructDecl *decl) {
 
   TypeContextGuard _(currentType, raw);
   ScopeGuard __(table);
-  table.getCurrent()->scopeKind = Scope::ScopeKind::FIELD;
-  raw->memberScope = table.getCurrent();
+  table.scopeManger.current()->scopeKind = Scope::ScopeKind::FIELD;
+  raw->memberScope = table.scopeManger.current();
   for (auto &a : decl->fields) {
     a->accept(this);
     raw->fields.push_back(a->symbol);
@@ -339,6 +344,8 @@ void Builder::visit(EnumDecl *decl) {
   symbol->name = decl->name;
   symbol->decl = decl;
   symbol->kind = TypeSymbol::TypeKind::ENUM;
+  symbol->path = table.registry.getCurrentFile()->path;
+  symbol->module = table.moudle;
 
   auto raw = symbol.get();
 
@@ -417,18 +424,17 @@ void Builder::visit(ImplDecl *decl) {
   symbol->decl = decl;
 
   auto raw = symbol.get();
+  table.registry.addImpl(decl, std::move(symbol));
 
   ScopeGuard _(table);
   TypeContextGuard __(currentType, raw);
-  table.getCurrent()->scopeKind = Scope::ScopeKind::FIELD;
-  symbol->memberScope = table.getCurrent();
+  table.scopeManger.current()->scopeKind = Scope::ScopeKind::FIELD;
+  raw->memberScope = table.scopeManger.current();
+
   for (auto &a : decl->LinkedImplMethods) {
     a->accept(this);
     a->methodSymbol->owner = nullptr;
   }
-
-  table.impls.push_back(std::move(symbol));
-  table.implMap.emplace(decl, raw);
 }
 
 void Builder::visit(TraitDecl *decl) {
@@ -481,8 +487,8 @@ void Builder::visit(TraitDecl *decl) {
 
   TypeContextGuard _(currentType, raw);
   ScopeGuard __(table);
-  table.getCurrent()->scopeKind = Scope::ScopeKind::FIELD;
-  raw->memberScope = table.getCurrent();
+  table.scopeManger.current()->scopeKind = Scope::ScopeKind::FIELD;
+  raw->memberScope = table.scopeManger.current();
   for (auto &a : decl->traitSigs) {
     if (a == nullptr)
       Error::internal("traitSig is nullptr");
@@ -537,9 +543,9 @@ void Builder::visit(TraitSig *sig) {
     }
   }
   ScopeGuard _(table);
-  table.getCurrent()->scopeKind = Scope::ScopeKind::FUNC;
+  table.scopeManger.current()->scopeKind = Scope::ScopeKind::FUNC;
   for (auto &a : sig->params) {
-    auto s = make_unique<ValueSymbol>();
+    auto s = make_unique<ParamSymbol>();
     s->name = a->name;
     s->kind = ValueSymbol::Kind::PARAM;
     s->node = a.get();
@@ -599,6 +605,8 @@ void Builder::visit(FuncDecl *decl) {
   symbol->owner = currentType;
   symbol->declType = currentType;
   symbol->modifier = decl->aModifier;
+  symbol->module = table.moudle;
+  symbol->path = table.registry.getCurrentFile()->path;
   auto raw = symbol.get();
 
   auto result = table.add(std::move(symbol));
@@ -643,7 +651,7 @@ void Builder::visit(FuncDecl *decl) {
 
   ScopeGuard _(table);
 
-  raw->scope = table.getCurrent();
+  raw->scope = table.scopeManger.current();
   raw->isExtern = decl->isExtern;
   raw->isFrame = decl->isFrame;
   raw->isOverride = decl->isOverride;
@@ -665,6 +673,7 @@ void Builder::visit(VarDecl *decl) {
   symbol->isRoot = decl->isRoot;
   symbol->modifier = decl->aModifier;
   symbol->nameSpan = decl->span;
+  symbol->isConst = !decl->isMutable;
   auto raw = symbol.get();
 
   auto result = table.add(std::move(symbol));
@@ -769,7 +778,7 @@ void Builder::visit(VarDecl *decl) {
 void Builder::visit(TypeNode *) {}
 void Builder::visit(ASTNode *) {}
 void Builder::visit(Param *a) {
-  auto s = make_unique<ValueSymbol>();
+  auto s = make_unique<ParamSymbol>();
   s->name = a->name;
   s->kind = ValueSymbol::Kind::PARAM;
   s->node = a;
@@ -822,21 +831,23 @@ void Builder::visit(InitDecl *decl) {
   symbol->decl = decl;
   symbol->owner = currentType;
   symbol->methodKind = MethodKind::Init;
-  symbol->returnType = table.getBuilt("void");
+  symbol->returnType = table.registry.getBuilt("void");
+  symbol->module = table.moudle;
+  symbol->path = table.registry.getCurrentFile()->path;
   auto raw = symbol.get();
 
-  table.addInit(std::move(symbol));
+  table.scopeManger.addInit(std::move(symbol));
 
   decl->methodSymbol = raw;
 
   ScopeGuard _(table);
 
-  raw->scope = table.getCurrent();
-  table.getCurrent()->scopeKind = Scope::ScopeKind::INIT;
+  raw->scope = table.scopeManger.current();
+  table.scopeManger.current()->scopeKind = Scope::ScopeKind::INIT;
   raw->isOverride = decl->isOverride;
 
   for (auto &a : decl->params) {
-    auto s = make_unique<ValueSymbol>();
+    auto s = make_unique<ParamSymbol>();
     s->name = a->name;
     s->kind = ValueSymbol::Kind::PARAM;
     s->node = a.get();
@@ -893,10 +904,12 @@ void Builder::visit(OnDestroyDecl *decl) {
   symbol->decl = decl;
   symbol->owner = currentType;
   symbol->methodKind = MethodKind::OnDestroy;
-  symbol->returnType = table.getBuilt("void");
+  symbol->returnType = table.registry.getBuilt("void");
+  symbol->module = table.moudle;
+  symbol->path = table.registry.getCurrentFile()->path;
   auto raw = symbol.get();
 
-  if (!table.addOnDestroy(std::move(symbol))) {
+  if (!table.scopeManger.addOnDestroy(std::move(symbol))) {
     auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S007);
     dia.labels = {
         {decl->span, "duplicate onDestroy declared here", true},
@@ -913,8 +926,16 @@ void Builder::visit(OnDestroyDecl *decl) {
 
   ScopeGuard _(table);
 
-  raw->scope = table.getCurrent();
-  table.getCurrent()->scopeKind = Scope::ScopeKind::ONDESTROY;
+  raw->scope = table.scopeManger.current();
+  table.scopeManger.current()->scopeKind = Scope::ScopeKind::ONDESTROY;
 
   decl->body->accept(this);
+}
+
+void Builder::visit(ImportDecl *decl) {
+  vector<string> vec;
+  for (auto s : decl->path) {
+    vec.push_back(s.str);
+  }
+  decl->sPath = {std::move(vec)};
 }

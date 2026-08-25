@@ -1,7 +1,7 @@
 #pragma once
 #include "hrd/IR/HIR/HIRDecl.h"
 #include "hrd/IR/HIR/HIRStmt.h"
-#include "hrd/SemanticAnalyzer/SymbolTable.h"
+#include "hrd/SemanticAnalyzer/SymbolTable/SymbolTable.h"
 
 class TypeContextGuard {
 public:
@@ -21,9 +21,11 @@ private:
 
 class ScopeGuard {
 public:
-  ScopeGuard(SymbolTable &t) : table(t) { table.enter(); }
-  ScopeGuard(SymbolTable &t, Scope *scope) : table(t) { table.enter(scope); }
-  ~ScopeGuard() noexcept { table.exit(); }
+  ScopeGuard(SymbolTable &t) : table(t) { table.scopeManger.enter(); }
+  ScopeGuard(SymbolTable &t, Scope *scope) : table(t) {
+    table.scopeManger.enter(scope);
+  }
+  ~ScopeGuard() noexcept { table.scopeManger.exit(); }
 
   ScopeGuard(const ScopeGuard &) = delete;
   ScopeGuard &operator=(const ScopeGuard &) = delete;

@@ -1,15 +1,17 @@
 #include "hrd/SemanticAnalyzer/Resolver.h"
+#include "hrd/SemanticAnalyzer/symbol/SymbolHelper.h"
+#include "hrd/SemanticAnalyzer/symbol/TypeSymbol.h"
+#include "hrd/diagnostic/Diagnostic.h"
 #include "hrd/util/Error.h"
-#include "hrd/util/diagnostic/Diagnostic.h"
 
 void Resolver::visit(UnaryExpr *expr) {
   expr->right->accept(this);
 
   if (expr->tOp.kind == TKind::BANG) {
-    if (table.isBool(expr->right->resolvedType)) {
+    if (isa<BoolType>(expr->right->resolvedType)) {
       expr->resolvedType = expr->right->resolvedType;
       expr->op = Operator::L_NOT;
-    } else if (table.isInt(expr->right->resolvedType)) {
+    } else if (isa<IntType>(expr->right->resolvedType)) {
       expr->resolvedType = expr->right->resolvedType;
       expr->op = Operator::B_NOT;
     } else {
@@ -31,7 +33,7 @@ void Resolver::visit(UnaryExpr *expr) {
       recover.recover();
     }
   } else if (expr->tOp.kind == TKind::PLUS || expr->tOp.kind == TKind::MINUS) {
-    if (table.isNumberic(expr->right->resolvedType)) {
+    if (SymbolHelper::isNumberic(expr->right->resolvedType)) {
       expr->resolvedType = expr->right->resolvedType;
     } else {
       auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S066);
@@ -56,7 +58,7 @@ void Resolver::visit(UnaryExpr *expr) {
     } else {
       expr->op = Operator::MINUS;
 
-      if (!table.isSigned(expr->right->resolvedType)) {
+      if (!SymbolHelper::isSigned(expr->right->resolvedType)) {
         auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S067);
         dia.labels = {
             {expr->right->span,
@@ -154,7 +156,7 @@ void Resolver::visit(BinaryExpr *expr) {
 void Resolver::visit(TernaryExpr *expr) {
   expr->conditon->accept(this);
 
-  if (expr->conditon->resolvedType != table.getBool()) {
+  if (expr->conditon->resolvedType != table.registry.getBool()) {
     auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S070);
     dia.labels = {
         {expr->conditon->span,

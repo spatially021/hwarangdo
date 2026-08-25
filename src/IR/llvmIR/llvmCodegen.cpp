@@ -2,7 +2,7 @@
 #include "hrd/AST/Decl.h"
 #include "hrd/IR/MIR/MIRNode.h"
 #include "hrd/SemanticAnalyzer/ResolvedLit.h"
-#include "hrd/SemanticAnalyzer/SymbolTable.h"
+#include "hrd/SemanticAnalyzer/SymbolTable/SymbolTable.h"
 #include "hrd/SemanticAnalyzer/symbol/MethodSymbol.h"
 #include "hrd/SemanticAnalyzer/symbol/TypeSymbol.h"
 #include "hrd/compiler/CompilerContexts.h"
@@ -30,13 +30,15 @@ template <class... Ts> Overloaded(Ts...) -> Overloaded<Ts...>;
 llvmCodegen::llvmCodegen(CodegenContext &ctx)
     : context(), program(ctx.program), table(ctx.table),
       llvmModule(make_unique<llvm::Module>("hwarangdo", context)),
-      builder(context) {}
+      builder(context), isCompile(ctx.isCompile) {}
 
 void llvmCodegen::generate() {
   buildTypes();
-  declareRoots(table.rootScope.get());
+  declareRoots(table.scopeManger.getRootScope());
   buildMethods();
-  generateEntryMain(table.main);
+  if (!isCompile) {
+    generateEntryMain(table.main);
+  }
 }
 
 void llvmCodegen::lowerBlock(BasicBlock *block, FuncContext &ctx) {

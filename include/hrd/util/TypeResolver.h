@@ -3,8 +3,8 @@
 #include "hrd/AST/ASTNode.h"
 #include "hrd/Recover/Recover.h"
 #include "hrd/SemanticAnalyzer/ResolvedLit.h"
-#include "hrd/SemanticAnalyzer/SymbolTable.h"
-#include "hrd/util/diagnostic/DiagnosticEngine.h"
+#include "hrd/SemanticAnalyzer/SymbolTable/SymbolTable.h"
+#include "hrd/diagnostic/DiagnosticEngine.h"
 
 struct TypeResolverContext {
   DiagnosticEngine &engine;

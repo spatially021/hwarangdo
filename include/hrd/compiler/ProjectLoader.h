@@ -1,9 +1,11 @@
 #pragma once
 
-#include "../Inputs.h"
+#include "hrd/Inputs.h"
 
 #include <filesystem>
 #include <optional>
+
+namespace fs = std::filesystem;
 
 class ProjectLoader {
 public:
@@ -25,4 +27,8 @@ private:
 
   static bool isProjectFile(const std::filesystem::path &path);
   static bool isSourceFile(const std::filesystem::path &path);
+  static ModuleConfigResult
+  loadModuleConfig(const std::filesystem::path &rootPath);
+  static SourcePath makeSourcePath(const fs::path &path,
+                                   const fs::path &sourceRoot);
 };

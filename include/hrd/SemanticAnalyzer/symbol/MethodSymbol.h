@@ -1,11 +1,13 @@
 #pragma once
 
 #include "Symbol.h"
+#include "hrd/Inputs.h"
 #include "hrd/SemanticAnalyzer/symbol/TypeSymbol.h"
 #include "hrd/SemanticAnalyzer/symbol/ValueSymbol.h"
 #include "hrd/enums/MethodKind.h"
 #include <vector>
 class Scope;
+struct Module;
 
 class MethodSymbol : public Symbol {
 public:
@@ -15,12 +17,13 @@ public:
   TypeSymbol *declType = nullptr;
   TypeSymbol *returnType = nullptr;
   ASTNode *decl = nullptr;
-  vector<ValueSymbol *> params;
+  vector<ParamSymbol *> params;
   Expr::State state = Expr::State::RESOLVED;
   Scope *scope = nullptr;
   Scope *selfScope = nullptr;
   MethodKind methodKind;
-
+  Module *module = nullptr;
+  SourcePath path;
   bool isExtern = false;
   bool isFrame = false;
   bool isOverride = false;

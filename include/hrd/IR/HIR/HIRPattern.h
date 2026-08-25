@@ -13,19 +13,19 @@ struct HIRPattern : HIRNode {
 };
 
 struct HIRLiteralCase {
-  unique_ptr<HIRLiteralExpr> expr = nullptr;
-  HIRLiteralCase(unique_ptr<HIRLiteralExpr> e) : expr(std::move(e)) {}
+  std::unique_ptr<HIRLiteralExpr> expr = nullptr;
+  HIRLiteralCase(std::unique_ptr<HIRLiteralExpr> e) : expr(std::move(e)) {}
 };
 
 struct HIRUnitCase {
-  HIREnumVariant *variant = nullptr;
-  HIRUnitCase(HIREnumVariant *v) : variant(v) {}
+  EnumVariantSymbol *variant = nullptr;
+  HIRUnitCase(EnumVariantSymbol *v) : variant(v) {}
 };
 
 struct HIRPayloadCase {
-  HIREnumVariant *variant = nullptr;
+  EnumVariantSymbol *variant = nullptr;
   HIRLocal *binding = nullptr;
-  HIRPayloadCase(HIREnumVariant *v, HIRLocal *b) : variant(v), binding(b) {}
+  HIRPayloadCase(EnumVariantSymbol *v, HIRLocal *b) : variant(v), binding(b) {}
 };
 
 struct HIRWildcardCase {};

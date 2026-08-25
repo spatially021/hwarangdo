@@ -10,8 +10,8 @@
 #include "hrd/AST/TokenStream.h"
 #include "hrd/Recover/ParserRecover.h"
 #include "hrd/compiler/CompilerContexts.h"
-#include "hrd/util/diagnostic/Diagnostic.h"
-#include "hrd/util/diagnostic/DiagnosticEngine.h"
+#include "hrd/diagnostic/Diagnostic.h"
+#include "hrd/diagnostic/DiagnosticEngine.h"
 #include <cassert>
 #include <cstddef>
 #include <memory>
@@ -62,6 +62,7 @@ private:
   const std::vector<Token> &tokens;
   DiagnosticEngine &engine;
   size_t current = 0;
+  bool endImport = false;
   TokenStream &stream;
 
   // 문장 단위
@@ -115,6 +116,7 @@ private:
   Decl::Ptr handleDecl(DeclPrefix prefix);
   Decl::Ptr initDecl(DeclPrefix prefix);
   Decl::Ptr onDestroyDecl(DeclPrefix prefix);
+  Decl::Ptr importDecl();
 
   // 유틸리티
   bool match(std::initializer_list<TKind> kinds);

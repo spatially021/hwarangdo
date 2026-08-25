@@ -3,17 +3,17 @@
 #include "hrd/AST/DeclContext.h"
 #include "hrd/AST/Expr.h"
 #include "hrd/AST/Stmt.h"
-#include "hrd/IR/HIR/HIRType.h"
 #include "hrd/SemanticAnalyzer/ResolvedLit.h"
 #include "hrd/SemanticAnalyzer/Resolver.h"
 #include "hrd/SemanticAnalyzer/symbol/MethodSymbol.h"
 #include "hrd/SemanticAnalyzer/symbol/Symbol.h"
 #include "hrd/SemanticAnalyzer/symbol/TypeSymbol.h"
 #include "hrd/SemanticAnalyzer/symbol/ValueSymbol.h"
+#include "hrd/diagnostic/Diagnostic.h"
 #include "hrd/util/Error.h"
 #include "hrd/util/Guard.h"
+#include "hrd/util/Helper.h"
 #include "hrd/util/TypeResolver.h"
-#include "hrd/util/diagnostic/Diagnostic.h"
 #include <llvm/ADT/APInt.h>
 #include <string>
 
@@ -69,14 +69,11 @@ void Resolver::visit(StructDecl *decl) {
 }
 void Resolver::visit(EnumDecl *) {}
 void Resolver::visit(ImplDecl *decl) {
-  auto implIt = table.implMap.find(decl);
-  if (implIt == table.implMap.end()) {
-    Error::internal(decl->span, "fail to find impl");
-  }
-  ScopeGuard _(table, implIt->second->memberScope);
-  TypeContextGuard __(currentType, implIt->second->target);
+  auto impl = table.registry.getImpl(decl);
+  ScopeGuard _(table, impl->memberScope);
+  TypeContextGuard __(currentType, impl->target);
   auto prev = currentSelf;
-  currentSelf = implIt->second->target->memberScope;
+  currentSelf = impl->target->memberScope;
   for (auto &m : decl->LinkedImplMethods) {
     m->accept(this);
     if (!decl->traits.empty() &&
@@ -240,6 +237,22 @@ void Resolver::visit(VarDecl *decl) {
     Error::internal(decl->span, "VarDecl symbol type not initialized");
   }
 
+  if (decl->isRoot && decl->init == nullptr) {
+    auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S128);
+    dia.labels = {
+        {decl->span, "this root variable has no initializer", true},
+    };
+    dia.notes = {
+        "root variables must have a known initial state before semantic "
+        "verification",
+    };
+    dia.helps = {
+        "add an initializer to this root variable declaration",
+    };
+    engine.emit(dia);
+    recover.recover();
+  }
+
   if (decl->init) {
     decl->init->accept(this);
 
@@ -263,8 +276,8 @@ void Resolver::visit(VarDecl *decl) {
         inferencePrim(decl->type.get(), decl->init->resolvedType);
         decl->symbol->typeSymbol = decl->type->resolved;
       }
-      auto [result, kind] =
-          canImplicitlyConvert(decl->init->resolvedType, decl->type->resolved);
+      auto [result, kind] = Helper::canImplicitlyConvert(
+          decl->init->resolvedType, decl->type->resolved);
       if (!result) {
         castFail(kind, decl->init->span);
       }
@@ -304,6 +317,7 @@ void Resolver::visit(VarDecl *decl) {
 void Resolver::visit(TypeNode *type) {
   TypeResolver::resolveTypeNode(type, typeContext);
 }
+
 void Resolver::visit(ASTNode *) {}
 
 void Resolver::visit(TraitSig *sig) {
@@ -313,6 +327,26 @@ void Resolver::visit(TraitSig *sig) {
     p->symbol->typeSymbol = p->type->resolved;
   }
 }
+
+static Expr *findInvalidDefaultValue(Expr *expr) {
+  if (dynamic_cast<LiteralExpr *>(expr) ||
+      dynamic_cast<DefaultValueExpr *>(expr)) {
+    return nullptr;
+  }
+
+  auto *call = dynamic_cast<CallExpr *>(expr);
+  if (!call || call->callType != CallExpr::CallType::INIT_CALL) {
+    return expr;
+  }
+
+  for (const auto &arg : call->arguments) {
+    if (Expr *invalid = findInvalidDefaultValue(arg.get())) {
+      return invalid;
+    }
+  }
+
+  return nullptr;
+}
 void Resolver::visit(Param *param) {
   param->type->accept(this);
   param->symbol->typeSymbol = param->type->resolved;
@@ -321,29 +355,52 @@ void Resolver::visit(Param *param) {
   }
   if (param->defaultValue.has_value()) {
     param->defaultValue.value()->accept(this);
-  }
-  if (!isAssignable(param->type->resolved,
-                    param->defaultValue.value()->resolvedType)) {
-    auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S045);
-    dia.labels = {{param->span,
-                   "expected type '" + param->type->type + "', found '" +
-                       param->defaultValue.value()->resolvedType->name + "'",
-                   true}};
-    engine.emit(dia);
-    recover.recover();
+    if (!isAssignable(param->type->resolved,
+                      param->defaultValue.value()->resolvedType)) {
+      auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S045);
+      dia.labels = {{param->span,
+                     "expected type '" + param->type->type + "', found '" +
+                         param->defaultValue.value()->resolvedType->name + "'",
+                     true}};
+      engine.emit(dia);
+      recover.recover();
+    }
+
+    auto expr = param->defaultValue.value().get();
+
+    if (auto invaild = findInvalidDefaultValue(expr); invaild != nullptr) {
+      auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S127);
+      dia.labels = {
+          {invaild->span, "this expression cannot be used as a default value",
+           true},
+      };
+      dia.notes = {
+          "default values are restricted to supported compile-time expression "
+          "kinds",
+      };
+      dia.helps = {
+          "use a literal or another supported default-value expression",
+      };
+      engine.emit(dia);
+      recover.recover();
+    }
   }
 }
 
 void Resolver::visit(InitDecl *decl) {
   auto symbol = decl->methodSymbol;
   for (auto r : symbol->returns) {
-    if (r->returnType != table.getBuilt("void")) {
+    if (r->returnType != table.registry.getBuilt("void")) {
       auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S046);
       dia.labels = {{decl->span, "init cannot declare a return type", true}};
       dia.helps = {{"remove the return type from this init declaration"}};
       engine.emit(dia);
       recover.recover();
     }
+  }
+
+  for (auto &p : decl->params) {
+    p->accept(this);
   }
 
   auto prev = currentMethod;
@@ -358,7 +415,7 @@ void Resolver::visit(InitDecl *decl) {
 void Resolver::visit(OnDestroyDecl *decl) {
   auto symbol = decl->methodSymbol;
   for (auto r : symbol->returns) {
-    if (r->returnType != table.getBuilt("void")) {
+    if (r->returnType != table.registry.getBuilt("void")) {
       auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S047);
       dia.labels = {
           {decl->span, "onDestroy cannot declare a return type", true}};
@@ -372,3 +429,5 @@ void Resolver::visit(OnDestroyDecl *decl) {
   ScopeGuard _(table, decl->methodSymbol->scope);
   decl->body->accept(this);
 }
+
+void Resolver::visit(ImportDecl *) {}

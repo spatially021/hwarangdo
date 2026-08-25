@@ -10,11 +10,11 @@ ResolvedLit Resolver::resolveChar(LiteralExpr *expr) {
   TypeSymbol *type = nullptr;
 
   if (cp <= 0x7F) {
-    type = table.getType("c8");
+    type = table.registry.getBuilt("c8");
   } else if (cp <= 0xFFFF) {
-    type = table.getType("c16");
+    type = table.registry.getBuilt("c16");
   } else {
-    type = table.getType("c32");
+    type = table.registry.getBuilt("c32");
   }
 
   if (type == nullptr) {

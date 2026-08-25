@@ -16,7 +16,6 @@ private:
   string ident();
 
   void debugType(HIRTypeDecl *type);
-  void debugField(HIRField *field);
   void debugMethod(HIRMethodDecl *method);
   void debugLocal(HIRLocal *local);
 

@@ -728,6 +728,224 @@ init은 entity 타입과 value 타입 모두에서 정의할 수 있다.
     * 일반 메서드에서 사용하는 field는 해당 메서드의 진입 시점에 이미 초기화가 보장되어 있거나, 해당 메서드 내부에서 사용 전에 직접 초기화되어야 한다.
 
 
+
+
+## 5.4 배열 초기화
+
+배열은 동일한 타입의 여러 value를 연속적으로 가지는 value 집합으로 취급한다.
+
+배열 자체를 하나의 초기화 단위로 취급하지 않으며, 각 배열 원소는 서로 독립적인 초기화 상태를 가진다.
+
+### 5.4.1 배열 선언과 초기화 상태
+
+배열은 초기화 없이 선언할 수 있다.
+
+```hwarangdo
+int:i32[4] values;
+```
+
+초기화식을 생략한 경우 모든 배열 원소는 미초기화 상태로 시작한다.
+
+```txt
+values[0] : 미초기화
+values[1] : 미초기화
+values[2] : 미초기화
+values[3] : 미초기화
+```
+
+특정 원소에 값을 대입하면 해당 원소만 초기화된 상태로 취급한다.
+
+```hwarangdo
+int:i32[4] values;
+
+values[0] = 10;
+values[2] = 20;
+```
+
+위 코드 이후 `values[0]`, `values[2]`는 초기화된 상태이며,
+`values[1]`, `values[3]`는 미초기화 상태이다.
+
+미초기화 상태의 배열 원소를 읽거나 값으로 사용하는 것은 컴파일 오류이다.
+
+### 5.4.2 배열 전체 초기화
+
+배열 선언 시 배열 원소 타입의 값을 초기화식으로 사용할 수 있다.
+
+```hwarangdo
+int:i32[4] values = 0;
+```
+
+배열 원소 타입을 `T`, 배열 크기를 `N`이라 할 때,
+
+```txt
+T[N] array = value;
+```
+
+형태의 초기화는 `value`를 배열의 모든 원소에 복사하여 초기화하는 것으로 취급한다.
+
+개념적으로 다음과 같다.
+
+```txt
+array[0] = value;
+array[1] = value;
+...
+array[N - 1] = value;
+```
+
+초기화식은 배열 원소 타입에 대입 가능한 완전히 초기화된 value여야 한다.
+
+기본 타입의 literal은 직접 사용할 수 있다.
+
+```hwarangdo
+int:i32[4] values = 0;
+bool[8] flags = false;
+```
+
+struct는 정상적으로 초기화된 struct 값을 사용할 수 있다.
+
+```hwarangdo
+Vec2 value = Vec2(1.0, 2.0);
+Vec2[4] values = value;
+```
+
+또는 초기화식을 직접 사용할 수 있다.
+
+```hwarangdo
+Vec2[4] values = Vec2(1.0, 2.0);
+```
+
+struct 값의 배열 전체 초기화는 객체를 공유하지 않으며,
+각 배열 원소에 value를 복사한다.
+
+부분적으로만 초기화된 value는 배열 전체 초기화식으로 사용할 수 없다.
+
+### 5.4.3 Handle 배열 전체 초기화
+
+`Handle<T>`는 value 타입이므로 배열 원소 타입으로 사용할 수 있으며,
+배열 전체 초기화에도 사용할 수 있다.
+
+```hwarangdo
+Handle<Enemy> enemy = ...;
+Handle<Enemy>[4] targets = enemy;
+```
+
+위 초기화는 동일한 handle 값을 모든 배열 원소에 복사한다.
+
+handle의 복사본은 동일한 entity를 가리키므로,
+위 코드의 모든 `targets` 원소는 동일한 entity를 가리킨다.
+
+이 동작은 허용하지만, handle 값 하나를 이용한 배열 전체 초기화에는 경고를 발생시킨다.
+
+배열의 각 원소가 서로 다른 entity를 가리키도록 의도한 경우 배열 리터럴 또는 개별 원소 초기화를 사용해야 한다.
+
+### 5.4.4 배열 리터럴
+
+배열 리터럴은 다음의 형태를 가진다.
+
+```hwarangdo
+[expr, expr, ...]
+```
+
+배열 리터럴은 각 원소 표현식의 타입을 기준으로 하나의 공통 원소 타입을 결정하고,
+원소 개수를 배열의 크기로 사용하여 배열 value를 생성한다.
+
+```hwarangdo
+int:i32[4] values = [1, 2, 3, 4];
+```
+
+배열 리터럴의 모든 원소는 생성 시 초기화되어야 하며,
+부분적으로 초기화된 배열 리터럴은 허용하지 않는다.
+
+기본 타입은 기존 암묵적 형변환 규칙에 따라 모든 원소를 표현할 수 있는 공통 타입으로 변환할 수 있다.
+
+```hwarangdo
+[1, 2, 3]
+```
+
+위 배열 리터럴의 원소 타입은 `int:i32`이다.
+
+서로 다른 기본 타입의 값이 포함된 경우,
+모든 원소가 암묵적으로 변환 가능한 공통 타입이 존재해야 한다.
+
+struct 타입은 모든 원소의 타입이 완전히 동일해야 한다.
+서로 다른 struct 타입을 하나의 배열 리터럴에 혼합할 수 없다.
+
+`Handle<T>`는 handle이 가리키는 entity 타입의 `extends` 상속 관계를 고려한다.
+
+서로 다른 `Handle<T>`가 하나의 배열 리터럴에 포함된 경우,
+모든 대상 entity 타입이 공유하는 가장 가까운 공통 parent가 존재하면 해당 parent의 handle 타입을 공통 타입으로 사용한다.
+
+예:
+
+```hwarangdo
+class Actor {
+}
+
+class Enemy extends Actor {
+}
+
+class Player extends Actor {
+}
+```
+
+```hwarangdo
+[enemyHandle, playerHandle]
+```
+
+`enemyHandle`이 `Handle<Enemy>`, `playerHandle`이 `Handle<Player>`인 경우
+위 배열 리터럴의 타입은 `Handle<Actor>[2]`로 결정된다.
+
+trait 구현 관계는 배열 리터럴의 공통 Handle 타입 결정에 사용하지 않는다.
+
+공통 타입을 결정할 수 없는 경우 컴파일 오류이다.
+
+### 5.4.5 배열 원소 타입 제한
+
+배열의 원소 타입은 저장 가능한 value 타입으로 제한한다.
+
+기본 타입, struct, `Handle<T>` 및 배열 타입은 배열 원소로 사용할 수 있다.
+
+entity 관찰자는 배열 원소로 사용할 수 없다.
+
+관찰자는 임시 접근 수단이며 저장 가능한 value로 취급하지 않는다.
+
+### 5.4.6 제어 흐름과 배열 원소 초기화
+
+배열 원소의 초기화 여부는 일반 변수 및 field와 동일하게 제어 흐름을 기준으로 검사한다.
+
+특정 배열 원소가 사용되는 모든 실행 경로에서 해당 원소의 초기화가 보장되는 경우에만 읽을 수 있다.
+
+```hwarangdo
+int:i32[4] values;
+
+if (condition) {
+    values[0] = 10;
+} else {
+    values[0] = 20;
+}
+
+use(values[0]);
+```
+
+위 코드에서 `values[0]`은 모든 분기에서 초기화되므로 사용할 수 있다.
+
+반복문을 통해 배열의 여러 원소를 초기화하는 경우,
+반복문 전체가 특정 원소 또는 배열 전체를 초기화한다고 별도로 추론하지 않는다.
+
+```hwarangdo
+int:i32[4] values;
+
+for (int:i32 i; 0..4) {
+    values[i] = 0;
+}
+```
+
+위 반복문만으로 반복문 종료 이후 모든 `values` 원소가 초기화되었다고 보장하지 않는다.
+
+단, 동일한 제어 흐름 내에서 초기화가 직접 확인되는 배열 원소는 해당 지점 이후 사용할 수 있다.
+
+배열 전체를 값으로 복사, 전달 또는 반환하는 경우에는 배열의 모든 원소가 초기화되어 있어야 한다.
+
 ---
 
 # 6. 선언과 바인딩
@@ -1624,7 +1842,7 @@ hwarangdo
 예:
 
 ```txt
-src/math/vector.hgm
+src/math/vector.hrd
 ```
 
 위 파일의 프로젝트 내부 경로는 다음과 같다.
@@ -1693,7 +1911,10 @@ SelectiveImport
     := "." "{" TypeNameList "}"
 
 TypeNameList
-    := Identifier ("," Identifier)*
+    := ImportType ("," ImportType)*
+
+ImportType
+    := Identifier ["as" Identifier]
 
 ModuleName
     := Identifier
@@ -1704,6 +1925,7 @@ ModuleName
 ```hwarangdo
 import math.vector;
 import math.matrix.{Matrix3, Matrix4};
+import math.vector.{Vec2 as Position2};
 
 import physics::collision.shape;
 import physics::collision.collider.{Collider};
@@ -1798,7 +2020,7 @@ import physics::collision.shape;
 
 ```txt
 프로젝트 모듈: physics
-파일 경로: collision/shape.hgm
+파일 경로: collision/shape.hrd
 ```
 
 외부 프로젝트 모듈은 현재 프로젝트의 의존성 목록에 등록되어 있어야 한다.
@@ -1824,7 +2046,7 @@ import math.vector;
 대상 파일:
 
 ```hwarangdo
-// math/vector.hgm
+// math/vector.hrd
 
 public struct Vec2 {
 }
@@ -1868,6 +2090,39 @@ import math.vector.{Vec2, Vec3};
 ```
 
 선택적 import에 명시되는 이름은 대상 파일의 최상위 타입 이름이어야 한다.
+
+선택적 타입 import에서는 `as`를 사용하여 현재 파일에서 사용할 별칭을 지정할 수 있다.
+
+```hwarangdo
+import math.vector.{Vec2 as Position2};
+```
+
+별칭 문법은 다음 형태를 따른다.
+
+```txt
+<원본 타입 이름> as <별칭>
+```
+
+별칭이 지정된 경우 현재 파일의 이름 탐색 범위에는 원본 타입 이름이 아니라 별칭이 추가된다.
+
+```hwarangdo
+import math.vector.{Vec2 as Position2};
+
+Position2 position;
+```
+
+위 코드에서 `Position2`는 import 대상인 `Vec2`를 가리킨다.
+
+같은 import 선언에서 별칭이 없는 타입과 별칭이 있는 타입을 함께 사용할 수 있다.
+
+```hwarangdo
+import math.vector.{Vec2 as Position2, Vec3};
+```
+
+별칭은 현재 파일에서만 유효하며 다른 파일로 전파되거나 재수출되지 않는다.
+
+별칭 자체는 새로운 타입을 생성하지 않으며,
+타입 동일성 판단에서는 원본 타입과 동일한 타입으로 취급한다.
 
 다음 선언은 허용되지 않는다.
 
@@ -1974,6 +2229,16 @@ physics::collision.shape.Circle value;
 
 일반 코드에서는 import된 타입의 이름을 사용한다.
 
+선택적 타입 import에서 별칭이 지정된 경우 일반 코드에서는 별칭을 사용한다.
+
+```hwarangdo
+import math.vector.{Vec2 as Position2};
+
+Position2 value;
+```
+
+별칭이 지정된 타입의 원본 이름은 해당 import 선언만으로 현재 파일의 이름 탐색 범위에 추가되지 않는다.
+
 ---
 
 ## 14.11 이름 충돌
@@ -2000,13 +2265,20 @@ import network.connection;
 
 이름 충돌은 실제 타입 사용 여부와 관계없이 import 선언을 처리하는 시점에 진단한다.
 
-현재 버전에서는 다음 기능을 제공하지 않는다.
+현재 버전에서는 선택적 타입 import의 alias를 지원한다.
 
-* import alias
-* 타입 alias
-* qualified type name을 이용한 충돌 해소
+```hwarangdo
+import game.player.{State as PlayerState};
+import network.connection.{State as ConnectionState};
+```
 
-이름 충돌은 import 대상을 줄이거나 타입 이름을 변경하여 해결해야 한다.
+위와 같이 서로 다른 원본 타입에 서로 다른 별칭을 지정하여 이름 충돌을 해소할 수 있다.
+
+별칭 자체가 현재 파일에서 다른 타입 이름과 충돌하는 경우 컴파일 오류이다.
+
+현재 버전에서는 qualified type name을 이용한 충돌 해소는 지원하지 않는다.
+
+이름 충돌은 import 대상을 줄이거나 타입 alias를 사용하여 해결할 수 있다.
 
 예:
 
@@ -2141,7 +2413,7 @@ import math.geometry.vector;
 위 경로는 다음 파일을 참조한다.
 
 ```txt
-math/geometry/vector.hgm
+math/geometry/vector.hrd
 ```
 
 선택적 타입 import에서도 `{}` 앞까지가 파일 경로이다.
@@ -2153,7 +2425,7 @@ import math.geometry.vector.{Vec2};
 파일 경로:
 
 ```txt
-math/geometry/vector.hgm
+math/geometry/vector.hrd
 ```
 
 타입 이름:
@@ -2180,7 +2452,7 @@ import 경로는 소스 루트를 제외한 상대 경로로 작성한다.
 project/
 ├── src/
 │   └── math/
-│       └── vector.hgm
+│       └── vector.hrd
 └── project 설정 파일
 ```
 
@@ -2199,10 +2471,10 @@ import src.math.vector;
 금지되는 경로 표현:
 
 ```txt
-./math/vector.hgm
-../common/vector.hgm
-/math/vector.hgm
-C:\project\math\vector.hgm
+./math/vector.hrd
+../common/vector.hrd
+/math/vector.hrd
+C:\project\math\vector.hrd
 ```
 
 import는 논리적 모듈 경로만 허용한다.
@@ -2229,7 +2501,7 @@ math.2d_vector
 game-object.player
 ```
 
-소스 파일 확장자 `.hgm`은 import 선언에 작성하지 않는다.
+소스 파일 확장자 `.hrd`은 import 선언에 작성하지 않는다.
 
 허용:
 
@@ -2240,7 +2512,7 @@ import math.vector;
 금지:
 
 ```hwarangdo
-import math.vector.hgm;
+import math.vector.hrd;
 ```
 
 ---
@@ -2378,18 +2650,22 @@ import math.vector.{*};
 import math.vector;
 ```
 
-### alias import
+### 파일 모듈 alias import
 
-금지:
-
-```hwarangdo
-import math.vector.{Vec2 as Vector2};
-```
+파일 모듈 자체에 대한 alias는 지원하지 않는다.
 
 금지:
 
 ```hwarangdo
 import physics::collision.shape as Shape;
+```
+
+선택적 타입 import의 alias는 허용한다.
+
+허용:
+
+```hwarangdo
+import math.vector.{Vec2 as Vector2};
 ```
 
 ### 상대 경로 import
@@ -2447,6 +2723,9 @@ import(path);
 13. 같은 선택적 import 목록에 동일한 타입 이름을 중복 작성한 경우
 14. 선택적 import 목록이 비어 있는 경우
 15. import 경로의 대소문자가 실제 경로와 일치하지 않는 경우
+16. 선택적 타입 import의 별칭이 현재 파일의 다른 타입 이름과 충돌하는 경우
+17. 동일한 선택적 import 목록에서 같은 별칭을 중복 사용하는 경우
+18. 원본 타입 이름과 별칭이 동일한 경우
 
 ---
 
@@ -2457,19 +2736,19 @@ import(path);
 ```txt
 game/
 ├── src/
-│   ├── Main.hgm
+│   ├── Main.hrd
 │   ├── math/
-│   │   ├── vector.hgm
-│   │   └── matrix.hgm
+│   │   ├── vector.hrd
+│   │   └── matrix.hrd
 │   ├── entity/
-│   │   ├── player.hgm
-│   │   └── enemy.hgm
+│   │   ├── player.hrd
+│   │   └── enemy.hrd
 │   └── system/
-│       └── movement.hgm
+│       └── movement.hrd
 └── 프로젝트 설정 파일
 ```
 
-`math/vector.hgm`:
+`math/vector.hrd`:
 
 ```hwarangdo
 public struct Vec2 {
@@ -2487,7 +2766,7 @@ private struct VectorStorage {
 }
 ```
 
-`entity/player.hgm`:
+`entity/player.hrd`:
 
 ```hwarangdo
 import math.vector.{Vec2};
@@ -2501,7 +2780,7 @@ public class Player {
 }
 ```
 
-`system/movement.hgm`:
+`system/movement.hrd`:
 
 ```hwarangdo
 import math.vector.{Vec2};
@@ -2514,7 +2793,7 @@ public struct Movement {
 }
 ```
 
-`Main.hgm`:
+`Main.hrd`:
 
 ```hwarangdo
 import math.vector.{Vec2};
@@ -2549,6 +2828,12 @@ import math.vector;
 import math.vector.{Vec2, Vec3};
 ```
 
+선택적 타입 import alias:
+
+```hwarangdo
+import math.vector.{Vec2 as Position2, Vec3};
+```
+
 ---
 
 ## 14.26 핵심 규칙 요약
@@ -2563,5 +2848,6 @@ import math.vector.{Vec2, Vec3};
 * import는 다른 파일로 재수출되지 않는다.
 * 직접 사용하는 타입은 각 파일에서 직접 import해야 한다.
 * 순환 import는 허용한다.
-* import alias와 qualified type name은 현재 지원하지 않는다.
+* 선택적 타입 import는 `Original as Alias` 형태의 타입 alias를 지원한다.
+* 파일 모듈 alias와 qualified type name은 현재 지원하지 않는다.
 * 파일 모듈에는 Main이 없어도 되며, 실행 프로그램 전체에서만 Main을 검사한다.

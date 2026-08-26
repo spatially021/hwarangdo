@@ -1,0 +1,69 @@
+//============================================================
+// HRD-L001
+//
+// Trigger:
+//   String literal reaches end-of-line or EOF without a
+//   matching closing quote.
+//============================================================
+DIAG(HRD_L001,Error,"unterminated string literal","HRD-L001")
+
+
+//============================================================
+// HRD-L002
+//
+// Trigger:
+//   Character literal contains an unsupported or invalid
+//   escape sequence.
+//============================================================
+DIAG(HRD_L002,
+     Error,
+     "invalid escape sequence in character literal",
+     "HRD-L002")
+
+//============================================================
+// HRD-L003
+//
+// Trigger:
+//   Character literal reaches end-of-line or EOF without a
+//   matching closing quote.
+//============================================================
+DIAG(HRD_L003,
+     Error,
+     "unterminated character literal",
+     "HRD-L003")
+     
+//============================================================
+// HRD_L004
+//
+// Trigger:
+//   Lexer encountered a character that is not part of the
+//   language grammar.
+//============================================================
+DIAG(HRD_L004,
+     Error,
+     "invalid character",
+     "HRD-L004")
+
+//============================================================
+// HRD_L005
+//
+// Trigger:
+//   A Unicode scalar value is expected, but the input does
+//   not contain a valid Unicode scalar value.
+//============================================================
+DIAG(HRD_L005,
+     Error,
+     "invalid Unicode scalar value",
+     "HRD-L005")
+
+//============================================================
+// HRD_L006
+//
+// Trigger:
+//   A floating-point literal does not conform to the required
+//   fractional or exponent syntax.
+//============================================================
+DIAG(HRD_L006,
+     Error,
+     "invalid floating-point literal",
+     "HRD-L006")

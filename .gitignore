@@ -84,4 +84,5 @@ asan.log
 dump/
 release/
 CHECKLIST.md
-hrd/
+./hrd/
+*.hrd

@@ -1,0 +1,128 @@
+//============================================================
+// HRD_S008
+//
+// Trigger:
+//   More than one 'update' method is declared in the same class.
+//   The 'update' method is a special engine callback and cannot be overloaded.
+//============================================================
+DIAG(HRD_S008,
+     Error,
+     "duplicate 'update' method declaration",
+     "HRD-S008")
+
+//============================================================
+// HRD_S009
+//
+// Trigger:
+//   A class that requires an 'update' method does not declare one.
+//   Each required entity update callback must be implemented.
+//============================================================
+DIAG(HRD_S009,
+     Error,
+     "missing required 'update' method",
+     "HRD-S009")
+
+//============================================================
+// HRD_S010
+//
+// Trigger:
+//   More than one 'init' method is declared in the 'Main' class.
+//   The 'Main' class cannot overload its 'init' method.
+//============================================================
+DIAG(HRD_S010,
+     Error,
+     "'Main' init method cannot be overloaded",
+     "HRD-S010")
+
+//============================================================
+// HRD_S011
+//
+// Trigger:
+//   The 'init' method declared in the 'Main' class has one or
+//   more parameters.
+//============================================================
+DIAG(HRD_S011,
+     Error,
+     "'Main' init method cannot have parameters",
+     "HRD-S011")
+
+//============================================================
+// HRD_S012
+//
+// Trigger:
+//   A class attempts to extend a type that is not a class.
+//============================================================
+DIAG(HRD_S012,
+     Error,
+     "base type must be a class",
+     "HRD-S012")
+
+//============================================================
+// HRD_S013
+//
+// Trigger:
+//   A referenced type name cannot be resolved to a declared or
+//   built-in type.
+//============================================================
+DIAG(HRD_S013,
+     Error,
+     "unknown type",
+     "HRD-S013")
+
+//============================================================
+// HRD_S014
+//
+// Trigger:
+//   An impl declaration attempts to implement a type that is
+//   not declared as a trait.
+//============================================================
+DIAG(HRD_S014,
+     Error,
+     "trait implementation target must be a trait",
+     "HRD-S014")
+
+//============================================================
+// HRD_S015
+//
+// Trigger:
+//   The same trait is implemented more than once for the same
+//   type.
+//============================================================
+DIAG(HRD_S015,
+     Error,
+     "duplicate trait implementation",
+     "HRD-S015")
+
+//============================================================
+// HRD_S016
+//
+// Trigger:
+//   An enum variant payload contains an entity type.
+//============================================================
+DIAG(HRD_S016,
+     Error,
+     "entity types are not allowed in enum variant payloads",
+     "HRD-S016")
+
+//============================================================
+// HRD_S017
+//
+// Trigger:
+//   An impl declaration targets a type that is not a struct.
+//============================================================
+DIAG(HRD_S017,
+     Error,
+     "impl target must be a struct type",
+     "HRD-S017")
+
+//============================================================
+// HRD_S018
+//
+// Trigger:
+//   An impl block declares more than one method with the same
+//   signature.
+//============================================================
+DIAG(HRD_S018,
+     Error,
+     "duplicate impl method declaration",
+     "HRD-S018")

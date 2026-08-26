@@ -1,0 +1,39 @@
+//=============================================================================
+// Trigger
+//=============================================================================
+// An import explicitly selects a type that is not declared in the target file.
+//
+// Example:
+//   import game.enemy.{Player};
+//
+// `game.enemy` does not directly declare a type named `Player`.
+
+DIAG(HRD_S124,
+     Error,
+     "imported type not found",
+     "HRD-S124")
+
+//=============================================================================
+// Trigger
+//=============================================================================
+// An imported type or alias uses a name that is already visible in the current
+// file.
+//
+// Example:
+//   import game.enemy{Enemy};
+//   import game.boss{Boss as Enemy};
+DIAG(HRD_S125,
+     Error,
+     "imported type name already in use",
+     "HRD-S125")
+
+//=============================================================================
+// Trigger
+//-----------------------------------------------------------------------------
+// An import declaration references a source path that does not exist in the
+// target module.
+//=============================================================================
+DIAG(HRD_S126,
+     Error,
+     "import path not found",
+     "HRD-S126")

@@ -9,11 +9,14 @@
 #include "hrd/SemanticAnalyzer/symbol/StorageSymbol.h"
 #include "hrd/SemanticAnalyzer/symbol/TypeSymbol.h"
 #include "hrd/SemanticAnalyzer/symbol/ValueSymbol.h"
+#include "hrd/SourceSpan.h"
 #include "hrd/Token.h"
 #include "hrd/diagnostic/Diagnostic.h"
 #include "hrd/util/Error.h"
+#include "hrd/util/Helper.h"
 #include "hrd/util/TypeResolver.h"
 #include <cassert>
+#include <llvm/ADT/APInt.h>
 #include <memory>
 #include <string>
 #include <utility>
@@ -129,7 +132,29 @@ void Resolver::visit(NameExpr *expr) {
 void Resolver::visit(AssignExpr *expr) {
   expr->target->accept(this);
   expr->value->accept(this);
-
+  if (auto arr = dynamic_cast<ArrayTypeSymbol *>(expr->target->resolvedType)) {
+    if (arr->baseType == expr->value->resolvedType) {
+      if (auto g = dynamic_cast<GenericSymbol *>(arr->baseType)) {
+        if (g->origin->kind == TypeSymbol::TypeKind::HANDLE) {
+          auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S132);
+          dia.labels = {
+              {expr->value->span,
+               "this single spawn result is copied into every array element",
+               true},
+          };
+          dia.notes = {
+              "all array elements will contain Handles to the same entity",
+          };
+          dia.helps = {
+              "spawn each element separately if the array should contain "
+              "distinct entities",
+          };
+          engine.emit(dia);
+        }
+      }
+      return;
+    }
+  }
   if (!isAssignable(expr->target->resolvedType, expr->value->resolvedType)) {
     auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S074);
     dia.labels = {
@@ -305,4 +330,104 @@ void Resolver::visit(DefaultValueExpr *expr) {
   if (!expr->resolvedType) {
     Error::internal(expr->span, "resolved type is nullptr");
   }
+}
+
+void Resolver::visit(ArrayLiteralExpr *expr) {
+  TypeSymbol *resolved = nullptr;
+  SourceSpan expectSpan;
+
+  if (expr->elements.empty()) {
+    auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S131);
+    dia.labels = {
+        {expr->span, "this array literal has no elements", true},
+    };
+    dia.notes = {
+        "the element type of an array literal is inferred from its elements",
+    };
+    dia.helps = {
+        "add at least one element to the array literal",
+    };
+    engine.emit(dia);
+    recover.recover();
+  }
+
+  for (auto &e : expr->elements) {
+    e->accept(this);
+    auto type = e->resolvedType;
+    if (type == table.registry.getBuilt("void")) {
+      auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S129);
+      dia.labels = {
+          {e->span, "this array element has type 'void'", true},
+      };
+      dia.notes = {
+          "every element in an array literal must produce a storable value",
+      };
+      dia.helps = {
+          "replace this expression with one that produces a non-void value",
+      };
+      engine.emit(dia);
+      recover.recover();
+    }
+
+    if (resolved == nullptr) {
+      resolved = type;
+      expectSpan = e->span;
+      continue;
+    }
+
+    if (resolved == type) {
+      continue;
+    }
+
+    vector<TypeSymbol *> candidates = getPromotionCandidates(resolved, type);
+    bool flag = false;
+    for (auto *candidate : candidates) {
+      auto leftResult = Helper::canImplicitlyConvert(resolved, candidate);
+      auto rightResult = Helper::canImplicitlyConvert(type, candidate);
+      if (leftResult.first && rightResult.first) {
+        if (leftResult.second == CastingResultKind::PrecisionLoss ||
+            rightResult.second == CastingResultKind::PrecisionLoss) {
+          auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S069);
+          dia.labels = {
+              {e->span,
+               "this operation implicitly converts between '" + resolved->name +
+                   "' and '" + type->name + "'",
+               true},
+          };
+          dia.notes = {
+              "the implicit conversion may lose numeric precision",
+          };
+          dia.helps = {
+              "use an explicit cast to acknowledge the possible precision loss",
+          };
+          engine.emit(dia);
+        }
+
+        resolved = candidate;
+        flag = true;
+        break;
+      }
+    }
+
+    if (!flag) {
+      auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S130);
+      dia.labels = {
+          {e->span, "this element has type '" + type->name + "'", true},
+      };
+      dia.notes = {
+          "all elements in an array literal must resolve to the same type",
+      };
+      dia.helps = {
+          "convert this element to the array's element type or use a separate "
+          "array",
+      };
+      engine.emit(dia);
+      recover.recover();
+    }
+  }
+  expr->elementType = resolved;
+  unsigned bits = 64;
+  auto size = expr->elements.size();
+  expr->resolvedType =
+      table.registry.getOrCreateArray(resolved, llvm::APInt(bits, size));
 }

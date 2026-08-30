@@ -42,6 +42,7 @@ struct FuncContext {
   localMap locals;
   ParamMap params;
   llvm::Value *self = nullptr;
+  TypeSymbol *selfType = nullptr;
   std::vector<Cleanup> cleanupStack;
   std::unordered_set<llvm::Value *> canceledCleanups;
 };
@@ -50,6 +51,11 @@ struct LoweredValue {
   llvm::Value *value = nullptr; // 실제 SSA value
   llvm::Value *addr = nullptr;  // cleanup/release 가능한 주소
   MIRValueCategory category = MIRValueCategory::Plain;
+};
+
+struct LoweredPlace {
+  llvm::Value *dst = nullptr;
+  TypeSymbol *type = nullptr;
 };
 
 class llvmCodegen {
@@ -108,7 +114,7 @@ private:
   void lowerLocalDecl(MIRLocalDeclStmt *stmt, FuncContext &ctx);
   void lowerQuit(MIRQuitStmt *stmt, FuncContext &ctx);
 
-  void assign(llvm::Value *lhs, LoweredValue rhs, TypeSymbol *type,
+  void assign(LoweredPlace lhs, LoweredValue rhs, TypeSymbol *type,
               FuncContext &ctx);
 
   void lowerStringSwitch(const SwitchTerminator &t, FuncContext &ctx);
@@ -121,7 +127,7 @@ private:
   void lowerTerminator(MIRTerminator &terminator, FuncContext &ctx);
 
   LoweredValue lowerValue(MIRValue *value, FuncContext &ctx);
-  llvm::Value *lowerPlace(MIRPlace *place, FuncContext &ctx);
+  LoweredPlace lowerPlace(MIRPlace *place, FuncContext &ctx);
 
   vector<Cleanup> lowerArgs(vector<llvm::Value *> &args,
                             vector<MIRValue *> values, FuncContext &ctx);
@@ -136,6 +142,7 @@ private:
   LoweredValue lowerPayloadExtractExpr(MIRPayloadExtractExpr *expr,
                                        FuncContext &ctx);
   LoweredValue lowerLiteralExpr(MIRLiteralExpr *expr, FuncContext &ctx);
+  LoweredValue lowerArrayInitExpr(MIRArrayInitExpr *expr, FuncContext &ctx);
   LoweredValue lowerStringLiteral(const StringPayload &payload,
                                   TypeSymbol *type);
   LoweredValue lowerS8(const StringPayload &payload, StringType *type);
@@ -158,12 +165,12 @@ private:
   LoweredValue lowerLogicalAnd(MIRBinaryExpr *expr, FuncContext &ctx);
   LoweredValue lowerLogicalOr(MIRBinaryExpr *expr, FuncContext &ctx);
 
-  llvm::Value *lowerLocalPlace(MIRLocalPlace *place, FuncContext &ctx);
-  llvm::Value *lowerParamPlace(MIRParamPlace *place, FuncContext &ctx);
-  llvm::Value *lowerArrayAccessPlace(MIRArrayAccessPlace *place,
+  LoweredPlace lowerLocalPlace(MIRLocalPlace *place, FuncContext &ctx);
+  LoweredPlace lowerParamPlace(MIRParamPlace *place, FuncContext &ctx);
+  LoweredPlace lowerArrayAccessPlace(MIRArrayAccessPlace *place,
                                      FuncContext &ctx);
-  llvm::Value *lowerFieldPlace(MIRFieldPlace *place, FuncContext &ctx);
-  llvm::Value *lowerRootPlace(MIRRootPlace *place, FuncContext &ctx);
+  LoweredPlace lowerFieldPlace(MIRFieldPlace *place, FuncContext &ctx);
+  LoweredPlace lowerRootPlace(MIRRootPlace *place, FuncContext &ctx);
   LoweredValue lowerRuntime(MIRRuntimeCallExpr *expr, FuncContext &ctx);
   llvm::Function *getOrDeclareRuntimeFunction(RuntimeSymbol *rt);
   llvm::Function *getOrgetOrDeclareFunction(MethodSymbol *method);

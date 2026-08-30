@@ -2,6 +2,7 @@
 
 #include "hrd/AST/Expr.h"
 #include "hrd/Imported/Hash.h"
+#include "hrd/InitChecker/InitSummary.h"
 #include "hrd/Inputs.h"
 #include "hrd/MetaData/MetaData.h"
 #include "hrd/MetaData/TypeRef.h"
@@ -58,6 +59,7 @@ private:
   vector<shared_ptr<Expr>> &ast;
   TypeMeta *currnet;
   Scope *scope;
+  InitSummary &summary;
   std::unordered_map<SourcePath, FileContext *, PathHash> fileMap;
   std::unordered_map<FileContext *,
                      unordered_map<std::string, unique_ptr<TypeSymbol>>>

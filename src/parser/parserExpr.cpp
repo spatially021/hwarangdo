@@ -7,6 +7,8 @@
 #include "hrd/util/Error.h"
 #include <memory>
 #include <string>
+#include <utility>
+#include <vector>
 
 using Ptr = Expr::Ptr;
 
@@ -390,6 +392,22 @@ Ptr Parser::primary() {
             "expected '}' after match body");
     return make_shared<MatchExpr>(makeSpan(t.span, end.span), value, cases);
   }
+
+  if (check(TKind::LEFT_BRACKET)) {
+    advance(); //[처리
+    vector<Ptr> elements;
+    if (!check(TKind::RIGHT_BRACKET)) {
+      do {
+        elements.push_back(ternary());
+      } while (match({TKind::COMMA}));
+    }
+    consume(TKind::RIGHT_BRACKET, DiagnosticCode::HRD_P053,
+            "expected ']' to close array literal");
+    auto end = previous();
+    return make_shared<ArrayLiteralExpr>(makeSpan(t.span, end.span),
+                                         std::move(elements));
+  }
+
   auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_P035);
   dia.labels = {
       {previous().span, "expected expression here", true},

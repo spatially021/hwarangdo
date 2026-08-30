@@ -89,6 +89,12 @@ void Linker::visit(MatchExpr *expr) {
     c->accept(this);
   }
 }
+void Linker::visit(ArrayLiteralExpr *expr) {
+  for (auto &e : expr->elements) {
+    e->accept(this);
+  }
+}
+
 // Statement Linker::visitor methods
 void Linker::visit(ExprStmt *stmt) { stmt->expr->accept(this); }
 void Linker::visit(BlockStmt *stmt) {

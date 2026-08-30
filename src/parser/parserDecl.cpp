@@ -763,6 +763,7 @@ Ptr Parser::onDestroyDecl(DeclPrefix prefix) {
   auto end = previous();
   return make_shared<OnDestroyDecl>(makeSpan(t, end), stmt);
 }
+
 Decl::Ptr Parser::importDecl() {
   if (endImport) {
     auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_P063);
@@ -878,6 +879,26 @@ Decl::Ptr Parser::importDecl() {
       break;
     }
 
+    if (peek().isKeyword()) {
+      auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_P070);
+
+      dia.labels = {
+          {peek().span, "reserved keyword cannot be used as an import path",
+           true},
+      };
+
+      dia.notes = {
+          "import path segments must be valid identifiers",
+      };
+
+      dia.helps = {
+          "rename the source file or path segment to a non-reserved identifier",
+      };
+
+      engine.emit(dia);
+      recover.recover();
+    }
+
     Token name = consume(TKind::IDENTIFIER, DiagnosticCode::HRD_P041,
                          "expected module name or path after 'import'");
 
@@ -906,6 +927,27 @@ Decl::Ptr Parser::importDecl() {
     path.emplace_back(name.text, name.span);
 
     if (check(TKind::DOT)) {
+      if (following(1).isKeyword()) {
+        auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_P069);
+
+        dia.labels = {
+            {following(1).span,
+             "reserved keyword cannot be used as an import path", true},
+        };
+
+        dia.notes = {
+            "import path segments must be valid identifiers",
+        };
+
+        dia.helps = {
+            "rename the source file or path segment to a non-reserved "
+            "identifier",
+        };
+
+        engine.emit(dia);
+        recover.recover();
+      }
+
       if (!check(TKind::IDENTIFIER, 1) && !check(TKind::LEFT_BRACE, 1)) {
         auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_P066);
         dia.labels = {

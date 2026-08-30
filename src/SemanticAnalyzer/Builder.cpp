@@ -99,6 +99,13 @@ void Builder::visit(MatchExpr *expr) {
     c->accept(this);
   }
 }
+
+void Builder::visit(ArrayLiteralExpr *expr) {
+  for (auto &e : expr->elements) {
+    e->accept(this);
+  }
+}
+
 // Statement Builder::visitor methods
 void Builder::visit(ExprStmt *stmt) { stmt->expr->accept(this); }
 void Builder::visit(BlockStmt *stmt) {

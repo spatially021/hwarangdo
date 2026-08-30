@@ -368,7 +368,7 @@ llvm::APInt TypeResolver::resolveFixedArraySize(Expr *expr,
     ctx.recover.recover();
   }
 
-  return value.zextOrTrunc(128);
+  return value.zextOrTrunc(64);
 }
 
 static int compareUnsignedDecimal(const std::string &left,

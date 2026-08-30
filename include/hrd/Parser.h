@@ -140,6 +140,7 @@ private:
   TypeNode::Ptr typeNodeConvertor(Token t, Token size = {});
   bool isAssign() const;
   bool isAssginable(Expr::Ptr p) const;
+  bool looksLikeDecl();
 
   TypeNode::Ptr parseType();
 

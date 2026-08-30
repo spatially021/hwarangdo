@@ -268,6 +268,23 @@ unique_ptr<HIRExpr> HIRBuilder::lowerLiteral(LiteralExpr *expr) {
   return std::make_unique<HIRLiteralExpr>(expr->span, ty, expr->resolvedLit);
 }
 
+unique_ptr<HIRExpr> HIRBuilder::lowerArrayLiteral(ArrayLiteralExpr *expr) {
+  if (expr->resolvedType == nullptr) {
+    Error::internal(expr->span, "array literal has no resolved type");
+  }
+  if (expr->elementType == nullptr) {
+    Error::internal(expr->span, "array literal's element type is nullptr");
+  }
+
+  auto *ty = expr->resolvedType;
+  vector<unique_ptr<HIRExpr>> elements;
+  for (auto e : expr->elements) {
+    elements.push_back(lowerExpr(e.get()));
+  }
+  return std::make_unique<HIRArrayLiteralExpr>(
+      expr->span, ty, expr->elementType, std::move(elements));
+}
+
 unique_ptr<HIRExpr> HIRBuilder::lowerRuntime(CallExpr *expr) {
   if (expr->resolvedType == nullptr) {
     Error::internal(expr->span, "runtimeCall has no resolved type");

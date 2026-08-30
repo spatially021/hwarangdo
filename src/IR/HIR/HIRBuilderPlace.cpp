@@ -6,6 +6,7 @@
 #include "hrd/SemanticAnalyzer/symbol/ValueSymbol.h"
 #include "hrd/util/Error.h"
 #include <memory>
+#include <string>
 #include <utility>
 #include <variant>
 
@@ -162,6 +163,28 @@ HIRBuilder::lowerArrayAccess(ArrayAccessExpr *expr) {
   auto index = lowerValue(expr->index.get());
   if (index == nullptr) {
     Error::internal(expr->index->span, "array index lowering returned nullptr");
+  }
+
+  if (auto lit = dynamic_cast<LiteralExpr *>(expr->index.get())) {
+    auto in = lit->resolvedLit.asInt().value.getSExtValue();
+    auto size = arrayType->sizeValue.getSExtValue();
+    if (in < 0 || in >= size) {
+      auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S133);
+      dia.labels = {
+          {expr->index->span,
+           "'" + to_string(in) + "' is outside the valid array range", true},
+      };
+      dia.notes = {
+          "array indices must be non-negative and smaller than the array "
+          "length",
+      };
+      dia.notes = {
+          "array indices must be non-negative and smaller than the array "
+          "length",
+      };
+      engine.emit(dia);
+      recover.recover();
+    }
   }
 
   if (expr->resolvedType == nullptr) {

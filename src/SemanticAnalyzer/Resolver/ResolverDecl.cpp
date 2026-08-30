@@ -267,6 +267,30 @@ void Resolver::visit(VarDecl *decl) {
       }
     }
 
+    if (auto arr = dynamic_cast<ArrayTypeSymbol *>(decl->type->resolved)) {
+      if (arr->baseType == decl->init->resolvedType) {
+        if (auto g = dynamic_cast<GenericSymbol *>(arr->baseType)) {
+          if (g->origin->kind == TypeSymbol::TypeKind::HANDLE) {
+            auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S132);
+            dia.labels = {
+                {decl->init->span,
+                 "this single spawn result is copied into every array element",
+                 true},
+            };
+            dia.notes = {
+                "all array elements will contain Handles to the same entity",
+            };
+            dia.helps = {
+                "spawn each element separately if the array should contain "
+                "distinct entities",
+            };
+            engine.emit(dia);
+          }
+        }
+        return;
+      }
+    }
+
     if (auto lit = dynamic_cast<LiteralExpr *>(decl->init.get())) {
       convertLit(lit, decl->type.get());
       decl->symbol->typeSymbol = decl->type->resolved;

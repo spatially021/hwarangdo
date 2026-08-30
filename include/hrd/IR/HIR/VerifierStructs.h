@@ -1,8 +1,5 @@
-#include "hrd/IR/HIR/HIRSymbol.h"
-#include "hrd/SemanticAnalyzer/symbol/ValueSymbol.h"
 #include <cstdint>
 #include <string>
-#include <unordered_map>
 #include <vector>
 enum class FlowBaseKind : std::uint8_t {
   Local,
@@ -69,20 +66,4 @@ struct FlowKeyHash {
 
     return seed;
   }
-};
-
-struct FlowState {
-  InitState initial;
-  InitState current;
-};
-
-using FlowMap = std::unordered_map<FlowKey, FlowState, FlowKeyHash>;
-using FieldMap = std::unordered_map<ValueSymbol *, InitState>;
-
-struct InitMap {
-  std::unordered_map<HIRLocal *, InitState> localStates;
-  std::unordered_map<HIRParam *, InitState> paramStates;
-  FieldMap fieldStates;
-  FieldMap rootStates;
-  FlowMap flowStates;
 };

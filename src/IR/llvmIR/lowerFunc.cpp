@@ -60,8 +60,8 @@ void llvmCodegen::buildMethods() {
       llvm::Argument *self = &*argIt++;
       self->setName("self");
 
-      FuncContext ctx = {fn,   blocks,       locals,          params,
-                         self, cleanupStack, canceledCleanups};
+      FuncContext ctx = {fn,   blocks,   locals,       params,
+                         self, m->owner, cleanupStack, canceledCleanups};
 
       emitFieldZeroInit(m->owner, self);
 

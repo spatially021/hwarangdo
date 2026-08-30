@@ -32,7 +32,7 @@ vector<Cleanup> llvmCodegen::lowerArgs(vector<llvm::Value *> &args,
 }
 
 llvm::Value *llvmCodegen::lowerReceiverPtr(MIRPlace *place, FuncContext &ctx) {
-  auto *addr = lowerPlace(place, ctx);
+  auto *addr = lowerPlace(place, ctx).dst;
   auto *ty = place->symbol->typeSymbol;
 
   if (ty->kind == TypeSymbol::TypeKind::CLASS &&

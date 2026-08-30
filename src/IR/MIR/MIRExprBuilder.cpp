@@ -19,6 +19,10 @@ unique_ptr<MIRValue> MIRBuilder::lowerExpr(HIRExpr *expr) {
     auto lit = expect<HIRLiteralExpr>(expr, HIRNodeKind::LiteralExpr);
     return lowerLiteral(lit);
   }
+  case HIRNodeKind::ArrayLiteralExpr: {
+    auto arr = expect<HIRArrayLiteralExpr>(expr, HIRNodeKind::ArrayLiteralExpr);
+    return lowerArrayLiteral(arr);
+  }
   case HIRNodeKind::LoadExpr: {
     auto load = expect<HIRLoadExpr>(expr, HIRNodeKind::LoadExpr);
     return lowerLoad(load);
@@ -252,4 +256,17 @@ unique_ptr<MIRValue> MIRBuilder::lowerRuntime(HIRRuntimeCall *expr) {
   }
   return make_unique<MIRRuntimeCallExpr>(expr->symbol, std::move(args),
                                          expr->type);
+}
+
+unique_ptr<MIRValue> MIRBuilder::lowerArrayLiteral(HIRArrayLiteralExpr *expr) {
+  vector<unique_ptr<MIRValue>> elements;
+
+  elements.reserve(expr->elements.size());
+
+  for (auto &e : expr->elements) {
+    elements.push_back(lowerExpr(e.get()));
+  }
+
+  return make_unique<MIRArrayInitExpr>(expr->type, expr->elementType,
+                                       std::move(elements));
 }

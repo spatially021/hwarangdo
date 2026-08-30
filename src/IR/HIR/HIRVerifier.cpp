@@ -9,9 +9,9 @@
 #include "hrd/IR/HIR/HIRSymbol.h"
 #include "hrd/Recover/HIRVerifierRecover.h"
 #include "hrd/SemanticAnalyzer/symbol/TypeSymbol.h"
-#include "hrd/SemanticAnalyzer/symbol/ValueSymbol.h"
 #include "hrd/compiler/CompilerContexts.h"
 #include "hrd/diagnostic/Diagnostic.h"
+#include "hrd/enums/HirExpect.h"
 #include "hrd/enums/InheritState.h"
 #include "hrd/util/Error.h"
 #include "magic_enum/magic_enum.hpp"
@@ -411,6 +411,17 @@ void HIRVerifier::verifyExpr(HIRExpr *expr, bool) {
     auto literal = expect<HIRLiteralExpr>(expr, HIRNodeKind::LiteralExpr);
     if (literal->type == nullptr) {
       Error::internal("literal's type is nullptr");
+    }
+    break;
+  }
+  case HIRNodeKind::ArrayLiteralExpr: {
+    auto literal =
+        expect<HIRArrayLiteralExpr>(expr, HIRNodeKind::ArrayLiteralExpr);
+    if (literal->type == nullptr) {
+      Error::internal("literal's type is nullptr");
+    }
+    for (auto &e : literal->elements) {
+      verifyExpr(e.get());
     }
     break;
   }

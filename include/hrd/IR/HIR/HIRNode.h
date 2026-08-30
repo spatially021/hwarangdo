@@ -33,6 +33,7 @@ enum class HIRNodeKind {
 
   // expr
   LiteralExpr,
+  ArrayLiteralExpr,
   LoadExpr,
   UnaryExpr,
   BinaryExpr,

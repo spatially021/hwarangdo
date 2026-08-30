@@ -20,6 +20,7 @@ SymbolRegistry::getOrCreateGeneric(TypeSymbol *origin,
     auto raw = ins.get();
     it = genericInsSMap.emplace(key, raw).first;
     types.push_back(std::move(ins));
+    typeRaw.push_back(raw);
   }
   return it->second;
 }
@@ -33,6 +34,7 @@ ArrayTypeSymbol *SymbolRegistry::getOrCreateArray(TypeSymbol *base,
     auto raw = type.get();
     it = arrayTypeMap.emplace(key, raw).first;
     types.push_back(std::move(type));
+    typeRaw.push_back(raw);
   }
   return it->second;
 }

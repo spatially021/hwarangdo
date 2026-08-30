@@ -781,3 +781,17 @@ DIAG(HRD_P069,
      Error,
      "type abbreviation cannot be used as a standalone type",
      "HRD-P069")
+
+// Trigger:
+// A reserved keyword is used as a module name or path segment in an import
+// declaration.
+//
+// Examples:
+//   import string;
+//   import foo.string;
+//   import class;
+
+DIAG(HRD_P070,
+     Error,
+     "reserved keyword in import path",
+     "HRD-P070")

@@ -513,3 +513,15 @@ public:
 
   bool isWildCard = false;
 };
+
+class ArrayLiteralExpr : public Expr {
+public:
+  vector<Ptr> elements;
+  void accept(ASTVisitor *visitor) override { visitor->visit(this); }
+  ArrayLiteralExpr(SourceSpan s, vector<Ptr> e)
+      : Expr(NKind::ARRAY_LITERAL_EXPR, s), elements(std::move(e)) {}
+  Ptr deepCopy() const override {
+    return make_shared<ArrayLiteralExpr>(span, elements);
+  }
+  TypeSymbol *elementType = nullptr;
+};

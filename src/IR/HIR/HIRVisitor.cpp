@@ -172,6 +172,10 @@ void HIRBuilder::visit(ArrayAccessExpr *expr) {
   exprResult = lowerArrayAccess(expr);
 }
 
+void HIRBuilder::visit(ArrayLiteralExpr *expr) {
+  exprResult = lowerArrayLiteral(expr);
+}
+
 void HIRBuilder::visit(TernaryExpr *expr) { exprResult = lowerTernary(expr); }
 
 void HIRBuilder::visit(ThisExpr *) { exprResult = lowerImplictSelf(); }

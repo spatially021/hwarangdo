@@ -50,6 +50,13 @@ inline void hrd_runtime_panic(const char *msg) {
 }
 
 // -------------------------
+// Runtime Safety
+// -------------------------
+
+extern "C" [[noreturn]] void hrd_array_bounds_error(int64_t index,
+                                                    uint64_t length);
+
+// -------------------------
 // World
 // -------------------------
 

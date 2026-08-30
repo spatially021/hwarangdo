@@ -26,15 +26,6 @@ struct APIntEqual {
 
 using APIntSet = std::unordered_set<llvm::APInt, APIntHash, APIntEqual>;
 
-struct InitState {
-  bool initialized = false;
-
-  // 배열일 때만 사용
-  bool fullyInitialized = false;
-  APIntSet initializedIndices;
-  InitState(bool i, bool f = false) : initialized(i), fullyInitialized(f) {}
-};
-
 struct HIRParam {
   int id = -1;
   std::string name;

@@ -1130,3 +1130,56 @@ DIAG(HRD_S128,
      Error,
      "root variable must be initialized at declaration",
      "HRD-S128")
+
+//=============================================================================
+// Trigger
+//-----------------------------------------------------------------------------
+// An array literal contains an element whose resolved type is void.
+//=============================================================================
+DIAG(HRD_S129,
+     Error,
+     "array literal cannot contain void values",
+     "HRD-S129")
+
+//=============================================================================
+// Trigger
+//-----------------------------------------------------------------------------
+// An array literal contains an element whose resolved type differs from the
+// element type established by the other elements.
+//=============================================================================
+DIAG(HRD_S130,
+     Error,
+     "array literal elements must have matching types",
+     "HRD-S130")
+
+//=============================================================================
+// Trigger
+//-----------------------------------------------------------------------------
+// An array literal is declared without any elements.
+//=============================================================================
+DIAG(HRD_S131,
+     Error,
+     "array literal must contain at least one element",
+     "HRD-S131")
+
+//=============================================================================
+// Trigger
+//-----------------------------------------------------------------------------
+// A Handle array is initialized by repeating a single world.spawn result
+// across multiple array elements.
+//=============================================================================
+DIAG(HRD_S132,
+     Warning,
+     "Handle array initialization repeats the same spawned entity",
+     "HRD-S132")
+
+//=============================================================================
+// Trigger
+//-----------------------------------------------------------------------------
+// A constant array index is negative or exceeds the valid index range of the
+// target array.
+//=============================================================================
+DIAG(HRD_S133,
+     Error,
+     "array index is out of range",
+     "HRD-S133")

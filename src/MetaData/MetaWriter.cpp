@@ -177,6 +177,20 @@ void MetaWriter::writeMethod(const MethodMeta &meta) {
 
   writeTypeRef(meta.returnType);
 
+  if (!meta.initializedFields.empty()) {
+    stream() << " init[";
+
+    for (size_t i = 0; i < meta.initializedFields.size(); ++i) {
+      if (i != 0) {
+        stream() << ", ";
+      }
+
+      stream() << meta.initializedFields[i];
+    }
+
+    stream() << ']';
+  }
+
   stream() << ";\n";
 }
 

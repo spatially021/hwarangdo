@@ -394,3 +394,44 @@ Expr::Ptr Parser::parseCaseValue() {
   }
   return make_shared<CaseValueExpr>(value->span, value, arg);
 }
+bool Parser::looksLikeDecl() {
+  size_t pos = current;
+
+  auto at = [&](size_t index) -> const Token & {
+    if (index >= tokens.size()) {
+      return tokens.back();
+    }
+
+    return tokens[index];
+  };
+
+  // statement()에서 호출되는 시점에는 IDENTIFIER임.
+  ++pos;
+
+  while (at(pos).kind == TKind::LEFT_BRACKET) {
+    size_t depth = 1;
+    ++pos;
+
+    while (depth > 0) {
+      switch (at(pos).kind) {
+      case TKind::LEFT_BRACKET:
+        ++depth;
+        break;
+
+      case TKind::RIGHT_BRACKET:
+        --depth;
+        break;
+
+      case TKind::END:
+        return false;
+
+      default:
+        break;
+      }
+
+      ++pos;
+    }
+  }
+
+  return at(pos).kind == TKind::IDENTIFIER;
+}

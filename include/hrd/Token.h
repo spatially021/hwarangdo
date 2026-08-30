@@ -157,6 +157,71 @@ struct Token {
   TKind kind = TKind::EMPTY;
   std::string text = "";
   SourceSpan span;
+  bool isKeyword() const {
+    switch (kind) {
+    case TKind::INT:
+    case TKind::FLOAT:
+    case TKind::FIXED:
+    case TKind::CHAR:
+    case TKind::STRING:
+    case TKind::BOOL:
+    case TKind::NUL:
+    case TKind::CONST:
+    case TKind::ROOT:
+
+    case TKind::IF:
+    case TKind::ELSE:
+    case TKind::SWITCH:
+    case TKind::MATCH:
+    case TKind::CASE:
+    case TKind::DEFAULT:
+    case TKind::FOR:
+    case TKind::BY:
+    case TKind::WHILE:
+    case TKind::BREAK:
+    case TKind::CONTINUE:
+    case TKind::RETURN:
+
+    case TKind::VOID:
+    case TKind::FRAME:
+    case TKind::INIT:
+    case TKind::ONDESTROY:
+    case TKind::OVERRIDE:
+    case TKind::ASYNC:
+    case TKind::WORLD:
+    case TKind::ARENA:
+
+    case TKind::CLASS:
+    case TKind::STRUCT:
+    case TKind::ENUM:
+    case TKind::NEW:
+    case TKind::TRY:
+    case TKind::CATCH:
+    case TKind::THROW:
+    case TKind::ONEXIT:
+
+    case TKind::PUBLIC:
+    case TKind::PROTECTED:
+    case TKind::PRIVATE:
+    case TKind::INTERNAL:
+
+    case TKind::IMPL:
+    case TKind::TRAIT:
+    case TKind::EXTENDS:
+    case TKind::SUPER:
+    case TKind::THIS:
+    case TKind::SELF:
+
+    case TKind::SIZE:
+    case TKind::CAST:
+    case TKind::HANDLE:
+    case TKind::IMPORT:
+      return true;
+
+    default:
+      return false;
+    }
+  }
 };
 inline SourceSpan makeSpan(const Token &a, const Token &b) {
   return makeSpan(a.span, b.span);

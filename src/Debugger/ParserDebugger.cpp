@@ -12,6 +12,14 @@ using std::string;
 string ParserDebugger::ident() { return string(depth * 2, ' '); }
 
 void ParserDebugger::visit(LiteralExpr *expr) { cout << expr->value; }
+void ParserDebugger::visit(ArrayLiteralExpr *expr) {
+  cout << "[";
+  for (auto e : expr->elements) {
+    e->accept(this);
+    cout << ", ";
+  }
+  cout << "]";
+}
 void ParserDebugger::visit(BinaryExpr *expr) {
   cout << " ";
   expr->left->accept(this);

@@ -15,7 +15,7 @@
 #endif
 ImportedSymbolBuilder::ImportedSymbolBuilder(ImportedContext &ctx)
     : meta(ctx.meta), module(ctx.module), table(ctx.table), ast(ctx.imported),
-      scope(ctx.scope) {}
+      scope(ctx.scope), summary(ctx.summary) {}
 
 ImportedSymbolBuilder::~ImportedSymbolBuilder() = default;
 

@@ -27,6 +27,8 @@ struct Scope;
 // Diagnostic
 class DiagnosticEngine;
 
+struct InitSummary;
+
 struct LexerContext {
   const InputSource &source;
   DiagnosticEngine &engine;
@@ -43,6 +45,7 @@ struct ImportedContext {
   SymbolTable &table;
   std::vector<std::shared_ptr<Expr>> &imported;
   Scope *scope;
+  InitSummary &summary;
 };
 
 struct SemanContext {
@@ -81,6 +84,17 @@ struct HIRContext {
 struct HIRVerifierContext {
   HIRProgram *program = nullptr;
   DiagnosticEngine &engine;
+};
+
+struct InitChecerContext {
+  HIRProgram *program = nullptr;
+  DiagnosticEngine &engine;
+  InitSummary &summary;
+};
+
+struct MetaBuilderContext {
+  SymbolTable &table;
+  InitSummary &summary;
 };
 
 struct MIRContext {

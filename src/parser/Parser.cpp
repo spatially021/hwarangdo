@@ -252,10 +252,12 @@ Stmt::Ptr Parser::statement() {
     return blockStmt();
 
   case TKind::IDENTIFIER:
-    if (following().kind == TKind::IDENTIFIER)
+    if (looksLikeDecl()) {
       return declStmt();
-    else
+    } else {
       return expressionStmt();
+    }
+
   default:
     return expressionStmt();
   }

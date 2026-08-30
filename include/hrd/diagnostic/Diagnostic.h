@@ -12,7 +12,6 @@ enum class DiagnosticCode {
 
   HRD_D001,
   HRD_D002,
-
   HRD_L001,
   HRD_L002,
   HRD_L003,
@@ -45,7 +44,6 @@ enum class DiagnosticCode {
   HRD_P023,
   HRD_P024,
   HRD_P025,
-
   HRD_P026,
   HRD_P027,
   HRD_P028,
@@ -56,12 +54,10 @@ enum class DiagnosticCode {
   HRD_P033,
   HRD_P034,
   HRD_P035,
-
   HRD_P036,
   HRD_P037,
   HRD_P038,
   HRD_P039,
-
   HRD_P040,
   HRD_P041,
   HRD_P042,
@@ -80,15 +76,11 @@ enum class DiagnosticCode {
   HRD_P055,
   HRD_P056,
   HRD_P057,
-
   HRD_P058,
   HRD_P059,
-
   HRD_P060,
   HRD_P061,
-
   HRD_P062,
-
   HRD_P063,
   HRD_P064,
   HRD_P065,
@@ -96,6 +88,7 @@ enum class DiagnosticCode {
   HRD_P067,
   HRD_P068,
   HRD_P069,
+  HRD_P070,
 
   HRD_S001,
   HRD_S002,
@@ -104,7 +97,6 @@ enum class DiagnosticCode {
   HRD_S005,
   HRD_S006,
   HRD_S007,
-
   HRD_S008,
   HRD_S009,
   HRD_S010,
@@ -116,7 +108,6 @@ enum class DiagnosticCode {
   HRD_S016,
   HRD_S017,
   HRD_S018,
-
   HRD_S019,
   HRD_S020,
   HRD_S021,
@@ -131,9 +122,7 @@ enum class DiagnosticCode {
   HRD_S030,
   HRD_S031,
   HRD_S032,
-
   HRD_S033,
-
   HRD_S034,
   HRD_S035,
   HRD_S036,
@@ -148,14 +137,12 @@ enum class DiagnosticCode {
   HRD_S045,
   HRD_S046,
   HRD_S047,
-
   HRD_S048,
   HRD_S049,
   HRD_S050,
   HRD_S051,
   HRD_S052,
   HRD_S053,
-
   HRD_S054,
   HRD_S055,
   HRD_S056,
@@ -168,20 +155,17 @@ enum class DiagnosticCode {
   HRD_S063,
   HRD_S064,
   HRD_S065,
-
   HRD_S066,
   HRD_S067,
   HRD_S068,
   HRD_S069,
   HRD_S070,
   HRD_S071,
-
   HRD_S072,
   HRD_S073,
   HRD_S074,
   HRD_S075,
   HRD_S076,
-
   HRD_S077,
   HRD_S078,
   HRD_S079,
@@ -194,7 +178,6 @@ enum class DiagnosticCode {
   HRD_S086,
   HRD_S087,
   HRD_S088,
-
   HRD_S089,
   HRD_S090,
   HRD_S091,
@@ -210,13 +193,11 @@ enum class DiagnosticCode {
   HRD_S101,
   HRD_S102,
   HRD_S103,
-
   HRD_S104,
   HRD_S105,
   HRD_S106,
   HRD_S107,
   HRD_S108,
-
   HRD_S109,
   HRD_S110,
   HRD_S111,
@@ -226,21 +207,22 @@ enum class DiagnosticCode {
   HRD_S115,
   HRD_S116,
   HRD_S117,
-
   HRD_S118,
   HRD_S119,
   HRD_S120,
   HRD_S121,
   HRD_S122,
-
   HRD_S123,
-
   HRD_S124,
   HRD_S125,
   HRD_S126,
-
   HRD_S127,
   HRD_S128,
+  HRD_S129,
+  HRD_S130,
+  HRD_S131,
+  HRD_S132,
+  HRD_S133,
 
   HRD_H001,
   HRD_H002,

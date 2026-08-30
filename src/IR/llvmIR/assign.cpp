@@ -2,10 +2,36 @@
 #include "hrd/IR/MIR/MIRExpr.h"
 #include "hrd/IR/llvmIR/llvmCodegen.h"
 #include "hrd/SemanticAnalyzer/symbol/TypeSymbol.h"
+#include "hrd/util/Error.h"
 #include <llvm/IR/Value.h>
-void llvmCodegen::assign(llvm::Value *dst, LoweredValue rhs, TypeSymbol *type,
+void llvmCodegen::assign(LoweredPlace dst, LoweredValue rhs, TypeSymbol *type,
                          FuncContext &ctx) {
 
+  if (auto *arr = dynamic_cast<ArrayTypeSymbol *>(dst.type)) {
+    if (arr->baseType == type) {
+      if (arr->sizeValue.getActiveBits() > sizeof(uint64_t) * 8) {
+        Error::internal("too big arr size");
+      }
+
+      const uint64_t size = arr->sizeValue.getZExtValue();
+      auto *baseType = arr->baseType;
+
+      LoweredValue elementRhs = rhs;
+      if (needsDestroy(baseType)) {
+        elementRhs.category = MIRValueCategory::Borrowed;
+      }
+
+      auto *arrayTy = getType(arr);
+
+      for (uint64_t i = 0; i < size; ++i) {
+        auto *place = builder.CreateInBoundsGEP(
+            arrayTy, dst.dst, {builder.getInt32(0), builder.getInt64(i)});
+
+        assign({place, baseType}, elementRhs, baseType, ctx);
+      }
+      return;
+    }
+  }
   if (dynamic_cast<StringType *>(type)) {
     llvm::Value *srcPtr = rhs.addr;
 
@@ -15,28 +41,34 @@ void llvmCodegen::assign(llvm::Value *dst, LoweredValue rhs, TypeSymbol *type,
       builder.CreateStore(rhs.value, srcPtr);
     }
 
-    lowerStringAssign(getStringSuffix(type), dst, srcPtr, rhs.category);
+    lowerStringAssign(getStringSuffix(type), dst.dst, srcPtr, rhs.category);
     return;
   }
 
   if (type->kind == TypeSymbol::TypeKind::STRUCT) {
-    lowerStructAssign(type, dst, rhs, rhs.category, ctx);
+    lowerStructAssign(type, dst.dst, rhs, rhs.category, ctx);
     return;
   }
 
   if (type->kind == TypeSymbol::TypeKind::ENUM) {
 
     if (rhs.category == MIRValueCategory::OwnedTemp) {
-      lowerEnumMoveAssign(type, dst, rhs.addr);
+      lowerEnumMoveAssign(type, dst.dst, rhs.addr);
       return;
     }
 
-    lowerEnumCopyAssign(type, dst, rhs.addr, ctx);
+    lowerEnumCopyAssign(type, dst.dst, rhs.addr, ctx);
 
     return;
   }
+  if (rhs.value == nullptr) {
+    if (rhs.addr == nullptr) {
+      Error::internal("assign rhs has neither value nor address");
+    }
 
-  builder.CreateStore(rhs.value, dst);
+    rhs.value = builder.CreateLoad(getType(type), rhs.addr);
+  }
+  builder.CreateStore(rhs.value, dst.dst);
 }
 
 void llvmCodegen::lowerEnumMoveAssign(TypeSymbol *type, llvm::Value *dst,
@@ -126,7 +158,7 @@ void llvmCodegen::lowerEnumCopyAssign(TypeSymbol *type, llvm::Value *dst,
       payloadRhs.value = builder.CreateLoad(payloadLayoutTy, srcPayload);
     }
 
-    assign(newPayload, payloadRhs, payloadTy, ctx);
+    assign({newPayload, payloadTy}, payloadRhs, payloadTy, ctx);
 
     builder.CreateStore(newPayload, dstPayloadSlot);
     builder.CreateBr(doneBB);
@@ -166,22 +198,10 @@ void llvmCodegen::lowerStructAssign(TypeSymbol *ty, llvm::Value *dst,
     auto *srcField =
         builder.CreateStructGEP(layoutTy, src, field->index, field->name);
 
-    if (dynamic_cast<StringType *>(fieldTy)) {
-      lowerStringAssign(getStringSuffix(ty), dstField, srcField, category);
-      continue;
-    }
-
-    if (fieldTy->kind == TypeSymbol::TypeKind::STRUCT) {
-      LoweredValue fieldRhs;
-      fieldRhs.addr = srcField;
-      fieldRhs.value = builder.CreateLoad(getLayoutType(fieldTy), srcField);
-
-      lowerStructAssign(fieldTy, dstField, fieldRhs, category, ctx);
-      continue;
-    }
-
-    auto *v = builder.CreateLoad(getType(fieldTy), srcField);
-    builder.CreateStore(v, dstField);
+    LoweredValue fieldRhs;
+    fieldRhs.addr = srcField;
+    fieldRhs.category = category;
+    assign({dstField, fieldTy}, fieldRhs, fieldTy, ctx);
   }
 
   if (category == MIRValueCategory::OwnedTemp && rhs.addr != nullptr) {
@@ -243,6 +263,6 @@ void llvmCodegen::lowerLocalDecl(MIRLocalDeclStmt *stmt, FuncContext &ctx) {
   if (stmt->init) {
     auto init = lowerValue(stmt->init.get(), ctx);
 
-    assign(slot, init, stmt->type, ctx);
+    assign({slot, stmt->type}, init, stmt->init->type, ctx);
   }
 }

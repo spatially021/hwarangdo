@@ -569,6 +569,19 @@ MethodMeta MetaReader::readMethod() {
 
   result.returnType = readTypeRef();
 
+  if (matchIdentifier("init")) {
+    expect(TokenKind::LBracket, "expected '[' after initializer metadata");
+
+    if (!check(TokenKind::RBracket)) {
+      do {
+        result.initializedFields.push_back(
+            expectIdentifier("expected initialized field name").text);
+      } while (match(TokenKind::Comma));
+    }
+
+    expect(TokenKind::RBracket, "expected ']' after initialized field list");
+  }
+
   expect(TokenKind::Semicolon, "expected ';' after method");
 
   return result;

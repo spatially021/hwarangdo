@@ -3,6 +3,7 @@
 #include "hrd/AST/TokenStream.h"
 #include "hrd/IR/HIR/HIRProgram.h"
 #include "hrd/IR/MIR/MIRProgram.h"
+#include "hrd/InitChecker/InitSummary.h"
 #include "hrd/Inputs.h"
 #include "hrd/MetaData/ImportedModule.h"
 #include "hrd/MetaData/MetaData.h"
@@ -27,6 +28,7 @@ struct CompilerStorage {
   ModuleMeta moduleMeta;
   std::vector<shared_ptr<Expr>> imported;
   unique_ptr<Scope> libTopLevel = make_unique<Scope>();
+  InitSummary summary;
 };
 
 class CompilerDriver {
@@ -52,6 +54,7 @@ private:
   bool runSemantic();
   bool runMeta();
   bool runHIR();
+  bool runInitCheck();
   bool runMIR();
   bool runCodegen(const std::filesystem::path &objectPath);
   bool linkExecutable();

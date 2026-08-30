@@ -125,6 +125,23 @@ struct MIRLiteralExpr : MIRValue {
   }
 };
 
+struct MIRArrayInitExpr : MIRValue {
+  MIRArrayInitExpr(TypeSymbol *t, TypeSymbol *e,
+                   std::vector<std::unique_ptr<MIRValue>> el)
+      : MIRValue(t), elements(std::move(el)), elementType(e) {}
+
+  std::vector<std::unique_ptr<MIRValue>> elements;
+  TypeSymbol *elementType = nullptr;
+  unique_ptr<MIRValue> clone() const override {
+    std::vector<std::unique_ptr<MIRValue>> el;
+    for (auto &e : elements) {
+      el.push_back(e->clone());
+    }
+
+    return make_unique<MIRArrayInitExpr>(type, elementType, std::move(el));
+  }
+};
+
 struct MIRUnaryExpr : MIRValue {
   unique_ptr<MIRValue> operrand = nullptr;
   Operator op;

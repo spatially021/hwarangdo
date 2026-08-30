@@ -1,25 +1,34 @@
 #pragma once
 
+#include "hrd/InitChecker/InitSummary.h"
 #include "hrd/MetaData/MetaData.h"
-#include "hrd/SemanticAnalyzer/SymbolTable/SymbolTable.h"
-#include "hrd/SemanticAnalyzer/symbol/TypeSymbol.h"
-#include "hrd/SemanticAnalyzer/symbol/ValueSymbol.h"
+
+class SymbolTable;
+class TypeSymbol;
+class ValueSymbol;
+class MethodSymbol;
+class EnumVariantSymbol;
+class Param;
+class Expr;
+
+struct MetaBuilderContext;
 
 class MetaBuilder {
 public:
-  MetaBuilder(SymbolTable &table);
+  explicit MetaBuilder(MetaBuilderContext &ctx);
+
   ModuleMeta build();
 
 private:
   SymbolTable &table;
-  TypeMeta buildType(const TypeSymbol *type);
-  TraitMeta buildTrait(const TypeSymbol *trait);
+  const InitSummary &summary;
 
-  FieldMeta buildField(const ValueSymbol *field);
-  MethodMeta buildMethod(const MethodSymbol *method);
-  ParamMeta buildParam(const Param *param);
-  EnumVariantMeta buildVariant(const EnumVariantSymbol *variant);
-
-  TypeRef buildTypeRef(TypeSymbol *type);
+  TypeMeta buildType(TypeSymbol *type);
+  TraitMeta buildTrait(TypeSymbol *type);
+  FieldMeta buildField(ValueSymbol *symbol);
+  MethodMeta buildMethod(MethodSymbol *symbol);
+  ParamMeta buildParam(Param *param);
   DefaultValueMeta buildDefaultValue(Expr *expr);
+  EnumVariantMeta buildVariant(EnumVariantSymbol *symbol);
+  TypeRef buildTypeRef(TypeSymbol *symbol);
 };

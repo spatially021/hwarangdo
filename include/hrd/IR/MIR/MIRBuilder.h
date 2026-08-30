@@ -112,6 +112,7 @@ private:
   unique_ptr<MIRValue> lowerTernary(HIRTernaryExpr *expr);
   unique_ptr<MIRValue> lowerMatch(HIRMatchExpr *expr);
   unique_ptr<MIRValue> lowerLiteral(HIRLiteralExpr *expr);
+  unique_ptr<MIRValue> lowerArrayLiteral(HIRArrayLiteralExpr *expr);
   unique_ptr<MIRValue> lowerLoad(HIRLoadExpr *expr);
   std::unique_ptr<MIRValue> lowerUnary(HIRUnaryExpr *expr);
   unique_ptr<MIRValue> lowerBinary(HIRBinaryExpr *expr);

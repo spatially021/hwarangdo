@@ -1,6 +1,7 @@
 #include "hrd/Debugger/HIRDebugger.h"
 #include "hrd/Debugger/DebuggerUtil.h"
 #include "hrd/IR/HIR/HIRDecl.h"
+#include "hrd/IR/HIR/HIRNode.h"
 #include "hrd/IR/HIR/HIRProgram.h"
 #include "hrd/IR/HIR/HIRSymbol.h"
 #include "hrd/enums/MethodKind.h"
@@ -574,6 +575,20 @@ void HIRDebugger::debugExpr(HIRExpr *expr) {
     cout << " ";
     DebugUtil::debugLiteral(e->resolvedLit);
     cout << "\n";
+    break;
+  }
+
+  case HIRNodeKind::ArrayLiteralExpr: {
+    auto e = static_cast<HIRArrayLiteralExpr *>(expr);
+    cout << ident() << "Array-literal";
+    if (e->type != nullptr) {
+      cout << " : " << e->type->name;
+    }
+    depth++;
+    for (auto &el : e->elements) {
+      debugExpr(el.get());
+    }
+    depth--;
     break;
   }
 

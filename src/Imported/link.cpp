@@ -30,11 +30,35 @@ void ImportedSymbolBuilder::linkField(FieldMeta &field) {
 
 void ImportedSymbolBuilder::linkMethod(MethodMeta &method) {
   auto symbol = getMethod(method);
+
   symbol->returnType = getOrCreateTypeRef(method.returnType);
+
   for (size_t i = 0; i < symbol->params.size(); ++i) {
     auto pSymbol = symbol->params[i];
     auto &pMeta = method.params[i];
+
     pSymbol->typeSymbol = getOrCreateTypeRef(pMeta.type);
+  }
+
+  if (method.name != "init") {
+    return;
+  }
+
+  if (symbol->owner == nullptr || symbol->owner->memberScope == nullptr) {
+    Error::internal("imported init has invalid owner");
+  }
+
+  auto &fields = summary.initFields[symbol];
+
+  for (const auto &fieldName : method.initializedFields) {
+    auto it = symbol->owner->memberScope->value.find(fieldName);
+
+    if (it == symbol->owner->memberScope->value.end()) {
+      Error::internal("failed to resolve initialized field '" + fieldName +
+                      "' in type '" + symbol->owner->name + "'");
+    }
+
+    fields.insert(it->second.get());
   }
 }
 

@@ -70,7 +70,7 @@ void llvmCodegen::lowerCleanup(MIRCleanupStmt *stmt, FuncContext &ctx) {
 }
 
 void llvmCodegen::lowerAssign(MIRAssignStmt *stmt, FuncContext &ctx) {
-  auto *dst = lowerPlace(stmt->lhs.get(), ctx);
+  auto dst = lowerPlace(stmt->lhs.get(), ctx);
   auto rhs = lowerValue(stmt->rhs.get(), ctx);
   auto *ty = stmt->rhs->type;
   assign(dst, rhs, ty, ctx);

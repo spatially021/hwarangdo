@@ -6,6 +6,7 @@
 #include "hrd/SemanticAnalyzer/ResolvedLit.h"
 #include "hrd/SemanticAnalyzer/symbol/MethodSymbol.h"
 #include "hrd/SemanticAnalyzer/symbol/RuntimeSymbol.h"
+#include "hrd/SemanticAnalyzer/symbol/TypeSymbol.h"
 #include "hrd/SemanticAnalyzer/symbol/ValueSymbol.h"
 #include "hrd/SourceSpan.h"
 #include "hrd/enums/Operator.h"
@@ -111,6 +112,15 @@ struct HIRLiteralExpr : HIRValueExpr {
 
   HIRLiteralExpr(SourceSpan s, TypeSymbol *ty, ResolvedLit rl)
       : HIRValueExpr(s, HIRNodeKind::LiteralExpr, ty), resolvedLit(rl) {}
+};
+
+struct HIRArrayLiteralExpr : HIRValueExpr {
+  TypeSymbol *elementType = nullptr;
+  std::vector<std::unique_ptr<HIRExpr>> elements;
+  HIRArrayLiteralExpr(SourceSpan s, TypeSymbol *ty, TypeSymbol *et,
+                      std::vector<std::unique_ptr<HIRExpr>> e)
+      : HIRValueExpr(s, HIRNodeKind::ArrayLiteralExpr, ty), elementType(et),
+        elements(std::move(e)) {}
 };
 
 struct HIRLoadExpr : HIRValueExpr {

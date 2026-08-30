@@ -58,6 +58,10 @@ LoweredValue llvmCodegen::lowerValue(MIRValue *value, FuncContext &ctx) {
     return lowerLiteralExpr(v, ctx);
   }
 
+  if (auto *v = dynamic_cast<MIRArrayInitExpr *>(value)) {
+    return lowerArrayInitExpr(v, ctx);
+  }
+
   if (auto *v = dynamic_cast<MIRUnaryExpr *>(value)) {
     return lowerUnaryExpr(v, ctx);
   }
@@ -386,7 +390,7 @@ LoweredValue llvmCodegen::lowerLogicalOr(MIRBinaryExpr *expr,
 }
 
 LoweredValue llvmCodegen::lowerLoad(MIRLoad *expr, FuncContext &ctx) {
-  auto ptr = lowerPlace(expr->place.get(), ctx);
+  auto ptr = lowerPlace(expr->place.get(), ctx).dst;
   llvm::Type *valueTy = getType(expr->type);
   return {builder.CreateLoad(valueTy, ptr, "loadtmp"), ptr,
           MIRValueCategory::Borrowed};
@@ -411,7 +415,7 @@ LoweredValue llvmCodegen::lowerPayloadExtractExpr(MIRPayloadExtractExpr *expr,
     Error::internal("payload extract source is not enum");
   }
 
-  auto *enumAddr = lowerPlace(load->place.get(), ctx);
+  auto *enumAddr = lowerPlace(load->place.get(), ctx).dst;
   auto *enumLayoutTy = getLayoutType(enumType);
 
   auto *payloadSlot =
@@ -663,7 +667,7 @@ LoweredValue llvmCodegen::lowerVariantExpr(MIRVariantExpr *expr,
    *
    * 구분은 assign() 내부에서 payloadValue.category를 보고 처리한다.
    */
-  assign(payloadAddr, payloadValue, payloadType, ctx);
+  assign({payloadAddr, expr->payload->type}, payloadValue, payloadType, ctx);
 
   // enum이 새 heap payload를 소유
   builder.CreateStore(payloadAddr, payloadPtr);
@@ -720,4 +724,40 @@ llvm::Function *llvmCodegen::getOrDeclareRuntimeFunction(RuntimeSymbol *rt) {
 
   runtimes.emplace(rt, func);
   return func;
+}
+
+LoweredValue llvmCodegen::lowerArrayInitExpr(MIRArrayInitExpr *expr,
+                                             FuncContext &ctx) {
+  auto *arrayTy = getType(expr->type);
+  auto *arr = createEntryAlloca(ctx.func, arrayTy, "array.literal");
+
+  auto *elementType = expr->elementType;
+
+  // assign()이 destroy부터 수행하는 타입이 있으므로 초기 상태 보장
+  if (needsDestroy(elementType)) {
+    builder.CreateStore(llvm::Constant::getNullValue(arrayTy), arr);
+  }
+
+  for (size_t i = 0; i < expr->elements.size(); ++i) {
+    auto raw = lowerValue(expr->elements[i].get(), ctx);
+
+    // Resolver가 정한 공통 element type으로 맞춤
+    auto value = castTo(raw, expr->elements[i]->type, elementType);
+
+    auto *slot = builder.CreateGEP(
+        arrayTy, arr,
+        {builder.getInt32(0), builder.getInt32(static_cast<uint32_t>(i))});
+
+    assign({slot, elementType}, value, elementType, ctx);
+  }
+
+  if (needsDestroy(expr->type)) {
+    addClean(arr, expr->type, ctx);
+  }
+
+  return {
+      builder.CreateLoad(arrayTy, arr, "array.literal.value"),
+      arr,
+      MIRValueCategory::OwnedTemp,
+  };
 }

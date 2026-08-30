@@ -24,6 +24,7 @@ AST_NODE(DefaultValueExpr)
 AST_NODE(Range)
 AST_NODE(CaseValueExpr)
 AST_NODE(MatchExpr)
+AST_NODE(ArrayLiteralExpr)
 
 // Stmt
 AST_NODE(ExprStmt)

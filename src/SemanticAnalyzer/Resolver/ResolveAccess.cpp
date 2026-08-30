@@ -1,3 +1,4 @@
+#include "hrd/AST/Expr.h"
 #include "hrd/SemanticAnalyzer/Resolver.h"
 #include "hrd/SemanticAnalyzer/symbol/TypeSymbol.h"
 #include "hrd/diagnostic/Diagnostic.h"
@@ -15,6 +16,7 @@ void Resolver::visit(ArrayAccessExpr *expr) {
     recover.recover();
   }
   if (auto arr = dynamic_cast<ArrayTypeSymbol *>(expr->object->resolvedType)) {
+
     expr->resolvedType = arr->baseType;
   } else {
     auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S049);

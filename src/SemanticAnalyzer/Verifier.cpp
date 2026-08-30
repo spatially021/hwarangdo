@@ -193,6 +193,17 @@ void Verifier::visit(ThisExpr *) {}
 void Verifier::visit(SuperExpr *) {}
 void Verifier::visit(RootExpr *) {}
 void Verifier::visit(SelfExpr *) {}
+void Verifier::visit(ArrayLiteralExpr *expr) {
+  if (expr->resolvedType == nullptr) {
+    unresolved(expr, "array literal is unresolved");
+  }
+  if (expr->elementType == nullptr) {
+    unresolved(expr, "array literal's elementType is unresolved");
+  }
+  for (auto &e : expr->elements) {
+    e->accept(this);
+  }
+}
 void Verifier::visit(CastExpr *expr) {
   expr->left->accept(this);
   expr->type->accept(this);

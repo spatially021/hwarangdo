@@ -86,6 +86,7 @@ private:
   std::unique_ptr<HIRExpr> lowerTernary(TernaryExpr *expr);
   std::unique_ptr<HIRExpr> lowerCast(CastExpr *expr);
   std::unique_ptr<HIRExpr> lowerLiteral(LiteralExpr *expr);
+  std::unique_ptr<HIRExpr> lowerArrayLiteral(ArrayLiteralExpr *expr);
   std::unique_ptr<HIRExpr> lowerRuntime(CallExpr *expr);
 
   // place/value split

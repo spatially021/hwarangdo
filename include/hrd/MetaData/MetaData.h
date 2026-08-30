@@ -1,12 +1,12 @@
 #pragma once
 
 #include "hrd/Inputs.h"
-#include "hrd/SemanticAnalyzer/ResolvedLit.h"
-
 #include "hrd/MetaData/TypeRef.h"
+#include "hrd/SemanticAnalyzer/ResolvedLit.h"
 #include "hrd/enums/AccessModifier.h"
 
 #include <llvm/ADT/APInt.h>
+
 #include <optional>
 #include <string>
 #include <vector>
@@ -20,6 +20,7 @@ enum class TypeKind {
   Class,
   Struct,
 };
+
 struct TypeMeta {
   std::string name;
   TypeKind kind;
@@ -27,7 +28,6 @@ struct TypeMeta {
   std::vector<FieldMeta> fields;
   std::vector<MethodMeta> methods;
   std::vector<EnumVariantMeta> variants;
-
   std::optional<TypeRef> parent;
   std::vector<TypeRef> traits;
 
@@ -68,7 +68,6 @@ struct DefaultValueMeta {
   DefaultValueKind kind;
   TypeRef resolvedType;
   std::optional<ResolvedLit> literal;
-
   std::optional<TypeRef> type;
   std::vector<DefaultValueMeta> args;
 
@@ -95,9 +94,17 @@ struct MethodMeta {
   std::vector<ParamMeta> params;
   AModifier modifier;
 
+  /*
+   * 해당 initializer가 반환 시 초기화를 보장하는 field 목록.
+   *
+   * 일반 method / trait method에서는 empty.
+   */
+  std::vector<std::string> initializedFields;
+
   bool operator==(const MethodMeta &rhs) const {
     return name == rhs.name && returnType == rhs.returnType &&
-           params == rhs.params && modifier == rhs.modifier;
+           params == rhs.params && modifier == rhs.modifier &&
+           initializedFields == rhs.initializedFields;
   }
 };
 

@@ -1,10 +1,11 @@
+#include "hrd/InitChecker/InitChecker.h"
+#include "hrd/MetaData/MetaReader.h"
 #ifndef NDEBUG
 #define HRD_DEBUG 1
 #else
 #define HRD_DEBUG 0
 #endif
 
-#include "hrd/compiler/CompilerDriver.h"
 #include "hrd/AST/Program.h"
 #include "hrd/Color.h"
 #include "hrd/IR/HIR/HIRBuilder.h"
@@ -19,7 +20,6 @@
 #include "hrd/Lexer.h"
 #include "hrd/MetaData/MetaBuilder.h"
 #include "hrd/MetaData/MetaData.h"
-#include "hrd/MetaData/MetaReader.h"
 #include "hrd/MetaData/MetaWriter.h"
 #include "hrd/Parser.h"
 #include "hrd/SemanticAnalyzer.h"
@@ -27,12 +27,11 @@
 #include "hrd/SemanticAnalyzer/SymbolTable/SymbolTable.h"
 #include "hrd/SemanticAnalyzer/Verifier.h"
 #include "hrd/SourceSpan.h"
-#include "hrd/compiler/CommandLineParser.h"
 #include "hrd/compiler/CompilerContexts.h"
+#include "hrd/compiler/CompilerDriver.h"
 #include "hrd/compiler/CompilerLinker.h"
 #include "hrd/compiler/CompilerSDK.h"
 #include "hrd/compiler/LinkInput.h"
-#include "hrd/compiler/ProjectLoader.h"
 #include "hrd/diagnostic/Diagnostic.h"
 #include "hrd/diagnostic/DiagnosticEngine.h"
 #include "hrd/diagnostic/DiagnosticRenderer.h"
@@ -60,30 +59,9 @@
 #include <vector>
 
 using namespace std;
+namespace fs = std::filesystem;
 
 namespace {
-
-void printHelp() {
-  std::cout << "HwarangDo Compiler\n"
-            << "\n"
-            << "Usage:\n"
-            << "  hrd <command> [project]\n"
-            << "\n"
-            << "Commands:\n"
-            << "  build      Build the project and create an executable\n"
-            << "  compile    Compile the project without linking\n"
-            << "\n"
-            << "Options:\n"
-            << "  -h, --help Show this help message\n"
-            << "\n"
-            << "Arguments:\n"
-            << "  project    Project directory (default: current directory)\n"
-            << "\n"
-            << "Examples:\n"
-            << "  hrd build\n"
-            << "  hrd build ./my-project\n"
-            << "  hrd compile\n";
-}
 
 void printStage(std::size_t current, std::size_t total, std::string_view name) {
 #if !HRD_DEBUG
@@ -107,60 +85,6 @@ inline std::string_view tokenToString(TKind kind) {
 CompilerDriver::CompilerDriver()
     : engine(DiagnosticEngine(
           make_unique<TerminalDiagnosticRenderer>(std::cout))) {}
-
-bool CompilerDriver::loadInput(int argc, char **argv) {
-  if (argc < 2) {
-    std::cerr << "Usage: hrd <command> [project]\n"
-              << "\n"
-              << "Commands:\n"
-              << "  build      Build the project and create an executable\n"
-              << "  compile    Compile the project without linking\n"
-              << "\n"
-              << "Project defaults to the current directory.\n";
-
-    return false;
-  }
-  if (!parseOptions(argc, argv)) {
-    return false;
-  }
-
-  return true;
-}
-
-bool CompilerDriver::parseOptions(int argc, char **argv) {
-
-  CommandLineParser parser;
-  auto result = parser.parse(argc, argv);
-
-  if (!result.result || !result.invocation.has_value()) {
-    switch (result.kind) {
-
-    case FailKind::None: {
-      break;
-    }
-    case FailKind::Help: {
-      printHelp();
-      break;
-    }
-    case FailKind::Unknown:
-      break;
-    }
-    return false;
-  }
-
-  invocation = result.invocation.value();
-  options = invocation.options;
-  ProjectLoader loader;
-
-  auto load = loader.load(invocation.projectRoot);
-
-  if (load.has_value()) {
-    projectInput = load.value();
-    return true;
-  }
-
-  return false;
-}
 
 int CompilerDriver::run(int argc, char **argv) {
 
@@ -228,7 +152,7 @@ int CompilerDriver::run(int argc, char **argv) {
   storage.module =
       make_unique<Module>(moudleName, projectInput.projectFilePath);
   storage.table.registry.setModule(storage.module.get());
-  constexpr std::size_t stageCount = 8;
+  constexpr std::size_t stageCount = 9;
   size_t current = 1;
   std::cout << "Building project: " << projectInput.config.name << "\n\n";
   std::cout << "project root : " << projectInput.rootPath << "\n";
@@ -258,15 +182,21 @@ int CompilerDriver::run(int argc, char **argv) {
 
   storage.table.registry.setCurrentFile(nullptr);
 
-  printStage(current++, stageCount, "Metadata");
-  if (invocation.options.isCompile)
-    if (!runMeta()) {
-      return 1;
-    }
-
   printStage(current++, stageCount, "HIR");
   if (!runHIR()) {
     return 1;
+  }
+
+  printStage(current++, stageCount, "initalize check");
+  if (!runInitCheck()) {
+    return 1;
+  }
+
+  printStage(current++, stageCount, "Metadata");
+  if (invocation.options.isCompile) {
+    if (!runMeta()) {
+      return 1;
+    }
   }
 
   printStage(current++, stageCount, "MIR");
@@ -421,8 +351,12 @@ bool CompilerDriver::loadLib() {
 
     storage.modules.push_back(std::move(module));
     storage.table.registry.addModule(name, raw);
-    ImportedContext ctx = {imported.meta, raw, storage.table, storage.imported,
-                           storage.libTopLevel.get()};
+    ImportedContext ctx = {imported.meta,
+                           raw,
+                           storage.table,
+                           storage.imported,
+                           storage.libTopLevel.get(),
+                           storage.summary};
     ImportedSymbolBuilder builder(ctx);
     try {
       builder.run();
@@ -536,7 +470,8 @@ bool CompilerDriver::runSemantic() {
 }
 
 bool CompilerDriver::runMeta() {
-  MetaBuilder builder = MetaBuilder(storage.table);
+  MetaBuilderContext ctx = {storage.table, storage.summary};
+  MetaBuilder builder = MetaBuilder(ctx);
   try {
     storage.moduleMeta = builder.build();
   } catch (std::runtime_error &e) {
@@ -636,6 +571,25 @@ bool CompilerDriver::runMIR() {
     cout << "=========================" << endl;
   }
 #endif
+  return true;
+}
+
+bool CompilerDriver::runInitCheck() {
+
+  try {
+    InitChecerContext ctx = {storage.hirProgram.get(), engine, storage.summary};
+    InitChecker checker = InitChecker(ctx);
+    checker.check();
+    storage.summary = checker.getSummary();
+  } catch (std::runtime_error &e) {
+#if HRD_DEBUG
+    cout << Color::RED << "error occur while init-check\n";
+#endif
+    cout << Color::RESET << e.what() << "\n";
+    return false;
+  } catch (Failure &f) {
+    return false;
+  }
   return true;
 }
 

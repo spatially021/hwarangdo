@@ -52,8 +52,8 @@ void llvmCodegen::emitFuncBody(MIRFunction *func) {
 
   params.emplace(func->symbol->selfReceiver, self);
 
-  FuncContext ctx = {fn,   blocks,       locals,          params,
-                     self, cleanupStack, canceledCleanups};
+  FuncContext ctx = {fn,   blocks,      locals,       params,
+                     self, func->owner, cleanupStack, canceledCleanups};
 
   for (auto p : func->symbol->params) {
     llvm::Argument *arg = &*argIt++;

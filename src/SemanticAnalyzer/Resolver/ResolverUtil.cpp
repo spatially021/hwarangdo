@@ -10,6 +10,7 @@
 #include "hrd/util/Error.h"
 #include "hrd/util/Helper.h"
 #include <cassert>
+#include <unordered_set>
 
 ValueSymbol *Resolver::resolveValue(str name) {
   if (auto *value = table.scopeManger.getValue(name)) {
@@ -169,11 +170,6 @@ Resolver::binaryCasting(TypeSymbol *left, TypeSymbol *right) {
     return {left, CastingResultKind::None};
   }
 
-  if (left->kind != TypeSymbol::TypeKind::PRIMITIVE ||
-      right->kind != TypeSymbol::TypeKind::PRIMITIVE) {
-    return {nullptr, CastingResultKind::Unmatched};
-  }
-
   vector<TypeSymbol *> candidates = getPromotionCandidates(left, right);
 
   for (auto *candidate : candidates) {
@@ -196,8 +192,28 @@ vector<TypeSymbol *> Resolver::getPromotionCandidates(TypeSymbol *left,
                                                       TypeSymbol *right) {
   vector<TypeSymbol *> result;
 
+  if (left->kind != TypeSymbol::TypeKind::PRIMITIVE &&
+      right->kind != TypeSymbol::TypeKind::PRIMITIVE) {
+    return result;
+  }
+
   if (left->kind != TypeSymbol::TypeKind::PRIMITIVE ||
       right->kind != TypeSymbol::TypeKind::PRIMITIVE) {
+    unordered_set<TypeSymbol *> used;
+    for (auto *type = left; type != nullptr; type = type->base) {
+      auto it = used.find(type);
+      if (it == used.end()) {
+        result.push_back(type);
+        used.emplace(type);
+      }
+    }
+    for (auto *type = right; type != nullptr; type = type->base) {
+      auto it = used.find(type);
+      if (it == used.end()) {
+        result.push_back(type);
+        used.emplace(type);
+      }
+    }
     return result;
   }
 

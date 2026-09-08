@@ -27,12 +27,15 @@ public:
   bool isExtern = false;
   bool isFrame = false;
   bool isOverride = false;
+  bool isStatic = false;
   std::vector<ReturnStmt *> returns;
   AModifier modifier = AModifier::PUBLIC;
 
   bool isRuntime = false;
 
   ValueSymbol *selfReceiver = nullptr;
+
+  string linkName = "";
 
 protected:
   void _anchor() override {};

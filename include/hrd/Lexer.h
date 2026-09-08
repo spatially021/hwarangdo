@@ -113,5 +113,7 @@ protected:
       {"self", TKind::SELF},
       {"by", TKind::BY},
       {"onDestroy", TKind::ONDESTROY},
-      {"import", TKind::IMPORT}};
+      {"import", TKind::IMPORT},
+      {"extern", TKind::EXTERN},
+      {"static", TKind::STATIC}};
 };

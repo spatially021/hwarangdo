@@ -3,6 +3,7 @@
 #include "hrd/SemanticAnalyzer/Scope.h"
 #include "hrd/SemanticAnalyzer/symbol/TypeSymbol.h"
 #include "hrd/SemanticAnalyzer/symbol/ValueSymbol.h"
+#include "hrd/SourceSpan.h"
 class ScopeManager {
 public:
   ScopeManager();
@@ -10,11 +11,7 @@ public:
 
 public:
   // ----- adds -----
-  bool addRoot(unique_ptr<ValueSymbol> symbol);
-  bool addValue(unique_ptr<ValueSymbol> valueSymbol);
-  bool addMethod(unique_ptr<MethodSymbol> methodSymbol);
-  bool addInit(unique_ptr<MethodSymbol> methodSymbol);
-  bool addOnDestroy(unique_ptr<MethodSymbol> methodSymbol);
+  pair<bool, SourceSpan> addValue(unique_ptr<ValueSymbol> valueSymbol);
 
   // ----- gets -----
   Scope *getRootScope();

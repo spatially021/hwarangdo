@@ -4,12 +4,12 @@
 
 bool SymbolHelper::isHandle(TypeSymbol *symbol) {
 
-  if (symbol->kind == TypeSymbol::TypeKind::HANDLE) {
+  if (symbol->kind == TypeKind::HANDLE) {
     return true;
   }
 
   if (auto generic = dynamic_cast<GenericSymbol *>(symbol)) {
-    return generic->origin->kind == TypeSymbol::TypeKind::HANDLE;
+    return generic->origin->kind == TypeKind::HANDLE;
   }
 
   return false;
@@ -17,7 +17,7 @@ bool SymbolHelper::isHandle(TypeSymbol *symbol) {
 
 TypeSymbol *SymbolHelper::getHandleType(TypeSymbol *t) {
   auto *g = dynamic_cast<GenericSymbol *>(t);
-  if (!g || !g->origin || g->origin->kind != TypeSymbol::TypeKind::HANDLE)
+  if (!g || !g->origin || g->origin->kind != TypeKind::HANDLE)
     return nullptr;
 
   return g->args[0];

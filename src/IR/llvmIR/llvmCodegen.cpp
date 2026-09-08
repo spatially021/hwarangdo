@@ -90,7 +90,7 @@ void llvmCodegen::lowerTerminator(MIRTerminator &terminator, FuncContext &ctx) {
                      lowerNativeSwitch(t, ctx);
                      return;
                    }
-                   if (type->kind == TypeSymbol::TypeKind::ENUM) {
+                   if (type->kind == TypeKind::ENUM) {
                      lowerEnumSwitch(t, ctx);
                      return;
                    }

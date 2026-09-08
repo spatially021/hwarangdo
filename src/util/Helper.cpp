@@ -14,9 +14,8 @@ std::string Helper::apIntToString(const llvm::APInt &value) {
   return std::string(buffer.str());
 }
 
-pair<bool, SourceSpan>
-Helper::hasSameMethodSig(const vector<MethodSymbol *> &methods,
-                         MethodSymbol *symbol) {
+SigResult Helper::hasSameMethodSig(const vector<MethodSymbol *> &methods,
+                                   MethodSymbol *symbol) {
   for (auto *method : methods) {
     if (method == symbol) {
       continue;
@@ -35,6 +34,7 @@ Helper::hasSameMethodSig(const vector<MethodSymbol *> &methods,
     }
 
     bool same = true;
+    MethodSymbol *sameMethod = method;
     SourceSpan span = method->decl->span;
 
     for (size_t i = 0; i < method->params.size(); ++i) {
@@ -45,11 +45,11 @@ Helper::hasSameMethodSig(const vector<MethodSymbol *> &methods,
     }
 
     if (same) {
-      return {true, span};
+      return {true, span, sameMethod};
     }
   }
 
-  return {false, {}};
+  return {false, {}, nullptr};
 }
 
 pair<bool, SourceSpan> Helper::hasSameSig(const vector<MethodSymbol *> &methods,
@@ -198,7 +198,7 @@ void TypeResolver::resolveTypeNode(TypeNode *type, TypeResolverContext &ctx) {
 
       auto *target = args[0];
 
-      if (target->kind != TypeSymbol::TypeKind::CLASS ||
+      if (target->kind != TypeKind::CLASS ||
           target->type == Symbol::SymbolType::MAIN) {
         auto dia = ctx.engine.makeDiagnostic(DiagnosticCode::HRD_S110);
         dia.labels = {
@@ -258,7 +258,7 @@ void TypeResolver::resolveTypeNode(TypeNode *type, TypeResolverContext &ctx) {
         ctx.recover.recover();
       }
 
-      if (args[1]->kind != TypeSymbol::TypeKind::ERROR) {
+      if (args[1]->kind != TypeKind::ERROR) {
         auto dia = ctx.engine.makeDiagnostic(DiagnosticCode::HRD_S113);
         dia.labels = {
             {generic->typeArgs[1]->span,
@@ -464,7 +464,7 @@ ResolvedLit TypeResolver::resolveLitInt(LiteralExpr *expr,
   return resolved;
 }
 
-pair<bool, TypeSymbol *> Helper::checkImplementTraitSig(TypeSymbol *symbol) {
+pair<bool, TypeSymbol *> Helper::checkImplementTraitSig(ObjectType *symbol) {
   if (symbol == nullptr) {
     Error::internal("type symbol is nullptr");
   }
@@ -495,17 +495,13 @@ pair<bool, TypeSymbol *> Helper::checkImplementTraitSig(TypeSymbol *symbol) {
   return {true, nullptr};
 }
 
-bool Helper::hasMethodInHierarchyWithSameSig(TypeSymbol *type,
+bool Helper::hasMethodInHierarchyWithSameSig(ObjectType *type,
                                              const std::string &name,
                                              MethodSymbol *sig) {
   for (auto *current = type; current != nullptr; current = current->base) {
-    if (current->memberScope == nullptr) {
-      continue;
-    }
+    auto it = current->methodMap.find(name);
 
-    auto it = current->memberScope->methodMap.find(name);
-
-    if (it == current->memberScope->methodMap.end()) {
+    if (it == current->methodMap.end()) {
       continue;
     }
 
@@ -527,14 +523,18 @@ pair<bool, CastingResultKind> Helper::canImplicitlyConvert(TypeSymbol *from,
     Error::internal("target type is nullptr");
   }
 
-  for (auto *type = from; type != nullptr; type = type->base) {
-    if (type == to) {
-      return {true, CastingResultKind::None};
+  if (from == to) {
+    return {true, CastingResultKind::None};
+  }
+  if (auto obj = dyn_cast<ObjectType>(from)) {
+    for (auto *type = obj; type != nullptr; type = type->base) {
+      if (type == to) {
+        return {true, CastingResultKind::None};
+      }
     }
   }
 
-  if (from->kind != TypeSymbol::TypeKind::PRIMITIVE ||
-      to->kind != TypeSymbol::TypeKind::PRIMITIVE) {
+  if (from->kind != TypeKind::PRIMITIVE || to->kind != TypeKind::PRIMITIVE) {
     return {false, CastingResultKind::Unmatched};
   }
 

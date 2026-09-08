@@ -51,37 +51,37 @@ SymbolTable::SymbolTable() {
   }
   auto symbol = make_unique<TypeSymbol>();
   symbol->name = "void";
-  symbol->kind = TypeSymbol::TypeKind::VOID;
+  symbol->kind = TypeKind::VOID;
   registry.addBuilt(std::move(symbol));
 
   symbol = make_unique<HandleSymbol>();
   symbol->name = "Handle";
-  symbol->kind = TypeSymbol::TypeKind::HANDLE;
+  symbol->kind = TypeKind::HANDLE;
   registry.addBuilt(std::move(symbol));
 
   symbol = make_unique<ResultSymbol>();
   symbol->name = "Result";
-  symbol->kind = TypeSymbol::TypeKind::RESULT;
+  symbol->kind = TypeKind::RESULT;
   registry.addBuilt(std::move(symbol));
 
   symbol = make_unique<OptionSymbol>();
   symbol->name = "Option";
-  symbol->kind = TypeSymbol::TypeKind::OPTION;
+  symbol->kind = TypeKind::OPTION;
   registry.addBuilt(std::move(symbol));
 
   symbol = make_unique<ErrorType>();
   symbol->name = "Error";
-  symbol->kind = TypeSymbol::TypeKind::ERROR;
+  symbol->kind = TypeKind::ERROR;
   registry.addBuilt(std::move(symbol));
 
   symbol = make_unique<TypeSymbol>();
   symbol->name = "@built";
-  symbol->kind = TypeSymbol::TypeKind::BUILTIN;
+  symbol->kind = TypeKind::BUILTIN;
   registry.addBuilt(std::move(symbol));
 
   symbol = make_unique<TypeSymbol>();
   symbol->name = "@default";
-  symbol->kind = TypeSymbol::TypeKind::DEFAULT_VALUE;
+  symbol->kind = TypeKind::DEFAULT_VALUE;
   registry.addBuilt(std::move(symbol));
 
   scopeManger.setCurrentToToplevel();
@@ -89,44 +89,44 @@ SymbolTable::SymbolTable() {
 
 SymbolTable::~SymbolTable() = default;
 
-SymbolTable::Result SymbolTable::add(unique_ptr<Symbol> symbol) {
+Result SymbolTable::add(unique_ptr<Symbol> symbol) {
   assert(symbol != nullptr);
   switch (symbol->type) {
   case Symbol::SymbolType::TYPE: {
     std::unique_ptr<TypeSymbol> s(static_cast<TypeSymbol *>(symbol.release()));
-    if (getType(s->name) != nullptr) {
+    if (auto type = getType(s->name); type != nullptr) {
       if (s->isReserved)
-        return {false, Result::RESERVED};
-      return {false, Result::DUPLICATED};
+        return {false, Result::RESERVED, type->decl->span};
+      return {false, Result::DUPLICATED, type->decl->span};
     }
 
-    bool ok = registry.addType(std::move(s));
-    return {ok, ok ? Result::NONE : Result::DUPLICATED};
+    auto ok = registry.addType(std::move(s));
+    return {ok.first, ok.first ? Result::NONE : Result::DUPLICATED, ok.second};
   }
   case Symbol::SymbolType::VALUE: {
-    bool b = scopeManger.addValue(
+    auto b = scopeManger.addValue(
         unique_ptr<ValueSymbol>(static_cast<ValueSymbol *>(symbol.release())));
-    return SymbolTable::Result(
-        {b, (b ? SymbolTable::Result::NONE : SymbolTable::Result::DUPLICATED)});
+    return Result(
+        {b.first, (b.first ? Result::NONE : Result::DUPLICATED), b.second});
   }
 
   case Symbol::SymbolType::METHOD: {
-    bool b = scopeManger.addMethod(unique_ptr<MethodSymbol>(
+    auto b = registry.addMethod(unique_ptr<MethodSymbol>(
         static_cast<MethodSymbol *>(symbol.release())));
-    return SymbolTable::Result(
-        {b, (b ? SymbolTable::Result::NONE : SymbolTable::Result::DUPLICATED)});
+    return Result(
+        {b.first, (b.first ? Result::NONE : Result::DUPLICATED), b.second});
   }
 
   case Symbol::SymbolType::MAIN: {
-    bool b = registry.addType(
+    auto b = registry.addType(
         unique_ptr<MainSymbol>(static_cast<MainSymbol *>(symbol.release())));
 
-    return SymbolTable::Result(
-        {b, (b ? SymbolTable::Result::NONE : SymbolTable::Result::DUPLICATED)});
+    return Result(
+        {b.first, (b.first ? Result::NONE : Result::DUPLICATED), b.second});
   }
 
   default:
-    return SymbolTable::Result({false, SymbolTable::Result::UNKNOWN_SYMBOL});
+    return Result({false, Result::UNKNOWN_SYMBOL, {}});
   }
 }
 

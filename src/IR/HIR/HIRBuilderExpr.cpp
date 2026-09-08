@@ -60,10 +60,15 @@ unique_ptr<HIRExpr> HIRBuilder::lowerImplictCall(CallExpr *expr) {
 
 std::unique_ptr<HIRExpr> HIRBuilder::lowerCall(CallExpr *expr) {
   assert(expr);
-  std::unique_ptr<HIRValueExpr> receiver = lowerReceiver(expr->receiver.get());
-  if (receiver == nullptr) {
-    Error::internal(expr->span, "fail to lower receiver");
+
+  std::unique_ptr<HIRValueExpr> receiver = nullptr;
+  if (!expr->isStatic) {
+    receiver = lowerReceiver(expr->receiver.get());
+    if (receiver == nullptr) {
+      Error::internal(expr->span, "fail to lower receiver");
+    }
   }
+
   MethodSymbol *methodDecl = nullptr;
   if (auto method = get_if<MethodSymbol *>(&expr->resolved)) {
 

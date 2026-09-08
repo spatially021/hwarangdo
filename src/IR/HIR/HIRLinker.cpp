@@ -125,6 +125,7 @@ void HIRLinker::lowerMethodDeclShell(FuncDecl *decl, HIRTypeDecl *currentType) {
   auto *raw = method.get();
 
   method->isAsync = false;
+  method->isExtern = decl->methodSymbol->isExtern;
   method->methodKind = decl->methodSymbol->methodKind;
   method->returnType = decl->methodSymbol->returnType;
   vector<unique_ptr<HIRParam>> params;

@@ -3,5 +3,6 @@
 #include "hrd/compiler/CompilerContexts.h"
 
 Resolver::Resolver(ResolverContext &ctx)
-    : table(ctx.table), engine(ctx.engine), recover(*this),
+    : table(ctx.table), currentType(ctx.table.registry.getCurrent()),
+      engine(ctx.engine), recover(*this),
       typeContext({ctx.engine, ctx.table, recover}) {}

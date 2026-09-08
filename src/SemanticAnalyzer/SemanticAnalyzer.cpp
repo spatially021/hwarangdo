@@ -213,8 +213,7 @@ void SemanticAnalyzer::resolve() {
 }
 
 void SemanticAnalyzer::fieldIndexing(TypeSymbol *type) {
-  if (type->kind != TypeSymbol::TypeKind::CLASS &&
-      type->kind != TypeSymbol::TypeKind::STRUCT) {
+  if (type->kind != TypeKind::CLASS && type->kind != TypeKind::STRUCT) {
     return;
   }
 
@@ -240,21 +239,23 @@ void SemanticAnalyzer::fieldIndexing(TypeSymbol *type) {
   layoutState[type] = LayoutState::Visiting;
 
   uint32_t index = 0;
+  if (auto obj = dyn_cast<ObjectType>(type)) {
+    if (obj->base != nullptr) {
+      fieldIndexing(obj->base);
 
-  if (type->base != nullptr) {
-    fieldIndexing(type->base);
+      if (layoutState[obj->base] != LayoutState::Done) {
+        return;
+      }
 
-    if (layoutState[type->base] != LayoutState::Done) {
-      return;
+      index = obj->base->fieldCount;
     }
 
-    index = type->base->fieldCount;
+    for (auto *field : obj->fields) {
+      field->index = index++;
+    }
+
+    obj->fieldCount = index;
   }
 
-  for (auto *field : type->fields) {
-    field->index = index++;
-  }
-
-  type->fieldCount = index;
   layoutState[type] = LayoutState::Done;
 }

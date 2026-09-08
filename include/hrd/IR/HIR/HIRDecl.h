@@ -67,6 +67,7 @@ struct HIRMethodDecl : HIRDecl {
   MethodKind methodKind;
   bool isStatic = false;
   bool isAsync = false;
+  bool isExtern = false;
 
   HIRMethodDecl(SourceSpan s, HIRTypeDecl *o, int i, const string &n,
                 MethodSymbol *m)

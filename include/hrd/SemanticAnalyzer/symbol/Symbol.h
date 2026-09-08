@@ -11,7 +11,7 @@ using std::vector;
 
 class Symbol {
 public:
-  string name;
+  string name = "";
   enum class SymbolType {
     TYPE,
     VALUE,

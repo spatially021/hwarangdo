@@ -163,7 +163,13 @@ void MetaWriter::writeField(const FieldMeta &meta) {
 void MetaWriter::writeMethod(const MethodMeta &meta) {
   writeIndent();
 
-  stream() << modifierName(meta.modifier) << " method " << meta.name << '(';
+  stream() << modifierName(meta.modifier) << ' ';
+
+  if (meta.isStatic) {
+    stream() << "static ";
+  }
+
+  stream() << "method " << meta.name << '(';
 
   for (size_t i = 0; i < meta.params.size(); ++i) {
     if (i != 0) {
@@ -493,14 +499,16 @@ void MetaWriter::writeIndent() {
 
 std::string_view MetaWriter::typeKindName(TypeKind kind) {
   switch (kind) {
-  case TypeKind::Enum:
+  case TypeKind::ENUM:
     return "enum";
 
-  case TypeKind::Class:
+  case TypeKind::CLASS:
     return "class";
 
-  case TypeKind::Struct:
+  case TypeKind::STRUCT:
     return "struct";
+  default:
+    break;
   }
 
   Error::internal("unknown metadata TypeKind");

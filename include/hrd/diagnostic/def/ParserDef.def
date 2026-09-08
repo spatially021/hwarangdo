@@ -795,3 +795,44 @@ DIAG(HRD_P070,
      Error,
      "reserved keyword in import path",
      "HRD-P070")
+
+DIAG(HRD_P071,
+Error,
+"duplicate 'extern' modifier",
+"HRD-P071")
+
+DIAG(HRD_P072,
+     Error,
+     "'extern' is only allowed on method declarations",
+     "HRD-P072")
+
+DIAG(HRD_P073,
+Error,
+"duplicate 'static' modifier",
+"HRD-P073")
+
+DIAG(HRD_P074,
+     Error,
+     "'static' is only allowed on method declarations",
+     "HRD-P074")
+
+//=============================================================================
+// Trigger
+//-----------------------------------------------------------------------------
+// An 'extern' modifier is applied to a method declaration inside a trait.
+//=============================================================================
+DIAG(HRD_P075,
+     Error,
+     "'extern' is not allowed on trait method declarations",
+     "HRD-P075")
+
+//=============================================================================
+// Trigger
+//-----------------------------------------------------------------------------
+// An extern link name is specified using an expression other than a string
+// literal.
+//=============================================================================
+DIAG(HRD_P076,
+     Error,
+     "extern link name must be a string literal",
+     "HRD-P076")

@@ -29,10 +29,10 @@ public:
 private:
   void build();
   void buildType(TypeMeta &meta);
-  ValueSymbol *buildField(FieldMeta &meta, TypeSymbol *symbol);
+  ValueSymbol *buildField(FieldMeta &meta, ObjectType *symbol);
   void buildMethod(MethodMeta &meta, TypeSymbol *symbol);
   void buildParam(ParamMeta &meta, MethodSymbol *symbol, Scope *scope);
-  void buildVariant(EnumVariantMeta &meta, TypeSymbol *type);
+  void buildVariant(EnumVariantMeta &meta, EnumType *type);
 
 private:
   void link();

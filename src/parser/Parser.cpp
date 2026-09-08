@@ -1,6 +1,7 @@
 #include "hrd/Parser.h"
 #include "hrd/AST/Decl.h"
 #include "hrd/AST/DeclContext.h"
+#include "hrd/AST/Expr.h"
 #include "hrd/AST/TokenStream.h"
 #include "hrd/Recover/ParserRecover.h"
 #include "hrd/Token.h"
@@ -60,13 +61,8 @@ Decl::Ptr Parser::declaration(DeclContext context) {
     checkAceess = true;
   }
 
-  while (check({
-      TKind::CONST,
-      TKind::ROOT,
-      TKind::FRAME,
-      TKind::OVERRIDE,
-      TKind::ASYNC,
-  })) {
+  while (check({TKind::CONST, TKind::ROOT, TKind::FRAME, TKind::OVERRIDE,
+                TKind::ASYNC, TKind::EXTERN, TKind::STATIC})) {
     if (check(TKind::CONST)) {
       advance();
       if (prefix.isConst) {
@@ -129,10 +125,59 @@ Decl::Ptr Parser::declaration(DeclContext context) {
       }
       prefix.isAsync = true;
     }
+
+    if (check(TKind::EXTERN)) {
+      advance(); // extern 처리
+      if (prefix.isExtern) {
+        auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_P071);
+        dia.labels = {
+            {peek().span, "'extern' modifier is already specified", true},
+        };
+        engine.emit(dia);
+        recover.recover();
+      }
+      prefix.isExtern = true;
+      if (check(TKind::LEFT_PAREN)) {
+        advance(); //(처리
+        auto span = peek().span;
+        if (isLit()) {
+          auto tok = advance();
+          if (tok.kind == TKind::LIT_STRING) {
+            prefix.linkName = tok.text;
+            consume(TKind::RIGHT_PAREN, DiagnosticCode::HRD_P047,
+                    "expected ')' to close extern link name");
+            continue;
+          }
+        }
+        auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_P076);
+        dia.labels = {
+            {span, "this extern link name is not a string literal", true},
+        };
+        dia.notes = {
+            "extern link names must be known exactly at compile time",
+        };
+        dia.helps = {
+            "replace this expression with a string literal containing the "
+            "native symbol name",
+        };
+        engine.emit(dia);
+        recover.recover();
+      }
+    }
+
+    if (check(TKind::STATIC)) {
+      advance(); // static 처리
+      if (prefix.isStatic) {
+        auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_P073);
+        dia.labels = {
+            {peek().span, "'static' modifier is already specified", true},
+        };
+        engine.emit(dia);
+        recover.recover();
+      }
+      prefix.isStatic = true;
+    }
   }
-  // if (check(TKind::FUNC)) {
-  //   return functionDecl(prefix, true);
-  // }
 
   if (check(TKind::VOID)) {
     return functionDecl(prefix);
@@ -229,6 +274,7 @@ Stmt::Ptr Parser::statement() {
   case TKind::PUBLIC:
   case TKind::PROTECTED:
   case TKind::PRIVATE:
+  case TKind::EXTERN:
   case TKind::IMPL:
   case TKind::TRAIT:
   case TKind::CONST:
@@ -236,6 +282,7 @@ Stmt::Ptr Parser::statement() {
   case TKind::FRAME:
   case TKind::INIT:
   case TKind::IMPORT:
+  case TKind::STATIC:
     return declStmt();
   case TKind::DOUBLE_ANGLEBUCKET:
     return valueTransferStmt();

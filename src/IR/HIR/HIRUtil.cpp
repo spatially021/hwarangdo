@@ -23,11 +23,10 @@ unique_ptr<HIRSelfExpr> HIRBuilder::lowerImplictSelf() {
 
   auto type = currentType->type;
   SourceSpan span;
-  return make_unique<HIRSelfExpr>(span,
-                                  type->kind == TypeSymbol::TypeKind::STRUCT
-                                      ? HIRSelfKind::Self
-                                      : HIRSelfKind::This,
-                                  type, type, type);
+  return make_unique<HIRSelfExpr>(
+      span,
+      type->kind == TypeKind::STRUCT ? HIRSelfKind::Self : HIRSelfKind::This,
+      type, type, type);
 }
 
 HIRLocal *HIRBuilder::lookUpLocal(ValueSymbol *symbol) {
@@ -104,7 +103,7 @@ void HIRBuilder::setDefaultInit(HIRTypeDecl *type) {
     auto place = make_unique<HIRFieldPlaceExpr>(
         span,
         make_unique<HIRSelfExpr>(span,
-                                 ty->kind == TypeSymbol::TypeKind::STRUCT
+                                 ty->kind == TypeKind::STRUCT
                                      ? HIRSelfKind::Self
                                      : HIRSelfKind::This,
                                  ty, ty, ty),
@@ -154,8 +153,9 @@ void HIRBuilder::bindMethod(FuncDecl *decl) {
   }
 
   MethodGuard _(currentMethod, method);
-
-  method->body = lowerStmtAsBlock(decl->body.get());
+  if (decl->body != nullptr) {
+    method->body = lowerStmtAsBlock(decl->body.get());
+  }
 }
 
 pair<bool, HIRLocal *> HIRBuilder::lookupLocal(ValueSymbol *symbol) {

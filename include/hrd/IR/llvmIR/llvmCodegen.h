@@ -207,6 +207,8 @@ private:
   void generateEntryMain(MainSymbol *mainType);
   llvm::Function *getRuntimeFunc(const std::string &name,
                                  llvm::FunctionType *type);
+  llvm::Function *getOrCreateFunc(MethodSymbol *symbol);
+  llvm::Function *createFuncShell(MethodSymbol *symbol);
   MethodSymbol *getMainMethod(const std::string &name);
   void emitFieldZeroInit(TypeSymbol *owner, llvm::Value *self);
   void addClean(llvm::Value *addr, TypeSymbol *type, FuncContext &ctx);
@@ -219,4 +221,6 @@ private:
 
   llvm::Value *extractEnumTag(const LoweredValue &value, TypeSymbol *enumType);
   std::string getStringSuffix(TypeSymbol *type);
+  bool needSelf(MIRFunction *func);
+  bool needSelf(MethodSymbol *func);
 };

@@ -16,27 +16,26 @@ void llvmCodegen::buildTypes() {
 
     switch (t->kind) {
 
-    case TypeSymbol::TypeKind::VOID: {
+    case TypeKind::VOID: {
       types.emplace(t, llvm::Type::getVoidTy(context));
       continue;
     }
-    case TypeSymbol::TypeKind::ARRAY:
+    case TypeKind::ARRAY:
 
-    case TypeSymbol::TypeKind::HANDLE:
+    case TypeKind::HANDLE:
 
-    case TypeSymbol::TypeKind::FUNC:
+    case TypeKind::FUNC:
 
-    case TypeSymbol::TypeKind::RESULT:
-    case TypeSymbol::TypeKind::OPTION:
-    case TypeSymbol::TypeKind::ERROR:
-    case TypeSymbol::TypeKind::BUILTIN:
+    case TypeKind::RESULT:
+    case TypeKind::OPTION:
+    case TypeKind::ERROR:
+    case TypeKind::BUILTIN:
 
     default:
       break;
     }
 
-    if (t->kind == TypeSymbol::TypeKind::CLASS ||
-        t->kind == TypeSymbol::TypeKind::STRUCT) {
+    if (t->kind == TypeKind::CLASS || t->kind == TypeKind::STRUCT) {
       auto type = llvm::StructType::create(context, mangleType(t));
       types.emplace(t, type);
       auto *fnTy = llvm::FunctionType::get(builder.getVoidTy(),
@@ -54,7 +53,7 @@ void llvmCodegen::buildTypes() {
       continue;
     }
 
-    if (t->kind == TypeSymbol::TypeKind::ENUM) {
+    if (t->kind == TypeKind::ENUM) {
       auto *st = llvm::StructType::create(context, mangleType(t));
       enums.emplace(t, st);
 
@@ -93,15 +92,14 @@ void llvmCodegen::buildTypes() {
       continue;
     }
 
-    if (t->kind == TypeSymbol::TypeKind::STRUCT ||
-        t->kind == TypeSymbol::TypeKind::CLASS) {
+    if (auto obj = dyn_cast<ObjectType>(t)) {
       auto *type = llvm::dyn_cast<llvm::StructType>(getLayoutType(t));
       if (type == nullptr) {
         Error::internal("illegal llvm type");
       }
 
       vector<llvm::Type *> fields;
-      for (auto &f : t->fields) {
+      for (auto &f : obj->fields) {
         fields.push_back(getFieldType(f->typeSymbol));
       }
 
@@ -112,7 +110,7 @@ void llvmCodegen::buildTypes() {
       continue;
     }
 
-    if (t->kind == TypeSymbol::TypeKind::ENUM) {
+    if (auto en = dyn_cast<EnumType>(t)) {
       auto *fn = defaultDestroys.at(t);
       auto *layoutTy = getLayoutType(t);
 
@@ -130,7 +128,7 @@ void llvmCodegen::buildTypes() {
       auto *payload = builder.CreateLoad(builder.getPtrTy(), payloadPtr);
 
       auto *sw = builder.CreateSwitch(
-          tag, doneBB, static_cast<unsigned int>(t->variants.size()));
+          tag, doneBB, static_cast<unsigned int>(en->variants.size()));
 
       auto *ptrTy = builder.getPtrTy();
       auto *voidTy = builder.getVoidTy();
@@ -138,7 +136,7 @@ void llvmCodegen::buildTypes() {
       auto *freeTy = llvm::FunctionType::get(voidTy, {ptrTy}, false);
       auto *freeFn = getRuntimeFunc("free", freeTy);
 
-      for (auto &v : t->variants) {
+      for (auto &v : en->variants) {
         auto *variant = v.get();
 
         // unit variant는 heap payload가 없음
@@ -301,7 +299,7 @@ llvm::Type *llvmCodegen::buildArrayType(ArrayTypeSymbol *arr) {
 
   llvm::Type *baseTy = nullptr;
 
-  if (arr->baseType->kind == TypeSymbol::TypeKind::ARRAY) {
+  if (arr->baseType->kind == TypeKind::ARRAY) {
     auto *inner = dynamic_cast<ArrayTypeSymbol *>(arr->baseType);
     if (inner == nullptr) {
       Error::internal("illegal array base type");
@@ -341,7 +339,7 @@ void llvmCodegen::emitArrayDestroy(ArrayTypeSymbol *arr) {
     return;
   }
 
-  if (arr->baseType->kind == TypeSymbol::TypeKind::ARRAY) {
+  if (arr->baseType->kind == TypeKind::ARRAY) {
     auto *inner = dynamic_cast<ArrayTypeSymbol *>(arr->baseType);
     if (inner == nullptr) {
       Error::internal("illegal nested array type");

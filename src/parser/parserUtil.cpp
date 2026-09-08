@@ -4,6 +4,7 @@
 #include "hrd/Token.h"
 #include "hrd/diagnostic/Diagnostic.h"
 #include "hrd/util/Error.h"
+#include <cstddef>
 #include <iterator>
 #include <memory>
 #include <stdexcept>
@@ -80,8 +81,8 @@ const Token &Parser::following(size_t step) const {
   throw runtime_error("No following token");
 }
 
-bool Parser::isAccessModifier() const {
-  auto k = peek().kind;
+bool Parser::isAccessModifier(const size_t offset) const {
+  auto k = following(offset).kind;
   return k == TKind::PUBLIC || k == TKind::PRIVATE || k == TKind::PROTECTED;
 }
 
@@ -135,28 +136,59 @@ bool Parser::isInit() {
 }
 
 bool Parser::isFunc() {
-  if (isAccessModifier()) {
-    if (isTypeToken(following().kind) || following().kind == TKind::VOID
-        /* following().kind == TKind::FUNC */) {
-      return following(2).kind == TKind::IDENTIFIER &&
-             following(3).kind == TKind::LEFT_PAREN;
+  size_t offset = 0;
+
+  while (true) {
+    if (isAccessModifier(offset) || check(TKind::STATIC, offset)) {
+      ++offset;
+      continue;
     }
-    auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_P026);
-    dia.labels = {
-        {peek().span, "expected type name here", true},
-    };
-    engine.emit(dia);
-    recover.recover();
+
+    if (check(TKind::EXTERN, offset)) {
+      ++offset;
+
+      // extern("symbol") 형태라면 괄호 부분까지 건너뜀.
+      if (following(offset).kind == TKind::LEFT_PAREN) {
+        int depth = 0;
+
+        do {
+          auto kind = following(offset).kind;
+
+          if (kind == TKind::LEFT_PAREN) {
+            ++depth;
+          } else if (kind == TKind::RIGHT_PAREN) {
+            --depth;
+          }
+
+          ++offset;
+
+        } while (depth > 0 && following(offset).kind != TKind::END);
+      }
+
+      continue;
+    }
+
+    break;
+  }
+
+  auto kind = following(offset).kind;
+
+  if (!(isTypeToken(kind) || kind == TKind::VOID)) {
+    if (offset != 0) {
+      auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_P026);
+      dia.labels = {
+          {following(offset).span, "expected type name here", true},
+      };
+
+      engine.emit(dia);
+      recover.recover();
+    }
+
     return false;
   }
 
-  if (isTypeToken(peek().kind) || peek().kind == TKind::VOID /* ||
-      peek().kind == TKind::FUNC */) {
-    return following().kind == TKind::IDENTIFIER &&
-           following(2).kind == TKind::LEFT_PAREN;
-  }
-
-  return false;
+  return following(offset + 1).kind == TKind::IDENTIFIER &&
+         following(offset + 2).kind == TKind::LEFT_PAREN;
 }
 
 TypeNode::Ptr Parser::typeNodeConvertor(Token ty, Token size) {
@@ -340,6 +372,25 @@ void Parser::notFunc(DeclPrefix prefix) {
     auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_P031);
     dia.labels = {
         {previous().span, "'async' is only allowed on function declarations",
+         true},
+    };
+    engine.emit(dia);
+    recover.recover();
+  }
+
+  if (prefix.isExtern) {
+    auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_P072);
+    dia.labels = {
+        {previous().span, "'extern' is only allowed on function declarations",
+         true},
+    };
+    engine.emit(dia);
+    recover.recover();
+  }
+  if (prefix.isStatic) {
+    auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_P074);
+    dia.labels = {
+        {previous().span, "'static' is only allowed on function declarations",
          true},
     };
     engine.emit(dia);

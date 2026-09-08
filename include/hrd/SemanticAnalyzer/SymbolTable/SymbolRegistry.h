@@ -7,6 +7,7 @@
 #include "hrd/SemanticAnalyzer/symbol/RuntimeSymbol.h"
 #include "hrd/SemanticAnalyzer/symbol/TypeSymbol.h"
 #include "hrd/SemanticAnalyzer/symbol/ValueSymbol.h"
+#include "hrd/SourceSpan.h"
 #include <memory>
 #include <optional>
 #include <unordered_map>
@@ -30,13 +31,16 @@ public:
   // ------- adds ---------
   void addTemp(std::unique_ptr<ValueSymbol> tempSymbol);
   void addBuilt(unique_ptr<TypeSymbol> typeSymbol);
-  bool addType(unique_ptr<TypeSymbol> typeSymbol);
+  pair<bool, SourceSpan> addType(unique_ptr<TypeSymbol> typeSymbol);
   void addRuntime(unique_ptr<RuntimeSymbol> runtimeSymbol);
   void addSelf(unique_ptr<ValueSymbol> selfSymbol);
   void addImpl(ImplDecl *key, unique_ptr<ImplSymbol> implSymbol);
   void addFile(SourcePath path, FileContext *file);
   void addFile(Module *module, SourcePath path, FileContext *file);
   void addModule(const string &name, Module *module);
+  pair<bool, SourceSpan> addMethod(unique_ptr<MethodSymbol> methodSymbol);
+  bool addInit(unique_ptr<MethodSymbol> methodSymbol);
+  bool addOnDestroy(unique_ptr<MethodSymbol> methodSymbol);
 
   // ------- getOrCreates ---------
 
@@ -75,6 +79,7 @@ public:
   void setCurrentFile(FileContext *file);
   void setModule(Module *moudle);
   TypeSymbol *makeRoot();
+  TypeSymbol *&getCurrent() { return currentType; }
 
 private:
   TypeMap &getTypeMap(FileContext *path);

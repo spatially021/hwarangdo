@@ -14,7 +14,7 @@
 class Builder : public ASTVisitor {
 public:
   SymbolTable &table;
-  TypeSymbol *currentType = nullptr;
+  TypeSymbol *&currentType;
   unique_ptr<Scope> rootScope = make_unique<Scope>();
   DiagnosticEngine &engine;
   Builder(BuilderContext &context);

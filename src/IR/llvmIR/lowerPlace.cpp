@@ -58,7 +58,7 @@ LoweredPlace llvmCodegen::lowerFieldPlace(MIRFieldPlace *place,
   auto *baseType = place->ownType;
   auto *baseLayoutTy = getLayoutType(baseType);
 
-  if (baseType->kind == TypeSymbol::TypeKind::CLASS &&
+  if (baseType->kind == TypeKind::CLASS &&
       dynamic_cast<MIRLocalPlace *>(place->base.get())) {
     base = builder.CreateLoad(builder.getPtrTy(), base, "entity.local.ptr");
   }

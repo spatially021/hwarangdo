@@ -11,18 +11,21 @@ llvm::Function *llvmCodegen::emitDefaultDestroy(TypeSymbol *ty) {
 
   auto *self = fn->getArg(0);
 
-  for (auto it = ty->fields.rbegin(); it != ty->fields.rend(); ++it) {
-    auto field = (*it);
-    auto *fieldPtr =
-        builder.CreateStructGEP(layoutTy, self, field->index, field->name);
+  if (isa<ObjectType>(ty)) {
+    auto obj = dyn_cast<ObjectType>(ty);
+    for (auto it = obj->fields.rbegin(); it != obj->fields.rend(); ++it) {
+      auto field = (*it);
+      auto *fieldPtr =
+          builder.CreateStructGEP(layoutTy, self, field->index, field->name);
 
-    if (needsDestroy(field->typeSymbol)) {
-      auto it_ = defaultDestroys.find(field->typeSymbol);
-      if (it_ == defaultDestroys.end()) {
-        throw runtime_error("fail to find default destroy : " + ty->name);
+      if (needsDestroy(field->typeSymbol)) {
+        auto it_ = defaultDestroys.find(field->typeSymbol);
+        if (it_ == defaultDestroys.end()) {
+          throw runtime_error("fail to find default destroy : " + ty->name);
+        }
+        auto *fieldDestroy = defaultDestroys.at(field->typeSymbol);
+        builder.CreateCall(fieldDestroy, {fieldPtr});
       }
-      auto *fieldDestroy = defaultDestroys.at(field->typeSymbol);
-      builder.CreateCall(fieldDestroy, {fieldPtr});
     }
   }
 
@@ -46,11 +49,13 @@ void llvmCodegen::emitFuncBody(MIRFunction *func) {
   std::vector<Cleanup> cleanupStack;
   std::unordered_set<llvm::Value *> canceledCleanups;
   auto argIt = fn->arg_begin();
+  llvm::Argument *self = nullptr;
+  if (needSelf(func)) {
+    self = &*argIt++;
+    self->setName("self");
 
-  llvm::Argument *self = &*argIt++;
-  self->setName("self");
-
-  params.emplace(func->symbol->selfReceiver, self);
+    params.emplace(func->symbol->selfReceiver, self);
+  }
 
   FuncContext ctx = {fn,   blocks,      locals,       params,
                      self, func->owner, cleanupStack, canceledCleanups};
@@ -78,8 +83,8 @@ void llvmCodegen::emitFuncBody(MIRFunction *func) {
 
 void llvmCodegen::emitFieldZeroInit(TypeSymbol *owner, llvm::Value *self) {
   auto *layoutTy = getLayoutType(owner);
-
-  for (auto *field : owner->fields) {
+  auto obj = dyn_cast<ObjectType>(owner);
+  for (auto *field : obj->fields) {
     auto *fieldPtr = builder.CreateStructGEP(layoutTy, self, field->index,
                                              field->name + ".zero");
 
@@ -90,7 +95,7 @@ void llvmCodegen::emitFieldZeroInit(TypeSymbol *owner, llvm::Value *self) {
                           fieldPtr);
     }
 
-    if (fieldTy->kind == TypeSymbol::TypeKind::STRUCT) {
+    if (fieldTy->kind == TypeKind::STRUCT) {
       auto *init = defaultInits.at(fieldTy);
       builder.CreateCall(init, {fieldPtr});
       continue;

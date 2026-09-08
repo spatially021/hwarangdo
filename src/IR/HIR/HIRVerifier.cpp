@@ -90,33 +90,36 @@ void HIRVerifier::verifyMethod(HIRMethodDecl *method, HIRTypeDecl *) {
     verifyParam(p.second);
   }
 
-  if (method->body == nullptr) {
-    Error::internal("method body is nullptr");
+  if (!method->isExtern) {
+    if (method->body == nullptr) {
+      Error::internal("method body is nullptr");
+    }
+
+    verifyBlock(method->body.get());
+
+    if (method->returnType->kind != TypeKind::VOID &&
+        !definitelyReturns(method->body.get())) {
+      auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_H001);
+      dia.labels = {
+          {method->span,
+           "method '" + method->name +
+               "' may reach the end without returning a value",
+           true},
+      };
+      dia.notes = {
+          "the declared return type is '" + method->returnType->name + "'",
+          "every reachable control-flow path must return a value",
+      };
+      dia.helps = {
+          "add a return statement to every reachable path",
+      };
+      engine.emit(dia);
+      recover.recover();
+    }
   }
 
-  verifyBlock(method->body.get());
   if (method->returnType == nullptr) {
     Error::internal(method->name + "'s return type is nullptr");
-  }
-
-  if (method->returnType->kind != TypeSymbol::TypeKind::VOID &&
-      !definitelyReturns(method->body.get())) {
-    auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_H001);
-    dia.labels = {
-        {method->span,
-         "method '" + method->name +
-             "' may reach the end without returning a value",
-         true},
-    };
-    dia.notes = {
-        "the declared return type is '" + method->returnType->name + "'",
-        "every reachable control-flow path must return a value",
-    };
-    dia.helps = {
-        "add a return statement to every reachable path",
-    };
-    engine.emit(dia);
-    recover.recover();
   }
 }
 
@@ -155,7 +158,7 @@ void HIRVerifier::verifyLocal(HIRLocal *local) {
   if (local->type == nullptr) {
     Error::internal("local's type is nullptr");
   }
-  if (local->type->kind == TypeSymbol::TypeKind::CLASS) {
+  if (local->type->kind == TypeKind::CLASS) {
     if (!local->isInitialized) {
       Error::internal("local is observer but not initialized");
     }
@@ -367,7 +370,7 @@ void HIRVerifier::verifyStmt(HIRStmt *stmt) {
     if (assign->lhs == nullptr) {
       Error::internal(assign->span, "assign's lhs is nullptr");
     }
-    if (assign->lhs->type->kind == TypeSymbol::TypeKind::CLASS) {
+    if (assign->lhs->type->kind == TypeKind::CLASS) {
       Error::internal(assign->span, "observer cannot be assigned");
     }
     if (assign->rhs == nullptr) {
@@ -383,7 +386,7 @@ void HIRVerifier::verifyStmt(HIRStmt *stmt) {
     if (compound->lhs == nullptr) {
       Error::internal("compoundAssignExpr's lhs is nullptr");
     }
-    if (compound->lhs->type->kind == TypeSymbol::TypeKind::CLASS) {
+    if (compound->lhs->type->kind == TypeKind::CLASS) {
       Error::internal("observer cannot be assigned");
     }
     if (compound->rhs == nullptr) {
@@ -485,10 +488,13 @@ void HIRVerifier::verifyExpr(HIRExpr *expr, bool) {
     if (call->type == nullptr) {
       Error::internal("methodCall's type is nullptr");
     }
-    if (call->receiver == nullptr) {
-      Error::internal("methodCall's receiver is nullptr");
+    if (!call->method->isStatic) {
+      if (call->receiver == nullptr) {
+        Error::internal("methodCall's receiver is nullptr");
+      }
+      verifyExpr(call->receiver.get());
     }
-    verifyExpr(call->receiver.get());
+
     if (call->method->params.size() != call->args.size()) {
       Error::internal("call argument count mismatch");
     }

@@ -70,14 +70,13 @@ void Resolver::visit(StructDecl *decl) {
 void Resolver::visit(EnumDecl *) {}
 void Resolver::visit(ImplDecl *decl) {
   auto impl = table.registry.getImpl(decl);
-  ScopeGuard _(table, impl->memberScope);
   TypeContextGuard __(currentType, impl->target);
   auto prev = currentSelf;
   currentSelf = impl->target->memberScope;
   for (auto &m : decl->LinkedImplMethods) {
     m->accept(this);
     if (!decl->traits.empty() &&
-        !Helper::hasSameMethodSig(decl->sigs, m->methodSymbol).first) {
+        !Helper::hasSameMethodSig(decl->sigs, m->methodSymbol).result) {
       auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S035);
       dia.labels = {
           {decl->span,
@@ -95,7 +94,6 @@ void Resolver::visit(ImplDecl *decl) {
 }
 
 void Resolver::visit(TraitDecl *decl) {
-  ScopeGuard _(table, decl->symbol->memberScope);
   for (auto a : decl->traitSigs) {
     a->accept(this);
   }
@@ -111,31 +109,74 @@ void Resolver::visit(FuncDecl *decl) {
     p->accept(this);
   }
 
-  decl->body->accept(this);
-
   auto rt = decl->returnType.get();
   rt->accept(this);
-  auto type = rt->resolved;
-  for (auto r : symbol->returns) {
-    if (!isAssignable(type, r->returnType)) {
-      auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S036);
-      dia.labels = {{decl->span,
-                     "expected return type '" + rt->type + "', found '" +
-                         r->returnType->name + "'",
-                     true}};
-      engine.emit(dia);
-      recover.recover();
+
+  if (!decl->prefix.isExtern) {
+    decl->body->accept(this);
+    auto type = rt->resolved;
+    for (auto r : symbol->returns) {
+      if (!isAssignable(type, r->returnType)) {
+        auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S036);
+        dia.labels = {{decl->span,
+                       "expected return type '" + rt->type + "', found '" +
+                           r->returnType->name + "'",
+                       true}};
+        engine.emit(dia);
+        recover.recover();
+      }
     }
   }
+
   symbol->returnType = rt->resolved;
 
   currentMethod = prev;
+  if (auto obj = dyn_cast<ObjectType>(currentType)) {
+    if (obj->base != nullptr) {
+      auto it = obj->base->methodMap.find(decl->name);
 
-  if (currentType->base != nullptr) {
-    auto it = currentType->base->memberScope->methodMap.find(decl->name);
-
-    if (it == currentType->base->memberScope->methodMap.end()) {
-      if (decl->isOverride) {
+      if (it == obj->base->methodMap.end()) {
+        if (decl->prefix.isOverride) {
+          auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S037);
+          dia.labels = {{decl->span, "no matching method to override", true}};
+          dia.helps = {{"remove the override modifier or match a parent method "
+                        "signature"}};
+          engine.emit(dia);
+          recover.recover();
+        }
+        return;
+      }
+      if (auto result =
+              Helper::hasSameMethodSig(it->second, decl->methodSymbol);
+          result.result) {
+        if (decl->prefix.isOverride && result.symbol->isExtern) {
+          auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S134);
+          dia.labels = {
+              {decl->span, "this method attempts to override an extern method",
+               true},
+              {result.span, "the overridden method is declared extern here",
+               false},
+          };
+          dia.notes = {
+              "extern methods are provided by an external implementation and "
+              "cannot participate in overriding",
+          };
+          dia.helps = {
+              "remove the override or override a non-extern method instead",
+          };
+          engine.emit(dia);
+          recover.recover();
+        }
+        if (!decl->prefix.isOverride) {
+          auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S038);
+          dia.labels = {{decl->span,
+                         "inherited method overridden without 'override'",
+                         true}};
+          dia.helps = {{"add the override modifier to this method"}};
+          engine.emit(dia);
+          recover.recover();
+        }
+      } else if (decl->prefix.isOverride) {
         auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S037);
         dia.labels = {{decl->span, "no matching method to override", true}};
         dia.helps = {{"remove the override modifier or match a parent method "
@@ -143,36 +184,18 @@ void Resolver::visit(FuncDecl *decl) {
         engine.emit(dia);
         recover.recover();
       }
-      return;
-    }
-    if (Helper::hasSameMethodSig(it->second, decl->methodSymbol).first) {
-      if (!decl->isOverride) {
-        auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S038);
-        dia.labels = {{decl->span,
-                       "inherited method overridden without 'override'", true}};
-        dia.helps = {{"add the override modifier to this method"}};
-        engine.emit(dia);
-        recover.recover();
-      }
-    } else if (decl->isOverride) {
-      auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S037);
-      dia.labels = {{decl->span, "no matching method to override", true}};
-      dia.helps = {{"remove the override modifier or match a parent method "
-                    "signature"}};
+    } else if (decl->prefix.isOverride) {
+      auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S039);
+      dia.labels = {{decl->span,
+                     "'override' is not valid in a class without a parent",
+                     true}};
+      dia.helps = {{"remove the override modifier"}};
       engine.emit(dia);
       recover.recover();
     }
-  } else if (decl->isOverride) {
-    auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S039);
-    dia.labels = {{decl->span,
-                   "'override' is not valid in a class without a parent",
-                   true}};
-    dia.helps = {{"remove the override modifier"}};
-    engine.emit(dia);
-    recover.recover();
   }
 
-  if (decl->isFrame) {
+  if (decl->prefix.isFrame) {
     if (!dynamic_cast<MainSymbol *>(currentType)) {
       auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S040);
       dia.labels = {
@@ -209,12 +232,14 @@ static bool canFieldInit(Expr *init) {
     }
   }
   if (auto member = dynamic_cast<MemberExpr *>(init)) {
-    if (member->resolved->typeSymbol->kind == TypeSymbol::TypeKind::ENUM) {
+    if (member->resolved->typeSymbol->kind == TypeKind::ENUM) {
       return true;
     }
   }
 
-  // TODO: 배열 초기화 방식 추가시 관련 내용 추가하기.
+  if (dynamic_cast<ArrayLiteralExpr *>(init)) {
+    return true;
+  }
 
   return false;
 }
@@ -256,7 +281,7 @@ void Resolver::visit(VarDecl *decl) {
   if (decl->init) {
     decl->init->accept(this);
 
-    if (decl->symbol->typeSymbol->kind == TypeSymbol::TypeKind::CLASS) {
+    if (decl->symbol->typeSymbol->kind == TypeKind::CLASS) {
       if (!dynamic_cast<ViewExpr *>(decl->init.get())) {
         auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S041);
         dia.labels = {{decl->init->span,
@@ -270,7 +295,7 @@ void Resolver::visit(VarDecl *decl) {
     if (auto arr = dynamic_cast<ArrayTypeSymbol *>(decl->type->resolved)) {
       if (arr->baseType == decl->init->resolvedType) {
         if (auto g = dynamic_cast<GenericSymbol *>(arr->baseType)) {
-          if (g->origin->kind == TypeSymbol::TypeKind::HANDLE) {
+          if (g->origin->kind == TypeKind::HANDLE) {
             auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S132);
             dia.labels = {
                 {decl->init->span,
@@ -320,7 +345,7 @@ void Resolver::visit(VarDecl *decl) {
     }
   }
 
-  if (decl->symbol->typeSymbol->kind == TypeSymbol::TypeKind::CLASS) {
+  if (decl->symbol->typeSymbol->kind == TypeKind::CLASS) {
     if (decl->init == nullptr) {
       auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S043);
       dia.labels = {

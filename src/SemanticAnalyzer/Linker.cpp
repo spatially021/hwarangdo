@@ -18,7 +18,8 @@
 #include <vector>
 
 Linker::Linker(LinkerContext &ctx)
-    : table(ctx.table), engine(ctx.engine), recover(*this) {}
+    : table(ctx.table), currentType(ctx.table.registry.getCurrent()),
+      engine(ctx.engine), recover(*this) {}
 
 void Linker::visit(LiteralExpr *) {}
 void Linker::visit(BinaryExpr *expr) {
@@ -139,7 +140,7 @@ void Linker::visit(ClassDecl *decl) {
 
   if (decl->symbol->type == Symbol::SymbolType::MAIN) {
     auto symbol = static_cast<MainSymbol *>(decl->symbol);
-    auto &bucket = symbol->memberScope->methodMap["update"];
+    auto &bucket = symbol->methodMap["update"];
     if (bucket.size() == 0) {
       auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S009);
       dia.labels = {
@@ -160,7 +161,7 @@ void Linker::visit(ClassDecl *decl) {
     }
     symbol->update = bucket[0];
 
-    bucket = symbol->memberScope->inits;
+    bucket = symbol->inits;
     if (bucket.size() > 1) {
       auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S010);
       dia.labels = {
@@ -192,7 +193,7 @@ void Linker::visit(ClassDecl *decl) {
     if (table.isType(s.str)) {
       auto symbol = table.getType(s.str);
       symbol->decl->isExtended = true;
-      if (symbol->kind != TypeSymbol::TypeKind::CLASS) {
+      if (symbol->kind != TypeKind::CLASS) {
         auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S012);
         dia.labels = {
             {s.span, "this type is not a class", true},
@@ -201,7 +202,7 @@ void Linker::visit(ClassDecl *decl) {
         engine.emit(dia);
         recover.recover();
       }
-      decl->symbol->base = symbol;
+      decl->symbol->base = dyn_cast<ObjectType>(symbol);
     } else {
       auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S013);
       dia.labels = {
@@ -223,7 +224,7 @@ void Linker::visit(ClassDecl *decl) {
       recover.recover();
     }
     auto symbol = table.getType(t.str);
-    if (symbol->kind != TypeSymbol::TypeKind::TRAIT) {
+    if (symbol->kind != TypeKind::TRAIT) {
       auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S014);
       dia.labels = {
           {t.span, "this type is not a trait", true},
@@ -283,7 +284,7 @@ void Linker::visit(EnumDecl *decl) {
         recover.recover();
       }
 
-      if (s->kind == TypeSymbol::TypeKind::CLASS) {
+      if (s->kind == TypeKind::CLASS) {
         auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S016);
         dia.labels = {
             {decl->span, "entity type used here", true},
@@ -299,7 +300,6 @@ void Linker::visit(EnumDecl *decl) {
 }
 void Linker::visit(ImplDecl *decl) {
   auto impl = table.registry.getImpl(decl);
-  ScopeGuard _(table, impl->memberScope);
   auto s = decl->target;
 
   if (!table.isType(s.str)) {
@@ -312,7 +312,7 @@ void Linker::visit(ImplDecl *decl) {
     recover.recover();
   }
   auto symbol = table.getType(s.str);
-  if (symbol->kind != TypeSymbol::TypeKind::STRUCT) {
+  if (symbol->kind != TypeKind::STRUCT) {
     auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S017);
     dia.labels = {
         {decl->span, "'" + s.str + "' is not a struct type", true},
@@ -320,11 +320,12 @@ void Linker::visit(ImplDecl *decl) {
     engine.emit(dia);
     recover.recover();
   }
-  decl->importTarget = symbol;
+  auto obj = dyn_cast<ObjectType>(symbol);
+  decl->importTarget = obj;
 
   for (auto &c : decl->traits) {
     auto t = table.getType(c.str);
-    if (t->kind != TypeSymbol::TypeKind::TRAIT) {
+    if (t->kind != TypeKind::TRAIT) {
       auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S014);
       dia.labels = {
           {c.span, "this type is not a trait", true},
@@ -347,7 +348,7 @@ void Linker::visit(ImplDecl *decl) {
       recover.recover();
     }
 
-    for (auto &it : t->memberScope->methodMap) {
+    for (auto &it : t->methodMap) {
       for (auto sig : it.second) {
         decl->sigs.push_back(sig);
       }
@@ -356,7 +357,7 @@ void Linker::visit(ImplDecl *decl) {
 
   TypeContextGuard __(currentType, symbol);
 
-  impl->target = symbol;
+  impl->target = obj;
   if (impl->target == nullptr) {
     Error::internal(decl->span, "impl target is nullptr");
   }
@@ -369,9 +370,11 @@ void Linker::visit(ImplDecl *decl) {
     if (methodSymbol == nullptr) {
       Error::internal(a->span, "not built methodSymbol : " + a->name);
     }
-    if (auto [result, span] = symbol->addMethod(methodSymbol); !result) {
-      auto it = symbol->memberScope->methodMap.find(a->name);
-      if (it == symbol->memberScope->methodMap.end()) {
+    if (auto [result, span] =
+            obj->addMethod(methodSymbol, methodSymbol->isStatic);
+        !result) {
+      auto it = obj->methodMap.find(a->name);
+      if (it == obj->methodMap.end()) {
         Error::internal("fail to get method symbol");
       }
       auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S018);
@@ -389,12 +392,11 @@ void Linker::visit(ImplDecl *decl) {
     a->accept(this);
 
     methodSymbol->owner = symbol;
-    methodSymbol->selfScope = symbol->memberScope;
+    methodSymbol->selfScope = obj->memberScope;
   }
 }
 
 void Linker::visit(TraitDecl *decl) {
-  ScopeGuard _(table, decl->symbol->memberScope);
   for (auto &s : decl->traitSigs) {
     s->accept(this);
   }
@@ -416,18 +418,18 @@ void Linker::visit(FuncDecl *decl) {
     decl->methodSymbol->params.push_back(p->symbol);
   }
 
-  auto it = currentType->memberScope->methodMap.find(decl->methodSymbol->name);
-  if (it == currentType->memberScope->methodMap.end()) {
+  auto it = currentType->methodMap.find(decl->methodSymbol->name);
+  if (it == currentType->methodMap.end()) {
     Error::internal(decl->span, "fail to find method map");
   }
 
   auto &bucket = it->second;
   auto raw = decl->methodSymbol;
-  if (auto [result, span] = Helper::hasSameMethodSig(bucket, raw); result) {
+  if (auto result = Helper::hasSameMethodSig(bucket, raw); result.result) {
     auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S018);
     dia.labels = {
         {raw->decl->span, "duplicate impl method declared here", true},
-        {span, "previous impl method declared here", false}};
+        {result.span, "previous impl method declared here", false}};
     engine.emit(dia);
     recover.recover();
   }
@@ -440,7 +442,9 @@ void Linker::visit(FuncDecl *decl) {
   table.registry.addSelf(std::move(selfReceiver));
   raw->selfReceiver = rawSelf;
 
-  decl->body->accept(this);
+  if (!raw->isExtern) {
+    decl->body->accept(this);
+  }
 }
 void Linker::visit(VarDecl *decl) {
   decl->type->accept(this);

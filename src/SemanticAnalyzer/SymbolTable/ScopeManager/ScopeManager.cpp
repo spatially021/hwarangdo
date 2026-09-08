@@ -14,35 +14,15 @@ ScopeManager::ScopeManager() {
 
 ScopeManager::~ScopeManager() = default;
 
-bool ScopeManager::addValue(unique_ptr<ValueSymbol> symbol) {
+pair<bool, SourceSpan> ScopeManager::addValue(unique_ptr<ValueSymbol> symbol) {
   auto name = symbol->name;
   if (symbol->isRoot) {
-    return rootScope->value.emplace(name, std::move(symbol)).second;
+    auto it = rootScope->value.emplace(name, std::move(symbol));
+    return {it.second, it.first->second->nameSpan};
   } else {
-    return currentScope->value.emplace(name, std::move(symbol)).second;
+    auto it = currentScope->value.emplace(name, std::move(symbol));
+    return {it.second, it.first->second->nameSpan};
   }
-}
-
-bool ScopeManager::addMethod(unique_ptr<MethodSymbol> symbol) {
-  auto raw = symbol.get();
-  currentScope->methodOwn.push_back(std::move(symbol));
-  currentScope->methodMap[raw->name].push_back(raw);
-  return true;
-}
-
-bool ScopeManager::addInit(unique_ptr<MethodSymbol> symbol) {
-  auto raw = symbol.get();
-  currentScope->initOwn.push_back(std::move(symbol));
-  currentScope->inits.push_back(raw);
-  return true;
-}
-
-bool ScopeManager::addOnDestroy(unique_ptr<MethodSymbol> symbol) {
-  if (currentScope->onDestroy != nullptr) {
-    return false;
-  }
-  currentScope->onDestroy = std::move(symbol);
-  return true;
 }
 
 Scope *ScopeManager::current() { return currentScope; }

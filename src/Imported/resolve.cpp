@@ -1,6 +1,7 @@
 #include "hrd/AST/Expr.h"
 #include "hrd/Imported/ImportedSymbolBuilder.h"
 #include "hrd/MetaData/MetaData.h"
+#include "hrd/SemanticAnalyzer/symbol/TypeSymbol.h"
 #include "hrd/SourceSpan.h"
 #include "hrd/Token.h"
 #include "hrd/util/Error.h"
@@ -131,12 +132,17 @@ ImportedSymbolBuilder::resolveInit(TypeSymbol *type,
   if (type == nullptr) {
     Error::internal("resolveInit: type is nullptr");
   }
+  if (!isa<ObjectType>(type)) {
+    Error::internal("illegal kind");
+  }
 
-  if (type->memberScope == nullptr) {
+  auto obj = dyn_cast<ObjectType>(type);
+
+  if (obj->memberScope == nullptr) {
     Error::internal("resolveInit: type has no member scope");
   }
 
-  auto &bucket = type->memberScope->inits;
+  auto &bucket = obj->inits;
 
   // init이 하나도 없고 인자도 없다면 implicit default init
   if (bucket.empty()) {

@@ -32,26 +32,6 @@ void BuilderDebugger::debug(Scope *scope) {
     depth--;
   }
 
-  if (!scope->methodMap.empty()) {
-    cout << ident() << "<methods>\n";
-    depth++;
-    for (auto &map : scope->methodMap) {
-      for (auto &m : map.second) {
-        cout << ident() << m->name << "\n";
-      }
-    }
-    depth--;
-  }
-
-  if (!scope->inits.empty()) {
-    cout << ident() << "<inits>\n";
-    depth++;
-    for (auto &t : scope->inits) {
-      cout << ident() << t->name << "\n";
-    }
-    depth--;
-  }
-
   for (auto &s : scope->children) {
     debug(s.get());
   }

@@ -31,7 +31,7 @@ void Resolver::visit(ArrayAccessExpr *expr) {
 
 void Resolver::visit(ThisExpr *expr) {
   assert(currentType);
-  if (currentType->kind != TypeSymbol::TypeKind::CLASS) {
+  if (currentType->kind != TypeKind::CLASS) {
     auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S050);
     dia.labels = {
         {expr->span, "'this' is not available in this context", true}};
@@ -44,7 +44,8 @@ void Resolver::visit(ThisExpr *expr) {
 }
 void Resolver::visit(SuperExpr *expr) {
   assert(currentType);
-  if (currentType->kind != TypeSymbol::TypeKind::CLASS) {
+  auto obj = dyn_cast<ObjectType>(currentType);
+  if (currentType->kind != TypeKind::CLASS || obj == nullptr) {
     auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S051);
     dia.labels = {
         {expr->span, "'super' is not available in this context", true}};
@@ -53,15 +54,15 @@ void Resolver::visit(SuperExpr *expr) {
     recover.recover();
   }
 
-  if (currentType->base == nullptr) {
+  if (obj->base == nullptr) {
     auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S052);
     dia.labels = {{expr->span, "'super' requires a parent class", true}};
     dia.helps = {{"remove 'super' or inherit from another class"}};
     engine.emit(dia);
     recover.recover();
   }
-  expr->resolved = currentType->base;
-  expr->resolvedType = currentType->base;
+  expr->resolved = obj->base;
+  expr->resolvedType = obj->base;
 }
 
 void Resolver::visit(RootExpr *expr) {
@@ -70,7 +71,7 @@ void Resolver::visit(RootExpr *expr) {
 }
 void Resolver::visit(SelfExpr *expr) {
   assert(currentType);
-  if (currentType->kind != TypeSymbol::TypeKind::STRUCT) {
+  if (currentType->kind != TypeKind::STRUCT) {
     auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S053);
     dia.labels = {
         {expr->span, "'self' is not available in this context", true}};

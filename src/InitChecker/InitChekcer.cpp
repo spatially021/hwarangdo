@@ -52,19 +52,20 @@ void InitChecker::prepareImportedSummary() {
 
     bool first = true;
     FieldSet common;
+    if (auto obi = dyn_cast<ObjectType>(type)) {
+      for (auto *init : obi->inits) {
+        auto it = initFields.find(init);
 
-    for (auto *init : type->memberScope->inits) {
-      auto it = initFields.find(init);
+        if (it == initFields.end()) {
+          continue;
+        }
 
-      if (it == initFields.end()) {
-        continue;
-      }
-
-      if (first) {
-        common = it->second;
-        first = false;
-      } else {
-        common = mergeField(common, it->second);
+        if (first) {
+          common = it->second;
+          first = false;
+        } else {
+          common = mergeField(common, it->second);
+        }
       }
     }
 
@@ -184,6 +185,10 @@ void InitChecker::checkMethod(HIRMethodDecl *method) {
     Error::internal("InitChecker: method is nullptr");
   }
 
+  if (method->isExtern) {
+    return;
+  }
+
   if (method->body == nullptr) {
     Error::internal(method->span, "InitChecker: method body is nullptr");
   }
@@ -221,8 +226,7 @@ void InitChecker::addMethodEntryState(HIRMethodDecl *method, InitState &state) {
      * 따라서 해당 type의 모든 init이 공통으로 보장하는
      * field만 사용할 수 있다.
      */
-    if (param->type != nullptr &&
-        param->type->kind == TypeSymbol::TypeKind::STRUCT) {
+    if (param->type != nullptr && param->type->kind == TypeKind::STRUCT) {
 
       auto it = commonFields.find(param->type);
 
@@ -313,7 +317,7 @@ void InitChecker::checkStmt(HIRStmt *stmt, InitState &state) {
      */
     if (local->init == nullptr) {
       if (local->local->type != nullptr &&
-          local->local->type->kind == TypeSymbol::TypeKind::STRUCT) {
+          local->local->type->kind == TypeKind::STRUCT) {
         ValueSymbol *symbol = local->local->symbol;
 
         if (symbol == nullptr) {
@@ -344,7 +348,7 @@ void InitChecker::checkStmt(HIRStmt *stmt, InitState &state) {
      * struct value라면 어떤 field들이 보장되는 값인지 같이 전달.
      */
     if (local->local->type != nullptr &&
-        local->local->type->kind == TypeSymbol::TypeKind::STRUCT) {
+        local->local->type->kind == TypeKind::STRUCT) {
 
       state.fields[symbol] = getExprFields(local->init.get(), state);
     }
@@ -376,7 +380,7 @@ void InitChecker::checkStmt(HIRStmt *stmt, InitState &state) {
     FieldSet rhsFields;
 
     if (assign->lhs->type != nullptr &&
-        assign->lhs->type->kind == TypeSymbol::TypeKind::STRUCT) {
+        assign->lhs->type->kind == TypeKind::STRUCT) {
 
       rhsFields = getExprFields(assign->rhs.get(), state);
     }
@@ -390,7 +394,7 @@ void InitChecker::checkStmt(HIRStmt *stmt, InitState &state) {
     ValueSymbol *target = getValueSymbol(assign->lhs.get());
 
     if (target != nullptr && assign->lhs->type != nullptr &&
-        assign->lhs->type->kind == TypeSymbol::TypeKind::STRUCT) {
+        assign->lhs->type->kind == TypeKind::STRUCT) {
 
       state.fields[target] = std::move(rhsFields);
     }
@@ -681,14 +685,12 @@ void InitChecker::checkExpr(HIRExpr *expr, InitState &state) {
   case HIRNodeKind::MethodCallExpr: {
     auto *call = expect<HIRMethodCallExpr>(expr, HIRNodeKind::MethodCallExpr);
 
-    if (call->receiver == nullptr) {
-      Error::internal(expr->span, "InitChecker: method receiver is nullptr");
+    if (!call->method->isStatic) {
+      if (call->receiver == nullptr) {
+        Error::internal(expr->span, "InitChecker: method receiver is nullptr");
+      }
+      checkRead(call->receiver.get(), state);
     }
-
-    /*
-     * receiver는 완성된 값이어야 한다.
-     */
-    checkRead(call->receiver.get(), state);
 
     for (auto &arg : call->args) {
       if (arg != nullptr) {
@@ -1206,7 +1208,7 @@ void InitChecker::checkCasePattern(HIRCasePattern *pattern, InitState &state) {
              * type common fields만 보장.
              */
             if (selector.binding->type != nullptr &&
-                selector.binding->type->kind == TypeSymbol::TypeKind::STRUCT) {
+                selector.binding->type->kind == TypeKind::STRUCT) {
 
               auto it = commonFields.find(selector.binding->type);
 
@@ -1280,7 +1282,7 @@ FieldSet InitChecker::mergeField(const FieldSet &lhs, const FieldSet &rhs) {
 FieldSet InitChecker::getExprFields(HIRExpr *expr, const InitState &state) {
 
   if (expr == nullptr || expr->type == nullptr ||
-      expr->type->kind != TypeSymbol::TypeKind::STRUCT) {
+      expr->type->kind != TypeKind::STRUCT) {
     return {};
   }
 

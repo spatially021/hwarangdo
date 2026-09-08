@@ -1,4 +1,5 @@
 #include "hrd/IR/MIR/MIRExpr.h"
+#include "hrd/IR/MIR/MIRNode.h"
 #include "hrd/IR/llvmIR/llvmCodegen.h"
 #include "hrd/SemanticAnalyzer/symbol/MethodSymbol.h"
 #include "hrd/SemanticAnalyzer/symbol/TypeSymbol.h"
@@ -185,7 +186,7 @@ llvm::Type *llvmCodegen::getType(TypeSymbol *t) {
     }
   }
 
-  if (t->kind == TypeSymbol::TypeKind::CLASS) {
+  if (t->kind == TypeKind::CLASS) {
     return llvm::PointerType::getUnqual(context);
   }
 
@@ -213,7 +214,7 @@ llvm::Type *llvmCodegen::getLayoutType(TypeSymbol *t) {
 }
 
 llvm::Type *llvmCodegen::getFieldType(TypeSymbol *type) {
-  if (type->kind == TypeSymbol::TypeKind::CLASS) {
+  if (type->kind == TypeKind::CLASS) {
     Error::internal("class observer cannot be stored as field");
   }
 
@@ -226,8 +227,8 @@ bool llvmCodegen::needsDestroy(TypeSymbol *type) {
     return needsDestroy(arr->baseType);
   }
 
-  return isString(type) || type->kind == TypeSymbol::TypeKind::STRUCT ||
-         type->kind == TypeSymbol::TypeKind::ENUM;
+  return isString(type) || type->kind == TypeKind::STRUCT ||
+         type->kind == TypeKind::ENUM;
 }
 
 llvm::Type *llvmCodegen::getHrdHandleType() {
@@ -276,5 +277,47 @@ llvm::Function *llvmCodegen::getOrgetOrDeclareFunction(MethodSymbol *method) {
                                     mangle(method), llvmModule.get());
 
   funcs.emplace(method, fn);
+  return fn;
+}
+
+bool llvmCodegen::needSelf(MIRFunction *func) {
+  auto method = func->symbol;
+  return needSelf(method);
+}
+
+bool llvmCodegen::needSelf(MethodSymbol *m) {
+  return !(m->isExtern || m->isStatic);
+}
+
+llvm::Function *llvmCodegen::getOrCreateFunc(MethodSymbol *symbol) {
+  auto it = funcs.find(symbol);
+  if (it != funcs.end()) {
+    return it->second;
+  }
+  auto fn = createFuncShell(symbol);
+  funcs.emplace(symbol, fn);
+  return fn;
+}
+
+llvm::Function *llvmCodegen::createFuncShell(MethodSymbol *symbol) {
+  auto rt = getType(symbol->returnType);
+  if (rt == nullptr) {
+    Error::internal("null llvm return type: " + symbol->name);
+  }
+
+  vector<llvm::Type *> params;
+  if (needSelf(symbol)) {
+    params.push_back(llvm::PointerType::get(context, 0));
+  }
+  for (auto &p : symbol->params) {
+    auto pt = getType(p->typeSymbol);
+    if (pt == nullptr) {
+      Error::internal("null llvm param type: " + p->name);
+    }
+    params.push_back(pt);
+  }
+  auto fnType = llvm::FunctionType::get(rt, params, false);
+  auto fn = llvm::Function::Create(fnType, llvm::GlobalValue::ExternalLinkage,
+                                   mangle(symbol), llvmModule.get());
   return fn;
 }

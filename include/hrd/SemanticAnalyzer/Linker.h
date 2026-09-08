@@ -11,7 +11,7 @@ class Linker : public ASTVisitor {
 
 private:
   SymbolTable &table;
-  TypeSymbol *currentType = nullptr;
+  TypeSymbol *&currentType;
   DiagnosticEngine &engine;
   LinkerRecover recover;
 
@@ -23,9 +23,8 @@ public:
 
 private:
   inline bool isDeclField(TypeSymbol *type) {
-    return (type->kind == TypeSymbol::TypeKind::PRIMITIVE ||
-            type->kind == TypeSymbol::TypeKind::HANDLE ||
-            type->kind == TypeSymbol::TypeKind::STRUCT ||
-            type->kind == TypeSymbol::TypeKind::ENUM);
+    return (type->kind == TypeKind::PRIMITIVE ||
+            type->kind == TypeKind::HANDLE || type->kind == TypeKind::STRUCT ||
+            type->kind == TypeKind::ENUM);
   }
 };

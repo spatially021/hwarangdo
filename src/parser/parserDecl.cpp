@@ -251,10 +251,9 @@ Ptr Parser::functionDecl(DeclPrefix prefix, bool) {
     engine.emit(dia);
     recover.recover();
   }
-
+  auto ctx = contexts.back();
   ContextGuard _{contexts, DeclContext::BLOCK};
   notVar(prefix);
-  AModifier modi = prefix.modi;
   Token t = prefix.startToken;
 
   TypeNode::Ptr ty = nullptr;
@@ -312,18 +311,50 @@ Ptr Parser::functionDecl(DeclPrefix prefix, bool) {
 
   consume(TKind::RIGHT_PAREN, DiagnosticCode::HRD_P047,
           "expected ')' to close parameter list");
-  consume(TKind::LEFT_BRACE, DiagnosticCode::HRD_P043,
-          "expected '{' to begin method body");
-  Stmt::Ptr stmt = blockStmt();
 
   TypeNode::Ptr returnType;
   returnType = ty;
 
+  if (ctx == DeclContext::TRAITBODY) {
+    if (prefix.isExtern) {
+      auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_P075);
+      dia.labels = {
+          {t.span, "'extern' cannot be used on a trait method declaration",
+           true},
+      };
+      dia.notes = {
+          "trait methods declare required behavior and do not provide native "
+          "implementations",
+      };
+      dia.helps = {
+          "remove the 'extern' modifier from this trait method",
+      };
+      engine.emit(dia);
+      recover.recover();
+    }
+    auto end = previous();
+    consume(TKind::SEMICOLON, DiagnosticCode::HRD_P044,
+            "expect ';' to end trait method declaration");
+    return make_shared<TraitSig>(makeSpan(t.span, end.span), returnType,
+                                 name.text, params, prefix);
+  }
+
+  if (prefix.isExtern) {
+    auto end = previous();
+    consume(TKind::SEMICOLON, DiagnosticCode::HRD_P044,
+            "expect ';' to end extern method");
+    return make_shared<FuncDecl>(makeSpan(t.span, end.span), name.text, params,
+                                 returnType, nullptr, prefix);
+  }
+
+  consume(TKind::LEFT_BRACE, DiagnosticCode::HRD_P043,
+          "expected '{' to begin method body");
+  Stmt::Ptr stmt = blockStmt();
+
   auto end = previous();
 
   return make_shared<FuncDecl>(makeSpan(t.span, end.span), name.text, params,
-                               returnType, stmt, modi, prefix.isExtern,
-                               prefix.isFrame, prefix.isOverride);
+                               returnType, stmt, prefix);
 }
 
 Ptr Parser::implDecl(DeclPrefix prefix) {
@@ -374,30 +405,12 @@ Ptr Parser::implDecl(DeclPrefix prefix) {
   vector<shared_ptr<FuncDecl>> methods;
 
   while (!check(TKind::RIGHT_BRACE) && !isAtEnd()) {
-    DeclPrefix p = {};
-    p.startToken = peek();
-    if (isAccessModifier())
-      p.modi = AModifierConvertor(advance());
-    if (check(TKind::CONST)) {
-      auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_P015);
-      dia.labels = {
-          {peek().span, "'const' is not allowed on this declaration", true},
-      };
-      engine.emit(dia);
-      recover.recover();
-    }
-
-    if (check(TKind::ROOT)) {
-      auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_P016);
-      dia.labels = {
-          {peek().span, "'root' is not allowed on this declaration", true},
-      };
-      engine.emit(dia);
-      recover.recover();
-    }
-
     if (isFunc()) {
-      methods.push_back(dynamic_pointer_cast<FuncDecl>(functionDecl(p)));
+      auto func = dynamic_pointer_cast<FuncDecl>(declaration(contexts.back()));
+      if (func == nullptr) {
+        Error::internal(tok, "expect func but not func");
+      }
+      methods.push_back(func);
     } else {
       auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_P017);
       dia.labels = {
@@ -429,82 +442,15 @@ Ptr Parser::traitDecl(DeclPrefix prefix) {
           "expected '{' to begin trait body");
 
   vector<shared_ptr<TraitSig>> traitSigs;
-
+  ContextGuard _(contexts, DeclContext::TRAITBODY);
   while (!check(TKind::RIGHT_BRACE) && !isAtEnd()) {
     Token tok = peek();
     if (isFunc()) {
-      if (isAccessModifier()) {
-        string modifier = peek().text;
-
-        auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_P018);
-        dia.labels = {
-            {peek().span,
-             "'" + modifier + "' is not allowed on trait method signatures",
-             true},
-        };
-        engine.emit(dia);
-        recover.recover();
+      auto sig = dynamic_pointer_cast<TraitSig>(declaration(contexts.back()));
+      if (sig == nullptr) {
+        Error::internal(tok, "expect traitSig but not");
       }
-      Token ty = advance();
-      // if (ty.kind == TKind::FUNC) {
-      //   auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_P019);
-      //   dia.labels = {
-      //       {peek().span, "trait methods must not use the 'func' keyword",
-      //        true},
-      //   };
-      //   engine.emit(dia);
-      //   recover.recover();
-      //   // Error::diagnostic(ty, "'func' is not allowed in trait
-      //   declarations");
-      // }
-      Token sigName = consume(TKind::IDENTIFIER, DiagnosticCode::HRD_P042,
-                              "expected method name here");
-
-      consume(TKind::LEFT_PAREN, DiagnosticCode::HRD_P046,
-              "expected '(' after method name");
-      vector<shared_ptr<Param>> params;
-      while (!check(TKind::RIGHT_PAREN) && !isAtEnd()) {
-        if (isType()) {
-          Token type = advance();
-          Token n = consume(TKind::IDENTIFIER, DiagnosticCode::HRD_P045,
-                            "expected parameter name after type");
-          optional<Expr::Ptr> init;
-          if (check(TKind::EQUAL)) {
-            advance(); //=처리
-            init = expression();
-          }
-          TypeNode::Ptr returnType = typeNodeConvertor(type);
-          params.push_back(make_shared<Param>(n.text, returnType, init));
-          if (check(TKind::COMMA)) {
-            if (!check(TKind::RIGHT_BRACE, 1))
-              advance(); //,처리
-            else {
-              auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_P013);
-              dia.labels = {
-                  {peek().span, "expected parameter after ','", true},
-              };
-              engine.emit(dia);
-              recover.recover();
-            }
-          }
-        } else {
-          auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_P014);
-          dia.labels = {
-              {peek().span, "parameter type is missing", true},
-          };
-          engine.emit(dia);
-          recover.recover();
-        }
-      }
-
-      consume(TKind::RIGHT_PAREN, DiagnosticCode::HRD_P047,
-              "expected ')' to close parameter list");
-      consume(TKind::SEMICOLON, DiagnosticCode::HRD_P044,
-              "expected ';' after method declaration");
-      auto e = previous();
-      TypeNode::Ptr returnType = typeNodeConvertor(ty);
-      traitSigs.push_back(make_shared<TraitSig>(
-          makeSpan(ty.span, e.span), returnType, sigName.text, params));
+      traitSigs.push_back(sig);
     } else {
       auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_P019);
       dia.labels = {

@@ -23,13 +23,12 @@ ModuleMeta MetaBuilder::build() {
   ModuleMeta module;
 
   for (auto type : table.registry.getDecledTypes()) {
-    if (type->kind == TypeSymbol::TypeKind::TRAIT) {
+    if (type->kind == TypeKind::TRAIT) {
       module.traits.push_back(buildTrait(type));
     }
 
-    if (type->kind == TypeSymbol::TypeKind::CLASS ||
-        type->kind == TypeSymbol::TypeKind::STRUCT ||
-        type->kind == TypeSymbol::TypeKind::ENUM) {
+    if (type->kind == TypeKind::CLASS || type->kind == TypeKind::STRUCT ||
+        type->kind == TypeKind::ENUM) {
       module.types.push_back(buildType(type));
     }
   }
@@ -43,50 +42,56 @@ TypeMeta MetaBuilder::buildType(TypeSymbol *type) {
   meta.name = type->name;
   meta.path = type->path;
 
-  if (type->kind == TypeSymbol::TypeKind::CLASS) {
-    meta.kind = TypeKind::Class;
-  } else if (type->kind == TypeSymbol::TypeKind::STRUCT) {
-    meta.kind = TypeKind::Struct;
-  } else if (type->kind == TypeSymbol::TypeKind::ENUM) {
-    meta.kind = TypeKind::Enum;
+  if (type->kind == TypeKind::CLASS || type->kind == TypeKind::STRUCT ||
+      type->kind == TypeKind::ENUM) {
+    meta.kind = type->kind;
   } else {
     Error::internal("illegal type kind");
   }
 
-  for (auto f : type->fields) {
-    meta.fields.push_back(buildField(f));
+  for (auto m : type->getMethods()) {
+    meta.methods.push_back(buildMethod(m));
   }
 
-  for (auto &m : type->memberScope->methodOwn) {
-    meta.methods.push_back(buildMethod(m.get()));
+  if (auto obj = dynamic_cast<ObjectType *>(type)) {
+    for (auto f : obj->fields) {
+      meta.fields.push_back(buildField(f));
+    }
+
+    for (auto i : obj->getInits()) {
+      meta.methods.push_back(buildMethod(i));
+    }
+
+    if (obj->base != nullptr) {
+      meta.parent = buildTypeRef(obj->base);
+    }
+
+    for (auto t : obj->traits) {
+      meta.traits.push_back(buildTypeRef(t));
+    }
   }
 
-  for (auto &i : type->memberScope->initOwn) {
-    meta.methods.push_back(buildMethod(i.get()));
-  }
-
-  for (auto &v : type->variants) {
-    meta.variants.push_back(buildVariant(v.get()));
-  }
-
-  if (type->base != nullptr) {
-    meta.parent = buildTypeRef(type->base);
-  }
-
-  for (auto t : type->traits) {
-    meta.traits.push_back(buildTypeRef(t));
+  if (auto en = dynamic_cast<EnumType *>(type)) {
+    for (auto &v : en->variants) {
+      meta.variants.push_back(buildVariant(v.get()));
+    }
   }
 
   return meta;
 }
 
 TraitMeta MetaBuilder::buildTrait(TypeSymbol *type) {
+  auto tra = dynamic_cast<TraitType *>(type);
+  if (tra == nullptr) {
+    Error::internal("illegal type kind");
+  }
+
   TraitMeta meta;
 
   meta.name = type->name;
   meta.path = type->path;
 
-  for (auto &sig : type->traitSigs) {
+  for (auto &sig : tra->traitSigs) {
     for (auto m : sig.second) {
       meta.methods.push_back(buildMethod(m->symbol));
     }
@@ -110,6 +115,7 @@ MethodMeta MetaBuilder::buildMethod(MethodSymbol *symbol) {
 
   meta.name = symbol->name;
   meta.modifier = symbol->modifier;
+  meta.isStatic = symbol->isStatic;
 
   if (auto func = dynamic_cast<FuncDecl *>(symbol->decl)) {
     for (auto &p : func->params) {
@@ -125,13 +131,6 @@ MethodMeta MetaBuilder::buildMethod(MethodSymbol *symbol) {
 
   meta.returnType = buildTypeRef(symbol->returnType);
 
-  /*
-   * InitChecker에서 이 method에 대한 field initialization summary가
-   * 존재한다면 initializer이다.
-   *
-   * 일반 method/trait method는 initFields에 존재하지 않으므로
-   * initializedFields는 empty 상태로 유지된다.
-   */
   auto init = summary.initFields.find(symbol);
 
   if (init != summary.initFields.end()) {
@@ -233,24 +232,24 @@ TypeRef MetaBuilder::buildTypeRef(TypeSymbol *symbol) {
   }
 
   switch (symbol->kind) {
-  case TypeSymbol::TypeKind::CLASS:
-  case TypeSymbol::TypeKind::ENUM:
-  case TypeSymbol::TypeKind::STRUCT:
-  case TypeSymbol::TypeKind::TRAIT: {
+  case TypeKind::CLASS:
+  case TypeKind::ENUM:
+  case TypeKind::STRUCT:
+  case TypeKind::TRAIT: {
     ref.name = symbol->name;
     ref.kind = TypeRefKind::Declared;
     ref.path = symbol->path;
     break;
   }
 
-  case TypeSymbol::TypeKind::VOID: {
+  case TypeKind::VOID: {
     ref.kind = TypeRefKind::BuiltIn;
     ref.builtIn = BuiltInType::VOID;
     break;
   }
 
-  case TypeSymbol::TypeKind::PRIMITIVE:
-  case TypeSymbol::TypeKind::BUILTIN: {
+  case TypeKind::PRIMITIVE:
+  case TypeKind::BUILTIN: {
     ref.kind = TypeRefKind::BuiltIn;
 
     auto built = dynamic_cast<PrimtiveType *>(symbol);
@@ -263,7 +262,7 @@ TypeRef MetaBuilder::buildTypeRef(TypeSymbol *symbol) {
     break;
   }
 
-  case TypeSymbol::TypeKind::ARRAY: {
+  case TypeKind::ARRAY: {
     ref.kind = TypeRefKind::Array;
 
     auto arr = dynamic_cast<ArrayTypeSymbol *>(symbol);
@@ -277,7 +276,7 @@ TypeRef MetaBuilder::buildTypeRef(TypeSymbol *symbol) {
     break;
   }
 
-  case TypeSymbol::TypeKind::GENERIC: {
+  case TypeKind::GENERIC: {
     ref.name = symbol->name;
     ref.kind = TypeRefKind::Generic;
     ref.path = symbol->path;

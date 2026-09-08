@@ -156,9 +156,8 @@ void Resolver::visit(SwitchStmt *stmt) {
 
   auto *targetType = stmt->value->resolvedType;
 
-  if (targetType->kind == TypeSymbol::TypeKind::ENUM) {
-    if (stmt->usedVariants.size() != targetType->variants.size() &&
-        !stmt->hasDefault) {
+  if (auto en = dyn_cast<EnumType>(targetType)) {
+    if (stmt->usedVariants.size() != en->variants.size() && !stmt->hasDefault) {
       auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S081);
       dia.labels = {
           {stmt->span, "this switch does not handle every enum variant", true},
@@ -172,7 +171,7 @@ void Resolver::visit(SwitchStmt *stmt) {
       engine.emit(dia);
       recover.recover();
     }
-  } else if (targetType->kind == TypeSymbol::TypeKind::PRIMITIVE) {
+  } else if (targetType->kind == TypeKind::PRIMITIVE) {
     if (!stmt->hasDefault) {
       auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S081);
       dia.labels = {

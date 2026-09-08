@@ -51,12 +51,7 @@ void Resolver::visit(SpawnExpr *expr) {
     Error::internal(expr->spawnType->span, "failed to resolve spawn type");
   }
 
-  if (!expr->spawnType->resolved->memberScope) {
-    Error::internal(expr->spawnType->span,
-                    expr->spawnType->type + "'s member scope is nullptr");
-  }
-
-  if (expr->spawnType->resolved->kind != TypeSymbol::TypeKind::CLASS) {
+  if (expr->spawnType->resolved->kind != TypeKind::CLASS) {
     auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S105);
     dia.labels = {
         {expr->spawnType->span,
@@ -85,9 +80,11 @@ void Resolver::visit(SpawnExpr *expr) {
 
     args.push_back(arg->resolvedType);
   }
-
-  auto [result, method] =
-      lookupInit(expr->spawnType->resolved->memberScope, args);
+  auto spawn = dyn_cast<ObjectType>(expr->spawnType->resolved);
+  if (spawn == nullptr) {
+    Error::internal("illegal spawn type");
+  }
+  auto [result, method] = lookupInit(spawn, args);
 
   if (!result) {
     auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S021);

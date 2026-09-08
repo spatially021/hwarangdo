@@ -11,46 +11,49 @@ void ImportedSymbolBuilder::buildType(TypeMeta &type) {
   auto file = getOrCreateFile(type.path);
   auto &map = getTypeMap(file);
 
-  auto symbol = make_unique<TypeSymbol>();
-  auto sc = make_unique<Scope>();
+  unique_ptr<TypeSymbol> symbol;
 
-  symbol->memberScope = sc.get();
+  switch (type.kind) {
+  case TypeKind::ENUM: {
+    symbol = make_unique<EnumType>();
+    auto raw = dynamic_cast<EnumType *>(symbol.get());
+    for (auto &v : type.variants) {
+      buildVariant(v, raw);
+    }
+    break;
+  }
+  case TypeKind::CLASS:
+  case TypeKind::STRUCT: {
+    symbol = make_unique<ObjectType>(type.kind);
+
+    auto sc = make_unique<Scope>();
+    auto raw = dynamic_cast<ObjectType *>(symbol.get());
+    raw->memberScope = sc.get();
+    scope->children.push_back(std::move(sc));
+    for (auto &f : type.fields) {
+      raw->fields.push_back(buildField(f, raw));
+    }
+    break;
+  }
+  default: {
+    Error::internal("illegal meta type kind");
+  }
+  }
+
   symbol->module = module;
-  scope->children.push_back(std::move(sc));
-
   auto raw = symbol.get();
 
   map.emplace(type.name, std::move(symbol));
 
   raw->name = type.name;
 
-  switch (type.kind) {
-  case TypeKind::Enum:
-    raw->kind = TypeSymbol::TypeKind::ENUM;
-    break;
-  case TypeKind::Class:
-    raw->kind = TypeSymbol::TypeKind::CLASS;
-    break;
-  case TypeKind::Struct:
-    raw->kind = TypeSymbol::TypeKind::STRUCT;
-    break;
-  }
-
-  for (auto &f : type.fields) {
-    raw->fields.push_back(buildField(f, raw));
-  }
-
   for (auto &m : type.methods) {
     buildMethod(m, raw);
-  }
-
-  for (auto &v : type.variants) {
-    buildVariant(v, raw);
   }
 }
 
 ValueSymbol *ImportedSymbolBuilder::buildField(FieldMeta &field,
-                                               TypeSymbol *type) {
+                                               ObjectType *type) {
   unique_ptr<ValueSymbol> symbol = make_unique<ValueSymbol>();
   auto raw = symbol.get();
   type->memberScope->value.emplace(field.name, std::move(symbol));
@@ -62,22 +65,37 @@ ValueSymbol *ImportedSymbolBuilder::buildField(FieldMeta &field,
 void ImportedSymbolBuilder::buildMethod(MethodMeta &method, TypeSymbol *type) {
   unique_ptr<MethodSymbol> symbol = make_unique<MethodSymbol>();
   auto raw = symbol.get();
-  if (method.name == "init") {
-    type->memberScope->initOwn.push_back(std::move(symbol));
-    type->memberScope->inits.push_back(raw);
-  } else {
-    type->memberScope->methodOwn.push_back(std::move(symbol));
-    type->memberScope->methodMap[method.name].push_back(raw);
-  }
-  methodMap[*currnet].emplace(method, raw);
   raw->name = method.name;
   raw->owner = type;
   raw->module = module;
   raw->path = currnet->path;
+  raw->isStatic = method.isStatic;
   unique_ptr<Scope> sc = make_unique<Scope>();
   auto rSc = sc.get();
-  rSc->parent = type->memberScope;
-  type->memberScope->children.push_back(std::move(sc));
+  if (method.name == "init") {
+    auto obj = dynamic_cast<ObjectType *>(type);
+    if (obj == nullptr) {
+      Error::internal("illegal meta type kind");
+    }
+    obj->addInit(std::move(symbol));
+    rSc->parent = obj->memberScope;
+    obj->memberScope->children.push_back(std::move(sc));
+
+  } else if (method.name == "onDestroy") {
+    if (auto obj = dyn_cast<ObjectType>(type)) {
+      obj->onDestroy = std::move(symbol);
+    } else {
+      Error::internal("illegal onDestroy");
+    }
+  } else {
+    if (isa<ObjectType>(type)) {
+      dyn_cast<ObjectType>(type)->addMethod(std::move(symbol), method.isStatic);
+    } else {
+      type->addMethod(std::move(symbol));
+    }
+  }
+  methodMap[*currnet].emplace(method, raw);
+
   for (auto &p : method.params) {
     buildParam(p, raw, rSc);
   }
@@ -95,7 +113,7 @@ void ImportedSymbolBuilder::buildParam(ParamMeta &param, MethodSymbol *method,
 }
 
 void ImportedSymbolBuilder::buildVariant(EnumVariantMeta &variant,
-                                         TypeSymbol *type) {
+                                         EnumType *type) {
   unique_ptr<EnumVariantSymbol> symbol = make_unique<EnumVariantSymbol>();
   auto raw = symbol.get();
   type->variants.push_back(std::move(symbol));

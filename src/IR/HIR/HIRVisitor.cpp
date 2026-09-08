@@ -119,12 +119,15 @@ void HIRBuilder::visit(CallExpr *expr) {
                       "type receiver did not resolve to TypeSymbol");
     }
 
-    if (type->kind == TypeSymbol::TypeKind::ENUM) {
+    if (type->kind == TypeKind::ENUM) {
       exprResult = lowerVariantValue(expr);
       return;
     }
 
-    Error::internal(expr->span, "static method call reached HIR lowering");
+    if (isa<ObjectType>(type)) {
+      exprResult = lowerCall(expr);
+      return;
+    }
   }
 
   if (expr->callType == CallExpr::CallType::INIT_CALL) {
@@ -157,7 +160,7 @@ void HIRBuilder::visit(MemberExpr *expr) {
                       "member type receiver has no resolved type");
     }
 
-    if (expr->object->resolvedType->kind == TypeSymbol::TypeKind::ENUM) {
+    if (expr->object->resolvedType->kind == TypeKind::ENUM) {
       exprResult = lowerVariantValue(expr);
       return;
     }
@@ -313,11 +316,12 @@ void HIRBuilder::visit(ClassDecl *decl) {
   TypeGuard typeGuard(currentType, it->second);
 
   if (decl->baseClass.has_value()) {
-    if (decl->symbol->base == nullptr) {
+    auto obj = dyn_cast<ObjectType>(decl->symbol);
+    if (obj->base == nullptr) {
       Error::internal(decl->span, "class base symbol is nullptr");
     }
 
-    it = program->typeDeclMap.find(decl->symbol->base);
+    it = program->typeDeclMap.find(obj->base);
 
     if (it == program->typeDeclMap.end() || it->second == nullptr) {
       Error::internal(decl->span, "base class HIR type shell was not created");

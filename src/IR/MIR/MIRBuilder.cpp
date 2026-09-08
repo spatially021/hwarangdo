@@ -9,7 +9,7 @@
 void MIRBuilder::build() {
   for (auto &s : HirProgram->sources) {
     for (auto &d : s->typeDecls) {
-      if (d->type->kind == TypeSymbol::TypeKind::ENUM) {
+      if (d->type->kind == TypeKind::ENUM) {
         continue;
       }
       lowerType(d.get());
@@ -40,16 +40,17 @@ void MIRBuilder::lowerType(HIRTypeDecl *type) {
 void MIRBuilder::lowerMethod(TypeSymbol *owner, HIRMethodDecl *method) {
   auto func = std::make_unique<MIRFunction>(method->symbol, owner);
   auto *raw = func.get();
-
   FuncGuard _(currentFunc, raw);
 
-  currentBlock = makeBlock();
-  raw->entry = currentBlock;
-  enterScope();
-  lowerBlock(method->body.get());
-  exitScope();
-  if (!hasTerminator(currentBlock)) {
-    getBlock(currentBlock)->terminator = ReturnTerminator(nullptr);
+  if (!method->symbol->isExtern) {
+    currentBlock = makeBlock();
+    raw->entry = currentBlock;
+    enterScope();
+    lowerBlock(method->body.get());
+    exitScope();
+    if (!hasTerminator(currentBlock)) {
+      getBlock(currentBlock)->terminator = ReturnTerminator(nullptr);
+    }
   }
 
   program->functions.push_back(std::move(func));

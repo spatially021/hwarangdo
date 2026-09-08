@@ -411,7 +411,7 @@ LoweredValue llvmCodegen::lowerPayloadExtractExpr(MIRPayloadExtractExpr *expr,
 
   auto *enumType = expr->enumValue->type;
 
-  if (!enumType || enumType->kind != TypeSymbol::TypeKind::ENUM) {
+  if (!enumType || enumType->kind != TypeKind::ENUM) {
     Error::internal("payload extract source is not enum");
   }
 
@@ -516,15 +516,17 @@ LoweredValue llvmCodegen::lowerCastExpr(MIRCastExpr *expr, FuncContext &ctx) {
 }
 
 LoweredValue llvmCodegen::lowerCallExpr(MIRCallExpr *expr, FuncContext &ctx) {
-  auto callee = funcs.at(expr->method);
+  auto callee = getOrCreateFunc(expr->method);
 
   std::vector<llvm::Value *> args;
 
   // self
-  if (auto l = dynamic_cast<MIRLoad *>(expr->base.get())) {
-    args.push_back(lowerReceiverPtr(l->place.get(), ctx));
-  } else {
-    Error::internal("fail to get receiver");
+  if (needSelf(expr->method)) {
+    if (auto l = dynamic_cast<MIRLoad *>(expr->base.get())) {
+      args.push_back(lowerReceiverPtr(l->place.get(), ctx));
+    } else {
+      Error::internal("fail to get receiver");
+    }
   }
 
   // 일반 인자

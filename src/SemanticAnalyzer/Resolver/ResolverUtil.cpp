@@ -90,8 +90,7 @@ bool Resolver::isBinaryOperatalbe(Operator op, TypeSymbol *left,
 }
 
 bool Resolver::isCmpable(TypeSymbol *left, TypeSymbol *right) {
-  if (left->kind == TypeSymbol::TypeKind::CLASS ||
-      right->kind == TypeSymbol::TypeKind::CLASS) {
+  if (left->kind == TypeKind::CLASS || right->kind == TypeKind::CLASS) {
     return false;
   }
 
@@ -103,8 +102,7 @@ bool Resolver::isCmpable(TypeSymbol *left, TypeSymbol *right) {
     return true;
   }
 
-  if (left->kind == TypeSymbol::TypeKind::ENUM &&
-      right->kind == TypeSymbol::TypeKind::ENUM) {
+  if (left->kind == TypeKind::ENUM && right->kind == TypeKind::ENUM) {
     return left == right;
   }
 
@@ -192,28 +190,32 @@ vector<TypeSymbol *> Resolver::getPromotionCandidates(TypeSymbol *left,
                                                       TypeSymbol *right) {
   vector<TypeSymbol *> result;
 
-  if (left->kind != TypeSymbol::TypeKind::PRIMITIVE &&
-      right->kind != TypeSymbol::TypeKind::PRIMITIVE) {
+  if (left->kind != TypeKind::PRIMITIVE && right->kind != TypeKind::PRIMITIVE) {
     return result;
   }
 
-  if (left->kind != TypeSymbol::TypeKind::PRIMITIVE ||
-      right->kind != TypeSymbol::TypeKind::PRIMITIVE) {
+  if (left->kind != TypeKind::PRIMITIVE || right->kind != TypeKind::PRIMITIVE) {
     unordered_set<TypeSymbol *> used;
-    for (auto *type = left; type != nullptr; type = type->base) {
-      auto it = used.find(type);
-      if (it == used.end()) {
-        result.push_back(type);
-        used.emplace(type);
+    if (auto obj = dyn_cast<ObjectType>(left)) {
+      for (auto *type = obj; type != nullptr; type = type->base) {
+        auto it = used.find(type);
+        if (it == used.end()) {
+          result.push_back(type);
+          used.emplace(type);
+        }
       }
     }
-    for (auto *type = right; type != nullptr; type = type->base) {
-      auto it = used.find(type);
-      if (it == used.end()) {
-        result.push_back(type);
-        used.emplace(type);
+
+    if (auto obj = dyn_cast<ObjectType>(right)) {
+      for (auto *type = obj; type != nullptr; type = type->base) {
+        auto it = used.find(type);
+        if (it == used.end()) {
+          result.push_back(type);
+          used.emplace(type);
+        }
       }
     }
+
     return result;
   }
 
@@ -289,7 +291,7 @@ Resolver::canImplicitlyLiteralConvert(LiteralExpr *from, TypeSymbol *to) {
     return {true, CastingResultKind::None};
   }
 
-  if (to->kind != TypeSymbol::TypeKind::PRIMITIVE) {
+  if (to->kind != TypeKind::PRIMITIVE) {
     return {false, CastingResultKind::Unmatched};
   }
 
@@ -433,12 +435,8 @@ Resolver::implicitCasting(Expr *from, TypeSymbol *to) {
   return {nullptr, kind};
 }
 
-ValueSymbol *Resolver::lookupEnumVariant(TypeSymbol *enumType,
-                                         const string &name,
+ValueSymbol *Resolver::lookupEnumVariant(EnumType *enumType, const string &name,
                                          SourceSpan &token) {
-  if (!enumType || enumType->kind != TypeSymbol::TypeKind::ENUM) {
-    Error::internal(token, "expected enum type");
-  }
 
   auto it = enumType->variantMap.find(name);
   if (it == enumType->variantMap.end()) {
@@ -461,39 +459,40 @@ ValueSymbol *Resolver::lookupEnumVariant(TypeSymbol *enumType,
   return it->second;
 }
 
-pair<bool, MethodSymbol *> Resolver::lookupMethod(str name, Scope *scope,
-                                                  vector<TypeSymbol *> args) {
-  auto &bucket = scope->methodMap[name];
+// pair<bool, MethodSymbol *> Resolver::lookupMethod(str name, Scope *scope,
+//                                                   vector<TypeSymbol *> args)
+//                                                   {
+//   auto &bucket = scope->methodMap[name];
 
-  if (bucket.empty() && args.empty()) {
-    return {true, nullptr};
-  }
+//   if (bucket.empty() && args.empty()) {
+//     return {true, nullptr};
+//   }
 
-  for (auto &method : bucket) {
-    if (method->params.size() != args.size()) {
-      continue;
-    }
+//   for (auto &method : bucket) {
+//     if (method->params.size() != args.size()) {
+//       continue;
+//     }
 
-    bool matches = true;
+//     bool matches = true;
 
-    for (unsigned int i = 0; i < args.size(); ++i) {
-      if (method->params[i]->typeSymbol != args[i]) {
-        matches = false;
-        break;
-      }
-    }
+//     for (unsigned int i = 0; i < args.size(); ++i) {
+//       if (method->params[i]->typeSymbol != args[i]) {
+//         matches = false;
+//         break;
+//       }
+//     }
 
-    if (matches) {
-      return {true, method};
-    }
-  }
+//     if (matches) {
+//       return {true, method};
+//     }
+//   }
 
-  return {false, nullptr};
-}
+//   return {false, nullptr};
+// }
 
-pair<bool, MethodSymbol *> Resolver::lookupInit(Scope *scope,
+pair<bool, MethodSymbol *> Resolver::lookupInit(ObjectType *type,
                                                 vector<TypeSymbol *> args) {
-  auto &bucket = scope->inits;
+  auto &bucket = type->inits;
 
   if (bucket.empty() && args.empty()) {
     return {true, nullptr};

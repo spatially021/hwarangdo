@@ -7,6 +7,7 @@
 #include "AST/Stmt.h"
 #include "Token.h"
 #include "enums/AccessModifier.h"
+#include "hrd/AST/DeclPrefix.h"
 #include "hrd/AST/TokenStream.h"
 #include "hrd/Recover/ParserRecover.h"
 #include "hrd/compiler/CompilerContexts.h"
@@ -38,17 +39,6 @@ public:
 
 private:
   std::vector<DeclContext> &stack_;
-};
-
-struct DeclPrefix {
-  AModifier modi = AModifier::PUBLIC;
-  Token startToken;
-  bool isExtern = false;
-  bool isConst = false;
-  bool isRoot = false;
-  bool isFrame = false;
-  bool isOverride = false;
-  bool isAsync = false;
 };
 
 class Parser {
@@ -134,7 +124,7 @@ private:
   bool isType();
   Token parseLiteralForType(const Token &type);
   bool isValidSize(const std::string &s) const;
-  bool isAccessModifier() const;
+  bool isAccessModifier(const size_t offset = 0) const;
   bool isTypeToken(TKind k) const;
   AModifier AModifierConvertor(Token t);
   TypeNode::Ptr typeNodeConvertor(Token t, Token size = {});

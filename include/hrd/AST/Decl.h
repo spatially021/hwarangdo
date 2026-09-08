@@ -2,6 +2,7 @@
 
 #include "hrd/AST/ASTNode.h"
 #include "hrd/AST/DeclContext.h"
+#include "hrd/AST/DeclPrefix.h"
 #include "hrd/AST/Visitor.h"
 #include "hrd/Inputs.h"
 #include "hrd/SourceSpan.h"
@@ -21,6 +22,9 @@ class EnumVariantSymbol;
 class ParamSymbol;
 class ImplSymbol;
 class MethodSymbol;
+class ObjectType;
+class EnumType;
+class TraitType;
 class Expr;
 class Stmt;
 using StmtPtr = shared_ptr<Stmt>;
@@ -117,17 +121,19 @@ public:
   vector<shared_ptr<Param>> params; // 이름 포함된 파라미터
   TypeNode::Ptr returnType;         // 반환 타입 (void면 BuiltinTypeNode void)
   StmtPtr body;
-  bool isExtern = false; // 외부 함수 여부 (DLL/FFI 등)
-  bool isFrame = false;
-  bool isOverride = false;
+  DeclPrefix prefix;
 
   FuncDecl(SourceSpan t, const string &n, vector<shared_ptr<Param>> p,
-           TypeNode::Ptr ret, StmtPtr b, AModifier modi = AModifier::PUBLIC,
-           bool e = false, bool f = false, bool o = false)
+           TypeNode::Ptr ret, StmtPtr b, AModifier modi = AModifier::PUBLIC)
       : Decl(NKind::FUNC_DECL, t, n, modi), params(std::move(p)),
-        returnType(std::move(ret)), body(std::move(b)), isExtern(e), isFrame(f),
-        isOverride(o) {
+        returnType(std::move(ret)), body(std::move(b)) {
     aModifier = modi;
+  }
+  FuncDecl(SourceSpan t, const string &n, vector<shared_ptr<Param>> p,
+           TypeNode::Ptr ret, StmtPtr b, DeclPrefix pre)
+      : Decl(NKind::FUNC_DECL, t, n, pre.modi), params(std::move(p)),
+        returnType(std::move(ret)), body(std::move(b)), prefix(pre) {
+    aModifier = prefix.modi;
   }
 
   void accept(ASTVisitor *visitor) override { visitor->visit(this); }
@@ -150,7 +156,7 @@ public:
   }
 
   void accept(ASTVisitor *visitor) override { visitor->visit(this); }
-  TypeSymbol *symbol = nullptr;
+  ObjectType *symbol = nullptr;
 };
 
 // 클래스 선언을 표현하는 AST 노드를 나타낸다.
@@ -181,7 +187,7 @@ public:
 
   void setBaseClass(StringDatum b) { baseClass = b; }
   void accept(ASTVisitor *visitor) override { visitor->visit(this); }
-  TypeSymbol *symbol = nullptr;
+  ObjectType *symbol = nullptr;
 };
 
 // 열거형 선언을 표현하는 AST 노드를 나타낸다.
@@ -209,7 +215,7 @@ public:
   }
 
   void accept(ASTVisitor *visitor) override { visitor->visit(this); }
-  TypeSymbol *symbol = nullptr;
+  EnumType *symbol = nullptr;
 };
 
 // 특정 타입에 대한 impl 블록을 표현하는 AST 노드를 나타낸다.
@@ -230,7 +236,7 @@ public:
   void accept(ASTVisitor *visitor) override { visitor->visit(this); }
 
   vector<MethodSymbol *> sigs;
-  TypeSymbol *importTarget = nullptr;
+  ObjectType *importTarget = nullptr;
 };
 
 // trait 선언을 표현하는 AST 노드를 나타낸다.
@@ -244,20 +250,22 @@ public:
             AModifier modi)
       : Decl(NKind::TRAIT_DECL, t, n, modi), traitSigs(std::move(tr)) {}
   void accept(ASTVisitor *visitor) override { visitor->visit(this); }
-  TypeSymbol *symbol = nullptr;
+  TraitType *symbol = nullptr;
 };
 
 // trait 내 메서드 시그니처를 표현하는 AST 노드를 나타낸다.
 // 반환 타입, 이름, 파라미터를 포함하며 실제 구현 없이 계약만 정의한다.
 // 의미 분석 이후 MethodSymbol과 연결된다.
-class TraitSig : public ASTNode {
+class TraitSig : public Decl {
 public:
   TypeNode::Ptr type;
   string name;
   vector<shared_ptr<Param>> params;
+  DeclPrefix prefix;
   TraitSig(SourceSpan t, TypeNode::Ptr ty, const string &n,
-           vector<shared_ptr<Param>> p)
-      : ASTNode(NKind::TRAIT_SIG, t), type(ty), name(n), params(std::move(p)) {}
+           vector<shared_ptr<Param>> p, DeclPrefix pre)
+      : Decl(NKind::TRAIT_SIG, t, n, pre.modi), type(ty), name(n),
+        params(std::move(p)), prefix(pre) {}
   void accept(ASTVisitor *visitor) override { visitor->visit(this); }
   MethodSymbol *symbol = nullptr;
 };
@@ -269,7 +277,7 @@ class InitDecl : public FuncDecl {
 public:
   InitDecl(SourceSpan t, vector<shared_ptr<Param>> p, StmtPtr b, bool o = false)
       : FuncDecl(t, "init", p, nullptr, b) {
-    isOverride = o;
+    prefix.isOverride = o;
   }
   void accept(ASTVisitor *visitor) override { visitor->visit(this); }
 };

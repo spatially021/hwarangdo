@@ -18,23 +18,7 @@ void llvmCodegen::buildMethods() {
       continue;
     }
 
-    auto rt = getType(m->symbol->returnType);
-    if (rt == nullptr) {
-      Error::internal("null llvm return type: " + m->symbol->name);
-    }
-
-    vector<llvm::Type *> params;
-    params.push_back(llvm::PointerType::get(context, 0));
-    for (auto &p : m->symbol->params) {
-      auto pt = getType(p->typeSymbol);
-      if (pt == nullptr) {
-        Error::internal("null llvm param type: " + p->name);
-      }
-      params.push_back(pt);
-    }
-    auto fnType = llvm::FunctionType::get(rt, params, false);
-    auto fn = llvm::Function::Create(fnType, llvm::GlobalValue::ExternalLinkage,
-                                     mangle(m->symbol), llvmModule.get());
+    auto fn = createFuncShell(m->symbol);
     funcs.emplace(m->symbol, fn);
   }
 
@@ -76,13 +60,17 @@ void llvmCodegen::buildMethods() {
 
       continue;
     }
-
-    emitFuncBody(m.get());
+    if (!m->symbol->isExtern) {
+      emitFuncBody(m.get());
+    }
   }
 }
 
 string llvmCodegen::mangle(MethodSymbol *symbol) {
-  string name = symbol->module->name;
+  if (symbol->isExtern) {
+    return symbol->linkName;
+  }
+  string name = "__hrd_" + symbol->module->name;
   for (auto &p : symbol->path.segments) {
     name += "_" + p;
   }
@@ -96,7 +84,7 @@ string llvmCodegen::mangle(MethodSymbol *symbol) {
 }
 
 string llvmCodegen::mangleType(TypeSymbol *type) {
-  if (type->kind == TypeSymbol::TypeKind::BUILTIN)
+  if (type->kind == TypeKind::BUILTIN)
     return type->name;
 
   if (type->module == nullptr) {

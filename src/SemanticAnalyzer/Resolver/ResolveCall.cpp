@@ -1,6 +1,7 @@
 #include "hrd/AST/Decl.h"
 #include "hrd/AST/Expr.h"
 #include "hrd/AST/Stmt.h"
+#include "hrd/SemanticAnalyzer/MethodBucket.h"
 #include "hrd/SemanticAnalyzer/Resolver.h"
 #include "hrd/SemanticAnalyzer/Scope.h"
 #include "hrd/SemanticAnalyzer/symbol/MethodSymbol.h"
@@ -193,7 +194,10 @@ SymbolT *Resolver::resolveOverload(SourceSpan span,
 }
 
 void Resolver::resolveInit(CallExpr *expr) {
-  auto *type = table.getType(expr->methodName);
+  auto *type = dyn_cast<ObjectType>(table.getType(expr->methodName));
+  if (type == nullptr) {
+    Error::internal("expect object");
+  }
 
   std::vector<Expr *> args;
   for (auto &a : expr->arguments) {
@@ -201,7 +205,7 @@ void Resolver::resolveInit(CallExpr *expr) {
     args.push_back(a.get());
   }
 
-  auto &bucket = type->memberScope->inits;
+  auto &bucket = type->inits;
 
   if (bucket.empty()) {
     if (args.empty()) {
@@ -297,9 +301,11 @@ void Resolver::ResolveEnumVariant(CallExpr *expr) {
   expr->resolvedType = expr->receiver->resolvedType;
 }
 
-void Resolver::resolveCall(CallExpr *expr, Scope *scope, bool isImplict) {
-  auto bucketIt = scope->methodMap.find(expr->methodName);
-  if (bucketIt == scope->methodMap.end()) {
+void Resolver::resolveCall(CallExpr *expr, TypeSymbol *scope, bool isImplict) {
+  MethodBucket result = getMethodBucket(expr->methodName, scope, false);
+  switch (result.kind) {
+
+  case NotFound: {
     auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S027);
     dia.labels = {
         {expr->span, "unknown method called here", true},
@@ -307,6 +313,42 @@ void Resolver::resolveCall(CallExpr *expr, Scope *scope, bool isImplict) {
     dia.notes = {{"the target type does not declare a method with this name"}};
     engine.emit(dia);
     recover.recover();
+    return;
+  }
+  case InstanceMethodAsStatic: {
+    auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S135);
+    dia.labels = {
+        {expr->span, "this static method is being called through an instance",
+         true},
+    };
+    dia.notes = {
+        "static methods do not use an instance receiver",
+    };
+    dia.helps = {
+        "call this method through its declaring type instead",
+    };
+    engine.emit(dia);
+    recover.recover();
+    return;
+  }
+  case StaticMethodAsInstance: {
+    auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S136);
+    dia.labels = {
+        {expr->span, "this instance method is being called without an instance",
+         true},
+    };
+    dia.notes = {
+        "instance methods require a receiver to provide 'self'",
+    };
+    dia.helps = {
+        "call this method through an instance of its declaring type",
+    };
+    engine.emit(dia);
+    recover.recover();
+    return;
+  }
+  case None:
+    break;
   }
 
   std::vector<Expr *> args;
@@ -315,7 +357,7 @@ void Resolver::resolveCall(CallExpr *expr, Scope *scope, bool isImplict) {
     args.push_back(a.get());
   }
 
-  auto *best = resolveMethodOverload(expr->span, bucketIt->second, args);
+  auto *best = resolveMethodOverload(expr->span, *result.bucket, args);
 
   checkMethodAccess(expr, best, isImplict);
 
@@ -431,6 +473,83 @@ bool Resolver::tryResolveRuntime(CallExpr *expr) {
   return true;
 }
 
+void Resolver::ResolveStaticMethod(CallExpr *expr, TypeSymbol *scope) {
+  MethodBucket result = getMethodBucket(expr->methodName, scope, true);
+  switch (result.kind) {
+
+  case NotFound: {
+    auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S027);
+    dia.labels = {
+        {expr->span, "unknown method called here", true},
+    };
+    dia.notes = {{"the target type does not declare a method with this name"}};
+    engine.emit(dia);
+    recover.recover();
+    return;
+  }
+  case InstanceMethodAsStatic: {
+    auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S135);
+    dia.labels = {
+        {expr->span, "this static method is being called through an instance",
+         true},
+    };
+    dia.notes = {
+        "static methods do not use an instance receiver",
+    };
+    dia.helps = {
+        "call this method through its declaring type instead",
+    };
+    engine.emit(dia);
+    recover.recover();
+    return;
+  }
+  case StaticMethodAsInstance: {
+    auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S136);
+    dia.labels = {
+        {expr->span, "this instance method is being called without an instance",
+         true},
+    };
+    dia.notes = {
+        "instance methods require a receiver to provide 'self'",
+    };
+    dia.helps = {
+        "call this method through an instance of its declaring type",
+    };
+    engine.emit(dia);
+    recover.recover();
+    return;
+  }
+  case None:
+    break;
+  }
+
+  std::vector<Expr *> args;
+  for (auto &a : expr->arguments) {
+    a->accept(this);
+    args.push_back(a.get());
+  }
+
+  auto *best = resolveMethodOverload(expr->span, *result.bucket, args);
+
+  checkMethodAccess(expr, best, false);
+
+  expr->resolved = best;
+  expr->isStatic = true;
+
+  if (best->returnType == nullptr) {
+    Error::internal(expr->span, "methodSymbol's returnType is nullptr");
+  }
+
+  for (size_t i = 0; i < best->params.size(); ++i) {
+    if (auto value =
+            dynamic_cast<DefaultValueExpr *>(expr->arguments[i].get())) {
+      value->resolved = best->params[i]->defaultValue;
+    }
+  }
+
+  expr->resolvedType = best->returnType;
+}
+
 void Resolver::visit(CallExpr *expr) {
   if (expr->callType != CallExpr::CallType::UNRESOLVED) {
     return;
@@ -450,10 +569,10 @@ void Resolver::visit(CallExpr *expr) {
       return;
     }
 
-    auto it = currentType->memberScope->methodMap.find(expr->methodName);
-    if (it != currentType->memberScope->methodMap.end()) {
+    auto it = currentType->methodMap.find(expr->methodName);
+    if (it != currentType->methodMap.end()) {
       expr->callType = CallExpr::CallType::FUNC_CALL;
-      resolveCall(expr, currentType->memberScope, true);
+      resolveCall(expr, currentType, true);
       return;
     }
 
@@ -469,9 +588,9 @@ void Resolver::visit(CallExpr *expr) {
   // 2. receiver 해석
   expr->receiver->accept(this);
   if (isTypeReceiver(expr->receiver.get())) {
-    if (expr->receiver->resolvedType->kind == TypeSymbol::TypeKind::ENUM) {
-      auto it = expr->receiver->resolvedType->variantMap.find(expr->methodName);
-      if (it == expr->receiver->resolvedType->variantMap.end()) {
+    if (auto en = dyn_cast<EnumType>(expr->receiver->resolvedType)) {
+      auto it = en->variantMap.find(expr->methodName);
+      if (it == en->variantMap.end()) {
         auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S028);
         dia.labels = {
             {expr->span, "unknown variant referenced here", true},
@@ -486,8 +605,13 @@ void Resolver::visit(CallExpr *expr) {
       expr->resolved = it->second;
       ResolveEnumVariant(expr);
       return;
+    } else if (expr->receiver->resolvedType->kind == TypeKind::CLASS ||
+               expr->receiver->resolvedType->kind == TypeKind::STRUCT) {
+
+      expr->callType = CallExpr::CallType::FUNC_CALL;
+      ResolveStaticMethod(expr, expr->receiver->resolvedType);
+      return;
     } else {
-      // TODO:정적 메서드 추가시 추가.
       auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S029);
       dia.labels = {
           {expr->span, "static methods are not supported yet", true},
@@ -515,15 +639,37 @@ void Resolver::visit(CallExpr *expr) {
       }
     }
 
-    auto *scope = ownerType->memberScope;
-    if (!scope) {
-      Error::internal(expr->span, "memberScope is nullptr: " + ownerType->name);
-    }
-
     expr->callType = CallExpr::CallType::FUNC_CALL;
-    resolveCall(expr, scope);
+    resolveCall(expr, ownerType);
     return;
   }
 
   Error::internal(expr->span, "unresolved call receiver");
+}
+
+MethodBucket Resolver::getMethodBucket(str name, TypeSymbol *scope,
+                                       bool isStatic) {
+
+  if (auto obj = dyn_cast<ObjectType>(scope)) {
+    auto sIt = obj->staticMethodMap.find(name);
+    auto iIt = scope->methodMap.find(name);
+    if (isStatic) {
+      if (sIt != obj->staticMethodMap.end()) {
+        return {&sIt->second, None};
+      }
+      if (iIt != obj->methodMap.end()) {
+        return {&iIt->second, InstanceMethodAsStatic};
+      }
+      return {nullptr, NotFound};
+    }
+
+    if (iIt != obj->methodMap.end()) {
+      return {&iIt->second, None};
+    }
+    if (sIt != obj->staticMethodMap.end()) {
+      return {&sIt->second, StaticMethodAsInstance};
+    }
+  }
+
+  return {nullptr, NotFound};
 }

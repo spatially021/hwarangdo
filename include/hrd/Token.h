@@ -132,6 +132,8 @@ enum class TKind {
   PROTECTED,
   PRIVATE,
   INTERNAL,
+  EXTERN,
+  STATIC,
 
   IMPL,
   TRAIT,

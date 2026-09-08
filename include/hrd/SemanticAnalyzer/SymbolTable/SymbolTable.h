@@ -9,9 +9,21 @@
 #include "hrd/SemanticAnalyzer/symbol/MethodSymbol.h"
 #include "hrd/SemanticAnalyzer/symbol/Symbol.h"
 #include "hrd/SemanticAnalyzer/symbol/TypeSymbol.h"
+#include "hrd/SourceSpan.h"
 
 #include <llvm/ADT/APInt.h>
 #include <memory>
+
+struct Result {
+  bool success = true;
+  enum ErrorType {
+    DUPLICATED,
+    RESERVED,
+    UNKNOWN_SYMBOL,
+    NONE,
+  } errorType = NONE;
+  SourceSpan span;
+};
 
 class SymbolTable {
   using scopePtr = shared_ptr<Scope>;
@@ -22,16 +34,6 @@ public:
   SymbolRegistry registry = SymbolRegistry();
 
 public:
-  struct Result {
-    bool success = true;
-    enum ErrorType {
-      DUPLICATED,
-      RESERVED,
-      UNKNOWN_SYMBOL,
-      NONE,
-    } errorType = NONE;
-  };
-
   SymbolTable();
   ~SymbolTable();
 

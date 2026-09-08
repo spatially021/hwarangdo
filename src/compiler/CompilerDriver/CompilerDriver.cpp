@@ -1,5 +1,6 @@
 #include "hrd/InitChecker/InitChecker.h"
 #include "hrd/MetaData/MetaReader.h"
+
 #ifndef NDEBUG
 #define HRD_DEBUG 1
 #else
@@ -43,6 +44,7 @@
 #include "hrd/Debugger/MIRDebugger/MIRGraphvizDebugger.h"
 #include "hrd/Debugger/ParserDebugger.h"
 #include "hrd/Debugger/ResolverDebugger.h"
+#include <llvm/Support/FileSystem.h>
 #endif
 
 #include <cstddef>
@@ -235,14 +237,32 @@ int CompilerDriver::run(int argc, char **argv) {
     for (auto &[_, import] : importedModules) {
       input.libraries.push_back(import.objectPath);
     }
+    const auto nativePath = projectInput.rootPath / "native";
+
+    if (fs::exists(nativePath) && fs::is_directory(nativePath)) {
+      for (const auto &entry : fs::directory_iterator(nativePath)) {
+        if (!entry.is_regular_file()) {
+          continue;
+        }
+
+        if (entry.path().extension() != ".o") {
+          continue;
+        }
+
+        input.natives.push_back(entry.path());
+      }
+    }
+
     CompilerLinker linker;
 
     if (!linker.link(input)) {
       return 1;
     }
-
     std::error_code ec;
+
+#if !HRD_DEBUG
     fs::remove(objectPath, ec);
+#endif
 
     if (ec) {
 #if HRD_DEBUG
@@ -602,16 +622,22 @@ bool CompilerDriver::runCodegen(const std::filesystem::path &objectPath) {
 
   try {
     codegen.generate();
+#if HRD_DEBUG
+    std::error_code ec;
+
+    llvm::raw_fd_ostream out("hwarangdo.ll", ec, llvm::sys::fs::OF_Text);
+
+    if (ec) {
+      Error::internal("failed to open LLVM IR output file: " + ec.message());
+    }
+
+    codegen.llvmModule->print(out, nullptr);
+    out.flush();
+#endif
 
     if (llvm::verifyModule(*codegen.llvmModule, &llvm::errs())) {
       throw std::runtime_error("invalid llvm module");
     }
-
-#if HRD_DEBUG
-    llvm::outs() << "\n===== LLVM IR =====\n";
-    codegen.llvmModule->print(llvm::outs(), nullptr);
-    llvm::outs().flush();
-#endif
 
     if (!codegen.emitObject(objectPath)) {
       throw std::runtime_error("failed to emit object file");

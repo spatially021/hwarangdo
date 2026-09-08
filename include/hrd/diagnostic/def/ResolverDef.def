@@ -1183,3 +1183,33 @@ DIAG(HRD_S133,
      Error,
      "array index is out of range",
      "HRD-S133")
+
+//=============================================================================
+// Trigger
+//-----------------------------------------------------------------------------
+// A method attempts to override a method that is declared as extern.
+//=============================================================================
+DIAG(HRD_S134,
+     Error,
+     "extern methods cannot be overridden",
+     "HRD-S134")
+
+//=============================================================================
+// Trigger
+//-----------------------------------------------------------------------------
+// A static method is invoked through an instance receiver.
+//=============================================================================
+DIAG(HRD_S135,
+     Error,
+     "static method cannot be called through an instance",
+     "HRD-S135")
+
+//=============================================================================
+// Trigger
+//-----------------------------------------------------------------------------
+// An instance method is invoked through a type without an instance receiver.
+//=============================================================================
+DIAG(HRD_S136,
+     Error,
+     "instance method requires an instance receiver",
+     "HRD-S136")

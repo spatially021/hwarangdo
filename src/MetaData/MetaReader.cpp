@@ -422,7 +422,7 @@ TypeMeta MetaReader::readType(TypeKind kind) {
   result.path = std::move(name.path);
 
   if (match(TokenKind::Colon)) {
-    if (kind != TypeKind::Class) {
+    if (kind != TypeKind::CLASS) {
       fail(previous(), "only class metadata may declare a parent");
     }
 
@@ -437,7 +437,7 @@ TypeMeta MetaReader::readType(TypeKind kind) {
     }
 
     // enum variant has no access modifier.
-    if (kind == TypeKind::Enum) {
+    if (kind == TypeKind::ENUM) {
       const bool looksLikeMember = checkIdentifier("public") ||
                                    checkIdentifier("protected") ||
                                    checkIdentifier("private");
@@ -447,7 +447,6 @@ TypeMeta MetaReader::readType(TypeKind kind) {
         continue;
       }
     }
-
     const Token &modifierToken = expectIdentifier("expected access modifier");
 
     const auto modifier = modifierFromName(modifierToken.text);
@@ -456,27 +455,37 @@ TypeMeta MetaReader::readType(TypeKind kind) {
       fail(modifierToken, "expected access modifier");
     }
 
+    bool isStatic = false;
+
+    if (matchIdentifier("static")) {
+      isStatic = true;
+    }
+
     const Token &member = expectIdentifier("expected field or method");
 
     if (member.text == "field") {
-      if (kind == TypeKind::Enum) {
+      if (kind == TypeKind::ENUM) {
         fail(member, "enum metadata cannot contain fields");
+      }
+
+      if (isStatic) {
+        fail(member, "metadata field cannot be static");
       }
 
       FieldMeta field = readField();
       field.modifier = *modifier;
 
       result.fields.push_back(std::move(field));
-
       continue;
     }
 
     if (member.text == "method") {
       MethodMeta method = readMethod();
+
       method.modifier = *modifier;
+      method.isStatic = isStatic;
 
       result.methods.push_back(std::move(method));
-
       continue;
     }
 
@@ -511,6 +520,12 @@ TraitMeta MetaReader::readTrait() {
       fail(modifierToken, "expected access modifier");
     }
 
+    bool isStatic = false;
+
+    if (matchIdentifier("static")) {
+      fail(previous(), "trait method cannot be static");
+    }
+
     const Token &member = expectIdentifier("expected trait method");
 
     if (member.text != "method") {
@@ -518,7 +533,9 @@ TraitMeta MetaReader::readTrait() {
     }
 
     MethodMeta method = readMethod();
+
     method.modifier = *modifier;
+    method.isStatic = isStatic;
 
     result.methods.push_back(std::move(method));
   }
@@ -883,15 +900,15 @@ std::optional<BuiltInType> MetaReader::builtInFromName(std::string_view name) {
 
 std::optional<TypeKind> MetaReader::typeKindFromName(std::string_view name) {
   if (name == "class") {
-    return TypeKind::Class;
+    return TypeKind::CLASS;
   }
 
   if (name == "struct") {
-    return TypeKind::Struct;
+    return TypeKind::STRUCT;
   }
 
   if (name == "enum") {
-    return TypeKind::Enum;
+    return TypeKind::ENUM;
   }
 
   return std::nullopt;

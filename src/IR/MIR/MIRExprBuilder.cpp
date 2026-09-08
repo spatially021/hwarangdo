@@ -205,8 +205,9 @@ unique_ptr<MIRValue> MIRBuilder::lowerCall(HIRMethodCallExpr *expr) {
     args.push_back(lowerExpr(a.get()));
   }
 
-  return make_unique<MIRCallExpr>(lowerExpr(expr->receiver.get()),
-                                  std::move(args), expr->method, expr->type);
+  return make_unique<MIRCallExpr>(
+      expr->receiver == nullptr ? nullptr : lowerExpr(expr->receiver.get()),
+      std::move(args), expr->method, expr->type);
 }
 
 unique_ptr<MIRValue> MIRBuilder::lowerSpawn(HIRSpawnExpr *expr) {

@@ -45,12 +45,12 @@ void llvmCodegen::assign(LoweredPlace dst, LoweredValue rhs, TypeSymbol *type,
     return;
   }
 
-  if (type->kind == TypeSymbol::TypeKind::STRUCT) {
+  if (type->kind == TypeKind::STRUCT) {
     lowerStructAssign(type, dst.dst, rhs, rhs.category, ctx);
     return;
   }
 
-  if (type->kind == TypeSymbol::TypeKind::ENUM) {
+  if (type->kind == TypeKind::ENUM) {
 
     if (rhs.category == MIRValueCategory::OwnedTemp) {
       lowerEnumMoveAssign(type, dst.dst, rhs.addr);
@@ -120,8 +120,8 @@ void llvmCodegen::lowerEnumCopyAssign(TypeSymbol *type, llvm::Value *dst,
       llvm::BasicBlock::Create(context, "enum.copy.unit", ctx.func);
 
   auto *sw = builder.CreateSwitch(srcTag, defaultBB);
-
-  for (auto &variant : type->variants) {
+  auto en = dyn_cast<EnumType>(type);
+  for (auto &variant : en->variants) {
     if (variant->payloadType == nullptr) {
       continue;
     }
@@ -153,7 +153,7 @@ void llvmCodegen::lowerEnumCopyAssign(TypeSymbol *type, llvm::Value *dst,
     payloadRhs.addr = srcPayload;
     payloadRhs.category = MIRValueCategory::Borrowed;
 
-    if (payloadTy->kind != TypeSymbol::TypeKind::STRUCT &&
+    if (payloadTy->kind != TypeKind::STRUCT &&
         dynamic_cast<StringType *>(payloadTy) == nullptr) {
       payloadRhs.value = builder.CreateLoad(payloadLayoutTy, srcPayload);
     }
@@ -189,7 +189,9 @@ void llvmCodegen::lowerStructAssign(TypeSymbol *ty, llvm::Value *dst,
     builder.CreateStore(rhs.value, src);
   }
 
-  for (auto *field : ty->fields) {
+  auto obj = dyn_cast<ObjectType>(ty);
+
+  for (auto *field : obj->fields) {
     auto *fieldTy = field->typeSymbol;
 
     auto *dstField =

@@ -401,7 +401,8 @@ void Verifier::visit(FuncDecl *decl) {
   for (auto &p : decl->params) {
     p->accept(this);
   }
-  decl->body->accept(this);
+  if (decl->body != nullptr)
+    decl->body->accept(this);
 }
 void Verifier::visit(VarDecl *decl) {
   if (decl->symbol == nullptr)

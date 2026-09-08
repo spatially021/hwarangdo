@@ -4,6 +4,7 @@
 #include "hrd/AST/Expr.h"
 #include "hrd/AST/Visitor.h"
 #include "hrd/Recover/ResolverRecover.h"
+#include "hrd/SemanticAnalyzer/MethodBucket.h"
 #include "hrd/SemanticAnalyzer/ResolvedLit.h"
 #include "hrd/SemanticAnalyzer/Scope.h"
 #include "hrd/SemanticAnalyzer/SymbolTable/SymbolTable.h"
@@ -20,6 +21,7 @@
 #include "hrd/util/TypeResolver.h"
 #include <cassert>
 #include <cstddef>
+#include <vector>
 
 class SymbolTable;
 
@@ -28,7 +30,7 @@ class Resolver : public ASTVisitor {
 
 public:
   SymbolTable &table;
-  TypeSymbol *currentType = nullptr;
+  TypeSymbol *&currentType;
   MethodSymbol *currentMethod = nullptr;
   ASTNode *currentSwitch = nullptr;
   Case *currentCase = nullptr;
@@ -55,9 +57,10 @@ private:
   Scope *currentBase = nullptr;
   bool tryResolveRuntime(CallExpr *expr);
   void ResolveEnumVariant(CallExpr *expr);
-  void resolveCall(CallExpr *expr, Scope *scope, bool isImplict = false);
+  void resolveCall(CallExpr *expr, TypeSymbol *scope, bool isImplict = false);
   void resolveInit(CallExpr *expr);
   void resolveCasePayload(CallExpr *expr);
+  void ResolveStaticMethod(CallExpr *expr, TypeSymbol *scope);
   ArgMatchKind matchArgument(Expr *arg, TypeSymbol *param,
                              bool hasInit = false);
   int rankOf(const ArgMatchKind &kind);
@@ -176,9 +179,9 @@ private:
            isa<StringType>(t) || isa<CharType>(t);
   }
 
-  ValueSymbol *lookupEnumVariant(TypeSymbol *enumType, const string &name,
+  ValueSymbol *lookupEnumVariant(EnumType *enumType, const string &name,
                                  SourceSpan &token);
-  TypeSymbol *getTargetType();
+  EnumType *getTargetType();
 
   inline bool isTypeReceiver(Expr *expr) {
     if (auto name = dynamic_cast<NameExpr *>(expr)) {
@@ -188,9 +191,9 @@ private:
   }
   llvm::APInt resolveFixedArraySize(Expr *expr);
 
-  pair<bool, MethodSymbol *> lookupMethod(str name, Scope *scope,
-                                          vector<TypeSymbol *> args);
-  pair<bool, MethodSymbol *> lookupInit(Scope *scope,
+  // pair<bool, MethodSymbol *> lookupMethod(str name, Scope *scope,
+  //                                         vector<TypeSymbol *> args);
+  pair<bool, MethodSymbol *> lookupInit(ObjectType *type,
                                         vector<TypeSymbol *> args);
 
 private:
@@ -210,4 +213,6 @@ private:
                   std::string_view ambiguousMessage);
 
   void checkMethodAccess(CallExpr *expr, MethodSymbol *method, bool isImplicit);
+
+  MethodBucket getMethodBucket(str name, TypeSymbol *scope, bool isStatic);
 };

@@ -15,8 +15,10 @@ void HIRHelper::linkSecondPass(HIRProgram *program) {
         if (it == program->typeDeclMap.end()) {
           Error::internal(d->span, "fail to get type");
         }
+        auto obj = dyn_cast<ObjectType>(c->symbol);
         if (c->baseClass.has_value()) {
-          auto bIt = program->typeDeclMap.find(c->symbol->base);
+
+          auto bIt = program->typeDeclMap.find(obj->base);
           if (bIt == program->typeDeclMap.end()) {
             Error::internal(c->span, "fail to get baseType");
           }

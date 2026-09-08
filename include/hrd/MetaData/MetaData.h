@@ -15,12 +15,6 @@ struct FieldMeta;
 struct MethodMeta;
 struct EnumVariantMeta;
 
-enum class TypeKind {
-  Enum,
-  Class,
-  Struct,
-};
-
 struct TypeMeta {
   std::string name;
   TypeKind kind;
@@ -93,7 +87,7 @@ struct MethodMeta {
   TypeRef returnType;
   std::vector<ParamMeta> params;
   AModifier modifier;
-
+  bool isStatic = false;
   /*
    * 해당 initializer가 반환 시 초기화를 보장하는 field 목록.
    *
@@ -104,6 +98,7 @@ struct MethodMeta {
   bool operator==(const MethodMeta &rhs) const {
     return name == rhs.name && returnType == rhs.returnType &&
            params == rhs.params && modifier == rhs.modifier &&
+           isStatic == rhs.isStatic &&
            initializedFields == rhs.initializedFields;
   }
 };

@@ -258,6 +258,7 @@ public:
 
   variant<std::monostate, MethodSymbol *, EnumVariantSymbol *, RuntimeSymbol *>
       resolved;
+  bool isStatic = false;
 };
 
 class TernaryExpr : public Expr {

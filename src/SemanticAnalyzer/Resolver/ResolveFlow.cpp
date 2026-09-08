@@ -116,7 +116,7 @@ void Resolver::visit(CaseValueExpr *expr) {
     return;
   }
 
-  TypeSymbol *enumTarget = getTargetType();
+  EnumType *enumTarget = getTargetType();
   if (enumTarget == nullptr) {
     auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S057);
     dia.labels = {
@@ -325,16 +325,16 @@ void Resolver::visit(CaseValueExpr *expr) {
   expr->variant = it->second;
 }
 
-TypeSymbol *Resolver::getTargetType() {
+EnumType *Resolver::getTargetType() {
   if (auto s = dynamic_cast<SwitchStmt *>(currentSwitch)) {
-    if (s->value->resolvedType->kind == TypeSymbol::TypeKind::ENUM) {
-      return s->value->resolvedType;
+    if (auto en = dyn_cast<EnumType>(s->value->resolvedType)) {
+      return en;
     }
   }
 
   if (auto m = dynamic_cast<MatchExpr *>(currentSwitch)) {
-    if (m->value->resolvedType->kind == TypeSymbol::TypeKind::ENUM) {
-      return m->value->resolvedType;
+    if (auto en = dyn_cast<EnumType>(m->value->resolvedType)) {
+      return en;
     }
   }
 
@@ -398,9 +398,8 @@ void Resolver::visit(MatchExpr *expr) {
 
   auto *targetType = expr->value->resolvedType;
 
-  if (targetType->kind == TypeSymbol::TypeKind::ENUM) {
-    if (expr->usedVariants.size() != targetType->variants.size() &&
-        !expr->hasDefault) {
+  if (auto en = dyn_cast<EnumType>(targetType)) {
+    if (expr->usedVariants.size() != en->variants.size() && !expr->hasDefault) {
       auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S064);
       dia.labels = {
           {expr->span, "this match does not handle every enum variant", true},
@@ -414,7 +413,7 @@ void Resolver::visit(MatchExpr *expr) {
       engine.emit(dia);
       recover.recover();
     }
-  } else if (targetType->kind == TypeSymbol::TypeKind::PRIMITIVE) {
+  } else if (targetType->kind == TypeKind::PRIMITIVE) {
     if (!expr->hasDefault) {
       auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S064);
       dia.labels = {

@@ -1,13 +1,23 @@
 #include "hrd/Imported/ImportedSymbolBuilder.h"
 #include "hrd/MetaData/MetaData.h"
 #include "hrd/SemanticAnalyzer/symbol/TypeSymbol.h"
+#include "hrd/util/Error.h"
 #include <cstddef>
 
 void ImportedSymbolBuilder::linkType(TypeMeta &type) {
   auto file = getFile(type.path);
   auto symbol = getTypeSymbol(file, type.name);
   if (type.parent.has_value()) {
-    symbol->base = getOrCreateTypeRef(type.parent.value());
+
+    auto obj = dynamic_cast<ObjectType *>(symbol);
+    if (obj == nullptr) {
+      Error::internal("illegal type kind");
+    }
+    auto r = getOrCreateTypeRef(type.parent.value());
+    if (!isa<ObjectType>(r)) {
+      Error::internal("illegal type kind");
+    }
+    obj->base = dyn_cast<ObjectType>(r);
   }
 
   for (auto &f : type.fields) {
@@ -44,16 +54,20 @@ void ImportedSymbolBuilder::linkMethod(MethodMeta &method) {
     return;
   }
 
-  if (symbol->owner == nullptr || symbol->owner->memberScope == nullptr) {
+  if (symbol->owner == nullptr) {
     Error::internal("imported init has invalid owner");
   }
 
   auto &fields = summary.initFields[symbol];
+  auto obj = dynamic_cast<ObjectType *>(symbol->owner);
+  if (!method.initializedFields.empty() && obj == nullptr) {
+    Error::internal("illegal type kind");
+  }
 
   for (const auto &fieldName : method.initializedFields) {
-    auto it = symbol->owner->memberScope->value.find(fieldName);
+    auto it = obj->memberScope->value.find(fieldName);
 
-    if (it == symbol->owner->memberScope->value.end()) {
+    if (it == obj->memberScope->value.end()) {
       Error::internal("failed to resolve initialized field '" + fieldName +
                       "' in type '" + symbol->owner->name + "'");
     }

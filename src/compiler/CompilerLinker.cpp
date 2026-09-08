@@ -37,6 +37,9 @@ bool CompilerLinker::link(const LinkInput &input) {
   for (const auto &library : input.libraries) {
     storage.push_back(library.string());
   }
+  for (const auto &natvie : input.natives) {
+    storage.push_back(natvie.string());
+  }
 
   storage.push_back("-o");
   storage.push_back(input.output.string());

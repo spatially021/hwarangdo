@@ -35,8 +35,7 @@ llvm::Value *llvmCodegen::lowerReceiverPtr(MIRPlace *place, FuncContext &ctx) {
   auto *addr = lowerPlace(place, ctx).dst;
   auto *ty = place->symbol->typeSymbol;
 
-  if (ty->kind == TypeSymbol::TypeKind::CLASS &&
-      dynamic_cast<MIRLocalPlace *>(place)) {
+  if (ty->kind == TypeKind::CLASS && dynamic_cast<MIRLocalPlace *>(place)) {
     return builder.CreateLoad(builder.getPtrTy(), addr, "receiver.ptr");
   }
 

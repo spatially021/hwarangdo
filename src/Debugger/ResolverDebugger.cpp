@@ -87,7 +87,7 @@ void ResolverDebugger::debug(Scope *scope) {
     depth--;
   }
 
-  if (!scope->methodMap.empty()) {
+  /* if (!scope->methodMap.empty()) {
     cout << ident() << "<methods>\n";
     depth++;
 
@@ -147,7 +147,7 @@ void ResolverDebugger::debug(Scope *scope) {
     }
 
     depth--;
-  }
+  } */
 
   for (auto &s : scope->children) {
     if (!s) {

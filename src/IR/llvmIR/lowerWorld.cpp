@@ -3,7 +3,7 @@
 #include "hrd/SemanticAnalyzer/symbol/TypeSymbol.h"
 
 LoweredValue llvmCodegen::lowerSpawnExpr(MIRSpawnExpr *expr, FuncContext &ctx) {
-  TypeSymbol *entityType = expr->entityType;
+  ObjectType *entityType = dyn_cast<ObjectType>(expr->entityType);
 
   llvm::Type *llvmEntityTy = getLayoutType(entityType);
   llvm::Value *size = getSizeOf(llvmEntityTy);
@@ -42,7 +42,7 @@ LoweredValue llvmCodegen::lowerSpawnExpr(MIRSpawnExpr *expr, FuncContext &ctx) {
   if (destroyIt == defaultDestroys.end()) {
     throw std::runtime_error("fail to find entity destroy");
   }
-  auto *on = expr->entityType->memberScope->onDestroy.get();
+  auto *on = entityType->onDestroy.get();
 
   llvm::Function *onDestroyFn = nullptr;
 

@@ -256,7 +256,8 @@ void ParserDebugger::visit(FuncDecl *decl) {
   joinAccept(decl->params, ", ");
   cout << ")\n";
   depth++;
-  decl->body->accept(this);
+  if (decl->body != nullptr)
+    decl->body->accept(this);
   depth--;
 }
 void ParserDebugger::visit(VarDecl *decl) {

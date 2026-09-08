@@ -72,13 +72,11 @@ void Resolver::visit(NameExpr *expr) {
     auto *type = table.getType(expr->name);
 
     if (type) {
-      if (type->kind == TypeSymbol::TypeKind::ENUM) {
+      if (isa<EnumType>(type) || isa<ObjectType>(type)) {
         expr->resolvedType = type;
         expr->resolved = type;
         return;
       }
-
-      // TODO: 추후 static 메서드 추가 시 타입 이름 식의 허용 범위 확장 필요.
       auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S072);
       dia.labels = {
           {expr->span, "type '" + expr->name + "' cannot be used as a value",
@@ -97,9 +95,10 @@ void Resolver::visit(NameExpr *expr) {
     if (currentType == nullptr) {
       Error::internal("currentType is nullptr");
     }
-
-    if (currentType->baseName.has_value() && currentType->base) {
-      symbol = lookLocalValue(expr->name, currentType->base->memberScope);
+    if (auto obj = dyn_cast<ObjectType>(currentType)) {
+      if (obj->baseName.has_value() && obj->base) {
+        symbol = lookLocalValue(expr->name, obj->base->memberScope);
+      }
     }
 
     if (!symbol) {
@@ -135,7 +134,7 @@ void Resolver::visit(AssignExpr *expr) {
   if (auto arr = dynamic_cast<ArrayTypeSymbol *>(expr->target->resolvedType)) {
     if (arr->baseType == expr->value->resolvedType) {
       if (auto g = dynamic_cast<GenericSymbol *>(arr->baseType)) {
-        if (g->origin->kind == TypeSymbol::TypeKind::HANDLE) {
+        if (g->origin->kind == TypeKind::HANDLE) {
           auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S132);
           dia.labels = {
               {expr->value->span,
@@ -175,7 +174,7 @@ void Resolver::visit(AssignExpr *expr) {
     recover.recover();
   }
 
-  if (expr->target->resolvedType->kind == TypeSymbol::TypeKind::CLASS) {
+  if (expr->target->resolvedType->kind == TypeKind::CLASS) {
     auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S075);
     dia.labels = {
         {expr->target->span, "this observer cannot be reassigned", true},
@@ -203,8 +202,8 @@ void Resolver::visit(MemberExpr *expr) {
     Error::internal(expr->span, "fail to cast symbol");
   }
 
-  if (symbol->kind == TypeSymbol::TypeKind::ENUM) {
-    expr->resolved = lookupEnumVariant(symbol, expr->member, expr->span);
+  if (auto en = dyn_cast<EnumType>(symbol)) {
+    expr->resolved = lookupEnumVariant(en, expr->member, expr->span);
     expr->resolvedType = symbol;
     return;
   }
@@ -228,14 +227,17 @@ void Resolver::visit(MemberExpr *expr) {
   }
 
   ValueSymbol *member = nullptr;
+  if (auto obj = dyn_cast<ObjectType>(symbol)) {
+    for (auto *type = obj; type != nullptr; type = type->base) {
+      auto it = type->memberScope->value.find(expr->member);
 
-  for (auto *type = symbol; type != nullptr; type = type->base) {
-    auto it = type->memberScope->value.find(expr->member);
-
-    if (it != type->memberScope->value.end()) {
-      member = it->second.get();
-      break;
+      if (it != type->memberScope->value.end()) {
+        member = it->second.get();
+        break;
+      }
     }
+  } else {
+    Error::internal("illegal type kind");
   }
 
   if (member == nullptr) {

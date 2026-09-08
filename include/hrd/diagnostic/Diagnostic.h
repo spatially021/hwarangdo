@@ -89,6 +89,12 @@ enum class DiagnosticCode {
   HRD_P068,
   HRD_P069,
   HRD_P070,
+  HRD_P071,
+  HRD_P072,
+  HRD_P073,
+  HRD_P074,
+  HRD_P075,
+  HRD_P076,
 
   HRD_S001,
   HRD_S002,
@@ -223,6 +229,9 @@ enum class DiagnosticCode {
   HRD_S131,
   HRD_S132,
   HRD_S133,
+  HRD_S134,
+  HRD_S135,
+  HRD_S136,
 
   HRD_H001,
   HRD_H002,

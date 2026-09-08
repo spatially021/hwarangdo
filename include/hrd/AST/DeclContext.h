@@ -5,4 +5,5 @@ enum class DeclContext {
   BLOCK,
   CLASSBODY,
   IMPLBODY,
+  TRAITBODY,
 };

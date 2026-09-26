@@ -12,6 +12,8 @@ public:
 public:
   // ----- adds -----
   pair<bool, SourceSpan> addValue(unique_ptr<ValueSymbol> valueSymbol);
+  void addGenericParam(GenericParamSymbol *symbol);
+  void addGenericParam(const string &name, GenericParamSymbol *symbol);
 
   // ----- gets -----
   Scope *getRootScope();
@@ -19,6 +21,7 @@ public:
   Scope *getTopLevelScope();
   int getScoopID();
   ValueSymbol *getValue(const string &name);
+  GenericParamSymbol *getGenericParam(const string &name);
 
   // ----- act -----
   void enter();

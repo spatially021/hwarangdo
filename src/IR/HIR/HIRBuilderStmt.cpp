@@ -1,7 +1,6 @@
 #include "hrd/AST/Expr.h"
 #include "hrd/AST/Stmt.h"
 #include "hrd/IR/HIR/HIRBuilder.h"
-#include "hrd/IR/HIR/HIRDecl.h"
 #include "hrd/IR/HIR/HIRExpr.h"
 #include "hrd/IR/HIR/HIRPattern.h"
 #include "hrd/IR/HIR/HIRStmt.h"
@@ -250,13 +249,6 @@ unique_ptr<HIRCasePattern> HIRBuilder::lowerCaseValue(CaseValueExpr *expr) {
   }
 
   if (dynamic_cast<NameExpr *>(expr->value.get())) {
-    auto typeIt = program->typeDeclMap.find(expr->variant->typeSymbol);
-
-    if (typeIt == program->typeDeclMap.end() || typeIt->second == nullptr) {
-      Error::internal(expr->value->span,
-                      "failed to find enum HIR type declaration");
-    }
-
     if (expr->variant == nullptr) {
       Error::internal("expect variant but nullptr");
     }
@@ -278,15 +270,6 @@ unique_ptr<HIRCasePattern> HIRBuilder::lowerCaseValue(CaseValueExpr *expr) {
                       "enum case receiver type is nullptr");
     }
 
-    auto typeIt = program->typeDeclMap.find(type);
-
-    if (typeIt == program->typeDeclMap.end() || typeIt->second == nullptr) {
-      Error::internal(expr->span, "failed to find enum HIR type declaration");
-    }
-
-    if (typeIt->second->typeDeclKind != HIRTypeDeclKind::Enum) {
-      Error::internal(expr->span, "enum case receiver is not enum type");
-    }
     if (expr->variant == nullptr) {
       Error::internal("expect variant but nullptr");
     }
@@ -316,12 +299,6 @@ unique_ptr<HIRCasePattern> HIRBuilder::lowerCaseValue(CaseValueExpr *expr) {
   }
 
   if (dynamic_cast<CallExpr *>(expr->value.get())) {
-    auto typeIt = program->typeDeclMap.find(expr->variant->typeSymbol);
-
-    if (typeIt == program->typeDeclMap.end() || typeIt->second == nullptr) {
-      Error::internal(expr->value->span,
-                      "failed to find enum HIR type declaration");
-    }
     if (expr->variant == nullptr) {
       Error::internal("expect variant but nullptr");
     }
@@ -420,7 +397,7 @@ unique_ptr<HIRStmt> HIRBuilder::lowerSwitch(SwitchStmt *stmt) {
   }
 
   return make_unique<HIRSwitchStmt>(stmt->span, std::move(condition),
-                                    std::move(cases));
+                                    std::move(cases), stmt->hasDefault);
 }
 
 unique_ptr<HIRStmt> HIRBuilder::lowerValueTransfer(ValueTransferStmt *stmt) {

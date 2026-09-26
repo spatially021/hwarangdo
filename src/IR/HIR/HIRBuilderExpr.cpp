@@ -1,7 +1,6 @@
 #include "hrd/AST/Decl.h"
 #include "hrd/AST/Expr.h"
 #include "hrd/IR/HIR/HIRBuilder.h"
-#include "hrd/IR/HIR/HIRDecl.h"
 #include "hrd/IR/HIR/HIRExpr.h"
 #include "hrd/IR/HIR/HIRStmt.h"
 #include "hrd/IR/HIR/HIRSymbol.h"
@@ -53,9 +52,9 @@ unique_ptr<HIRExpr> HIRBuilder::lowerImplictCall(CallExpr *expr) {
         lowerCallArg(expr->arguments[i].get(), (*symbol)->params[i]));
   }
 
-  return make_unique<HIRMethodCallExpr>(expr->span, std::move(receiver),
-                                        methodDecl, std::move(args),
-                                        expr->resolvedType);
+  return make_unique<HIRMethodCallExpr>(
+      expr->span, std::move(receiver), methodDecl, std::move(args),
+      expr->resolvedGenericParams, expr->resolvedType, expr->substitution);
 }
 
 std::unique_ptr<HIRExpr> HIRBuilder::lowerCall(CallExpr *expr) {
@@ -94,8 +93,9 @@ std::unique_ptr<HIRExpr> HIRBuilder::lowerCall(CallExpr *expr) {
 
   auto rType = expr->resolvedType;
 
-  return make_unique<HIRMethodCallExpr>(expr->span, std::move(receiver),
-                                        methodDecl, std::move(args), rType);
+  return make_unique<HIRMethodCallExpr>(
+      expr->span, std::move(receiver), methodDecl, std::move(args),
+      expr->resolvedGenericParams, rType, expr->substitution);
 }
 
 unique_ptr<HIRValueExpr> HIRBuilder::lowerCallArg(Expr *expr,
@@ -144,12 +144,12 @@ unique_ptr<HIRExpr> HIRBuilder::lowerCast(CastExpr *expr) {
 unique_ptr<HIRExpr> HIRBuilder::lowerMatch(MatchExpr *expr) {
   unique_ptr<HIRValueExpr> cond = lowerValue(expr->value.get());
   vector<unique_ptr<HIRCase>> cases;
-  for (auto &c : expr->cases) {
+  for (auto &c : expr->clauses) {
     cases.push_back(lowerCase(c.get()));
   }
   TypeSymbol *type = expr->resolvedType;
   return make_unique<HIRMatchExpr>(expr->span, type, std::move(cond),
-                                   std::move(cases));
+                                   std::move(cases), expr->hasDefault);
 }
 
 unique_ptr<HIRExpr> HIRBuilder::lowerSpawn(SpawnExpr *expr) {
@@ -180,28 +180,8 @@ unique_ptr<HIRExpr> HIRBuilder::lowerSpawn(SpawnExpr *expr) {
     args.push_back(lowerExpr(a.get()));
   }
 
-  HIRMethodDecl *init = nullptr;
-
-  auto it = program->typeDeclMap.find(expr->spawnType->resolved);
-
-  if (it == program->typeDeclMap.end()) {
-    Error::internal(expr->span, "fail to find TypeDecl");
-  }
-
-  HIRTypeDecl *decl = it->second;
-
-  if (expr->resolvedInit != nullptr) {
-    auto [result, method] = lookupInit(decl, expr->resolvedInit);
-    if (result) {
-      init = method;
-    } else {
-      Error::internal(expr->span,
-                      "fail to find method : " + expr->resolvedInit->name);
-    }
-  }
-
   return make_unique<HIRSpawnExpr>(expr->span, handle, storageKind, entity,
-                                   init, std::move(args));
+                                   expr->resolvedInit, std::move(args));
 }
 
 unique_ptr<HIRExpr> HIRBuilder::lowerView(ViewExpr *expr) {
@@ -253,14 +233,16 @@ unique_ptr<HIRExpr> HIRBuilder::lowerInitCall(CallExpr *expr) {
     }
 
     return make_unique<HIRStructInitExpr>(
-        expr->span, methodDecl, std::move(args), expr->resolvedType, true);
+        expr->span, methodDecl, std::move(args), expr->resolvedGenericParams,
+        expr->resolvedType, true);
   }
   vector<unique_ptr<HIRExpr>> args;
 
   auto rType = expr->resolvedType;
 
   return make_unique<HIRStructInitExpr>(expr->span, nullptr, std::move(args),
-                                        rType, true);
+                                        expr->resolvedGenericParams, rType,
+                                        true);
 }
 
 unique_ptr<HIRExpr> HIRBuilder::lowerLiteral(LiteralExpr *expr) {

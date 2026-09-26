@@ -118,7 +118,7 @@ void ParserDebugger::visit(MatchExpr *expr) {
   expr->value->accept(this);
   cout << ")\n";
   depth++;
-  for (auto c : expr->cases)
+  for (auto c : expr->clauses)
     c->accept(this);
   depth--;
 }
@@ -198,7 +198,7 @@ void ParserDebugger::visit(EmptyStmt *) {}
 // declare ParserDebugger::visitor methods
 void ParserDebugger::visit(ClassDecl *decl) {
   cout << ident() << "[classDecl] name : " << decl->name << " , baseClass : "
-       << (decl->baseClass.has_value() ? decl->baseClass.value().str : " ")
+       << (decl->baseClass.has_value() ? decl->baseClass.value()->type : " ")
        << " , implements : ";
   for (auto s : decl->traits)
     cout << s.str << " ";
@@ -232,7 +232,7 @@ void ParserDebugger::visit(EnumDecl *decl) {
   depth--;
 }
 void ParserDebugger::visit(ImplDecl *decl) {
-  cout << ident() << "[implDecl] target : " << decl->target.str << "\n";
+  cout << ident() << "[implDecl] target : " << decl->target.name.text << "\n";
   depth++;
   for (auto m : decl->LinkedImplMethods)
     m->accept(this);

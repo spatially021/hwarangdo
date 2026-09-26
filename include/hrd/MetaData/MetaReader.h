@@ -41,6 +41,7 @@ private:
     Semicolon,
     Equal,
     Arrow,
+    At,
 
     End,
   };
@@ -80,6 +81,7 @@ private:
   EnumVariantMeta readVariant();
 
   TypeRef readTypeRef();
+  std::vector<std::string> readGenericParams();
 
   DefaultValueMeta readDefaultValue();
   ResolvedLit readLiteral();

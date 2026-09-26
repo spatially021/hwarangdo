@@ -323,19 +323,10 @@ class GenericTypeNode : public TypeNode {
 public:
   string baseName;
   vector<TypeNode::Ptr> typeArgs;
-  enum class GenericKind {
-    HANDLE,
-    OPTION,
-    RESULT,
 
-  } gKind;
   GenericTypeNode(Token s, const string &base, vector<TypeNode::Ptr> args)
-      : TypeNode(NKind::GENERIC_TYPE, s), typeArgs(std::move(args)) {
-    if (base == "Handle") {
-      gKind = GenericKind::HANDLE;
-    } else {
-      Error::internal(span, "unknwon genertic type : " + s.text);
-    }
-  }
+      : TypeNode(NKind::GENERIC_TYPE, s), baseName(base),
+        typeArgs(std::move(args)) {}
+
   void accept(ASTVisitor *visitor) override { visitor->visit(this); }
 };

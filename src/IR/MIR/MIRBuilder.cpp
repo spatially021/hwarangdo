@@ -23,11 +23,19 @@ void MIRBuilder::lowerType(HIRTypeDecl *type) {
       make_unique<MIRFunction>(nullptr, type->type);
   auto raw = defaultint.get();
   defaultint->isDefaultInit = true;
-  program->functions.push_back(std::move(defaultint));
+  if (type->symbol->isGenericDecl) {
+    program->genericOrigin.push_back(std::move(defaultint));
+    program->genericMap[type->symbol].symbol = type->symbol;
+    program->genericMap[type->symbol].defaultInit = raw;
+
+  } else {
+    program->functions.push_back(std::move(defaultint));
+  }
   currentFunc = raw;
 
   BlockID defaultInitBlock = makeBlock();
   currentBlock = defaultInitBlock;
+  raw->entry = defaultInitBlock;
   lowerBlock(type->defaultInitBlock.get());
   if (!hasTerminator(currentBlock)) {
     getBlock(currentBlock)->terminator = ReturnTerminator(nullptr);
@@ -52,6 +60,11 @@ void MIRBuilder::lowerMethod(TypeSymbol *owner, HIRMethodDecl *method) {
       getBlock(currentBlock)->terminator = ReturnTerminator(nullptr);
     }
   }
-
-  program->functions.push_back(std::move(func));
+  if (owner->isGenericDecl || method->symbol->isGenericDecl) {
+    program->genericOrigin.push_back(std::move(func));
+    program->genericMap[owner].methods.push_back(raw);
+    program->genericMap[owner].methodMap.emplace(method->symbol, raw);
+  } else {
+    program->functions.push_back(std::move(func));
+  }
 }

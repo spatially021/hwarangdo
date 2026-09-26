@@ -5,6 +5,7 @@
 #include "hrd/SemanticAnalyzer/symbol/MethodSymbol.h"
 #include "hrd/SemanticAnalyzer/symbol/TypeSymbol.h"
 #include "hrd/SourceSpan.h"
+#include "hrd/diagnostic/Diagnostic.h"
 #include "hrd/util/Error.h"
 #include "hrd/util/TypeResolver.h"
 
@@ -109,9 +110,26 @@ void TypeResolver::resolveTypeNode(TypeNode *type, TypeResolverContext &ctx) {
     Error::internal("type node is nullptr");
   }
 
-  if (dynamic_cast<BuiltinTypeNode *>(type) ||
-      dynamic_cast<IdentifierTypeNode *>(type)) {
-    auto *symbol = ctx.table.getType(type);
+  auto &table = ctx.table;
+
+  if (auto built = dynamic_cast<BuiltinTypeNode *>(type)) {
+    auto symbol = table.getBuilt(built->type);
+    if (symbol == nullptr) {
+      Error::internal(type->span, "fail to get built");
+    }
+
+    type->resolved = symbol;
+    return;
+  }
+
+  if (auto *identifier = dynamic_cast<IdentifierTypeNode *>(type)) {
+    TypeSymbol *symbol = nullptr;
+
+    symbol = table.scopeManger.getGenericParam(identifier->name);
+
+    if (symbol == nullptr) {
+      symbol = ctx.table.getType(type);
+    }
 
     if (symbol == nullptr) {
       auto dia = ctx.engine.makeDiagnostic(DiagnosticCode::HRD_S013);
@@ -176,111 +194,60 @@ void TypeResolver::resolveTypeNode(TypeNode *type, TypeResolverContext &ctx) {
       args.push_back(arg->resolved);
     }
 
-    TypeSymbol *origin = nullptr;
-
-    switch (generic->gKind) {
-    case GenericTypeNode::GenericKind::HANDLE: {
-      if (args.size() != 1) {
-        auto dia = ctx.engine.makeDiagnostic(DiagnosticCode::HRD_S109);
-        dia.labels = {
-            {generic->span,
-             "Handle has " + to_string(args.size()) + " type arguments", true},
-        };
-        dia.notes = {
-            "Handle requires exactly one type argument",
-        };
-        dia.helps = {
-            "use 'Handle<T>' with one entity type",
-        };
-        ctx.engine.emit(dia);
-        ctx.recover.recover();
-      }
-
-      auto *target = args[0];
-
-      if (target->kind != TypeKind::CLASS ||
-          target->type == Symbol::SymbolType::MAIN) {
-        auto dia = ctx.engine.makeDiagnostic(DiagnosticCode::HRD_S110);
-        dia.labels = {
-            {generic->typeArgs[0]->span,
-             "type '" + target->name + "' cannot be used as a Handle target",
-             true},
-        };
-        dia.notes = {
-            "Handle can only reference non-Main class entity types",
-        };
-        dia.helps = {
-            "use a class entity type as the Handle target",
-        };
-        ctx.engine.emit(dia);
-        ctx.recover.recover();
-      }
-
-      origin = ctx.table.registry.getHandle();
-      break;
-    }
-
-    case GenericTypeNode::GenericKind::OPTION: {
-      if (args.size() != 1) {
-        auto dia = ctx.engine.makeDiagnostic(DiagnosticCode::HRD_S111);
-        dia.labels = {
-            {generic->span,
-             "Option has " + to_string(args.size()) + " type arguments", true},
-        };
-        dia.notes = {
-            "Option requires exactly one type argument",
-        };
-        dia.helps = {
-            "use 'Option<T>' with one type",
-        };
-        ctx.engine.emit(dia);
-        ctx.recover.recover();
-      }
-
-      origin = ctx.table.registry.getOption();
-      break;
-    }
-
-    case GenericTypeNode::GenericKind::RESULT: {
-      if (args.size() != 2) {
-        auto dia = ctx.engine.makeDiagnostic(DiagnosticCode::HRD_S112);
-        dia.labels = {
-            {generic->span,
-             "Result has " + to_string(args.size()) + " type arguments", true},
-        };
-        dia.notes = {
-            "Result requires a value type and an error type",
-        };
-        dia.helps = {
-            "use 'Result<T, E>' with exactly two type arguments",
-        };
-        ctx.engine.emit(dia);
-        ctx.recover.recover();
-      }
-
-      if (args[1]->kind != TypeKind::ERROR) {
-        auto dia = ctx.engine.makeDiagnostic(DiagnosticCode::HRD_S113);
-        dia.labels = {
-            {generic->typeArgs[1]->span,
-             "type '" + args[1]->name + "' is not an error type", true},
-        };
-        dia.notes = {
-            "the second type argument of Result must be an error type",
-        };
-        dia.helps = {
-            "use an error type as the second Result argument",
-        };
-        ctx.engine.emit(dia);
-        ctx.recover.recover();
-      }
-
-      origin = ctx.table.registry.getResult();
-      break;
-    }
-    }
+    TypeSymbol *origin = ctx.table.getType(generic);
 
     if (origin == nullptr) {
-      Error::internal(generic->span, "generic origin type is nullptr");
+      auto dia = ctx.engine.makeDiagnostic(DiagnosticCode::HRD_S013);
+      dia.labels = {
+          {type->span, "type '" + type->type + "' is not declared", true},
+      };
+      dia.helps = {
+          "declare the type before using it",
+      };
+      ctx.engine.emit(dia);
+      ctx.recover.recover();
+    }
+
+    auto &params = origin->getGenericParams();
+
+    if (params.empty()) {
+      auto dia = ctx.engine.makeDiagnostic(DiagnosticCode::HRD_S139);
+      dia.labels = {
+          {type->span, "this type does not declare generic parameters", true},
+          {origin->decl->span, "this target type is generic", false},
+      };
+      dia.notes = {
+          "an impl must match the generic structure of its target type",
+      };
+      dia.helps = {
+          "declare the generic parameters required by the target type",
+      };
+      ctx.engine.emit(dia);
+      ctx.recover.recover();
+    }
+
+    if (params.size() != args.size()) {
+      auto dia = ctx.engine.makeDiagnostic(DiagnosticCode::HRD_S140);
+      dia.labels = {
+          {type->span,
+           "this impl provides " + std::to_string(args.size()) +
+               " generic arguments",
+           true},
+          {origin->decl->span,
+           "this type requires " + std::to_string(params.size()) +
+               " generic arguments",
+           false},
+      };
+      dia.notes = {
+          "the number of generic arguments in an impl must match the target "
+          "type's generic parameters",
+      };
+      dia.helps = {
+          "provide exactly " + std::to_string(params.size()) +
+              " generic arguments for this impl target",
+      };
+      ctx.engine.emit(dia);
+      ctx.recover.recover();
     }
 
     generic->resolved = ctx.table.registry.getOrCreateGeneric(origin, args);

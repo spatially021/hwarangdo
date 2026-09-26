@@ -72,7 +72,6 @@ void llvmCodegen::lowerTerminator(MIRTerminator &terminator, FuncContext &ctx) {
                  },
 
                  [&](const ReturnTerminator &t) {
-                   //  emitCleanups(ctx);
                    if (t.value) {
                      builder.CreateRet(lowerValue(t.value.get(), ctx).value);
                    } else {
@@ -90,7 +89,7 @@ void llvmCodegen::lowerTerminator(MIRTerminator &terminator, FuncContext &ctx) {
                      lowerNativeSwitch(t, ctx);
                      return;
                    }
-                   if (type->kind == TypeKind::ENUM) {
+                   if (isa<EnumType>(type->base())) {
                      lowerEnumSwitch(t, ctx);
                      return;
                    }

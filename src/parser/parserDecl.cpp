@@ -12,6 +12,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <utility>
 #include <vector>
 // TODO(parser): Refactor declaration parsing.
 // Current declaration parsing is patched around class/struct/impl-specific
@@ -40,14 +41,13 @@ Ptr Parser::classDecl(DeclPrefix prefix) {
   Token t = prefix.startToken;
   advance(); // class 처리
 
-  Token name = consume(TKind::IDENTIFIER, DiagnosticCode::HRD_P041,
-                       "expected class name after 'class'");
-  optional<StringDatum> base;
+  TypeName name = parseTypeName(DiagnosticCode::HRD_P041,
+                                "expected struct name after 'class'");
+  optional<TypeNode::Ptr> base;
 
   if (check(TKind::EXTENDS)) {
     advance(); // extends 처리
-    auto b = advance();
-    base = StringDatum(b.text, b.span);
+    base = parseType();
   }
 
   vector<StringDatum> traits;
@@ -102,7 +102,7 @@ Ptr Parser::classDecl(DeclPrefix prefix) {
   consume(TKind::RIGHT_BRACE, DiagnosticCode::HRD_P040,
           "expected '}' after class body");
   Token end = previous(); // '}' 토큰
-  return make_shared<ClassDecl>(makeSpan(t.span, end.span), name.text, fields,
+  return make_shared<ClassDecl>(makeSpan(t.span, end.span), name, fields,
                                 methods, base, traits, modi);
 }
 
@@ -124,9 +124,8 @@ Ptr Parser::structDecl(DeclPrefix prefix) {
   AModifier modi = prefix.modi;
   Token t = prefix.startToken;
   advance(); // struct 처리
-
-  Token name = consume(TKind::IDENTIFIER, DiagnosticCode::HRD_P041,
-                       "expected struct name after 'struct'");
+  TypeName name = parseTypeName(DiagnosticCode::HRD_P041,
+                                "expected struct name after 'struct'");
 
   consume(TKind::LEFT_BRACE, DiagnosticCode::HRD_P043,
           "expected '{' to begin struct body");
@@ -182,7 +181,7 @@ Ptr Parser::structDecl(DeclPrefix prefix) {
   consume(TKind::RIGHT_BRACE, DiagnosticCode::HRD_P040,
           "expected '}' after struct body");
   auto end = previous();
-  return make_shared<StructDecl>(makeSpan(t.span, end.span), name.text, fields,
+  return make_shared<StructDecl>(makeSpan(t.span, end.span), name, fields,
                                  inits, modi);
 }
 
@@ -270,10 +269,28 @@ Ptr Parser::functionDecl(DeclPrefix prefix, bool) {
   }
   Token name = consume(TKind::IDENTIFIER, DiagnosticCode::HRD_P042,
                        "expected method name here");
+  vector<shared_ptr<Param>> params;
+  vector<GenericParamDecl> genericParams;
+  if (check(TKind::LESS)) {
+    advance(); // <
+
+    genericParams.push_back(
+        GenericParamDecl{consume(TKind::IDENTIFIER, DiagnosticCode::HRD_P041,
+                                 "expected generic parameter name")});
+
+    while (check(TKind::COMMA)) {
+      advance();
+
+      genericParams.push_back(
+          GenericParamDecl{consume(TKind::IDENTIFIER, DiagnosticCode::HRD_P041,
+                                   "expected generic parameter name")});
+    }
+
+    consume(TKind::GREATER, DiagnosticCode::HRD_P050,
+            "expected '>' after generic parameters");
+  }
   consume(TKind::LEFT_PAREN, DiagnosticCode::HRD_P046,
           "expected '(' after method name");
-
-  vector<shared_ptr<Param>> params;
 
   while (!check(TKind::RIGHT_PAREN) && !isAtEnd()) {
     if (isType()) {
@@ -336,7 +353,8 @@ Ptr Parser::functionDecl(DeclPrefix prefix, bool) {
     consume(TKind::SEMICOLON, DiagnosticCode::HRD_P044,
             "expect ';' to end trait method declaration");
     return make_shared<TraitSig>(makeSpan(t.span, end.span), returnType,
-                                 name.text, params, prefix);
+                                 name.text, params, std::move(genericParams),
+                                 prefix);
   }
 
   if (prefix.isExtern) {
@@ -344,7 +362,8 @@ Ptr Parser::functionDecl(DeclPrefix prefix, bool) {
     consume(TKind::SEMICOLON, DiagnosticCode::HRD_P044,
             "expect ';' to end extern method");
     return make_shared<FuncDecl>(makeSpan(t.span, end.span), name.text, params,
-                                 returnType, nullptr, prefix);
+                                 returnType, std::move(genericParams), nullptr,
+                                 prefix);
   }
 
   consume(TKind::LEFT_BRACE, DiagnosticCode::HRD_P043,
@@ -354,7 +373,8 @@ Ptr Parser::functionDecl(DeclPrefix prefix, bool) {
   auto end = previous();
 
   return make_shared<FuncDecl>(makeSpan(t.span, end.span), name.text, params,
-                               returnType, stmt, prefix);
+                               returnType, std::move(genericParams), stmt,
+                               prefix);
 }
 
 Ptr Parser::implDecl(DeclPrefix prefix) {
@@ -375,9 +395,8 @@ Ptr Parser::implDecl(DeclPrefix prefix) {
   Token t = prefix.startToken;
   advance(); // impl 처리
 
-  Token tok = consume(TKind::IDENTIFIER, DiagnosticCode::HRD_P041,
-                      "expected type name after 'impl'");
-  StringDatum target = StringDatum(tok.text, tok.span);
+  auto target = parseTypeName(DiagnosticCode::HRD_P041,
+                              "expected type name after 'impl'");
   vector<StringDatum> traits;
   unordered_map<TypeSymbol *, SourceSpan> traitSapn;
   if (check(TKind::COLON)) {
@@ -408,7 +427,7 @@ Ptr Parser::implDecl(DeclPrefix prefix) {
     if (isFunc()) {
       auto func = dynamic_pointer_cast<FuncDecl>(declaration(contexts.back()));
       if (func == nullptr) {
-        Error::internal(tok, "expect func but not func");
+        Error::internal(peek(), "expect func but not func");
       }
       methods.push_back(func);
     } else {
@@ -424,8 +443,8 @@ Ptr Parser::implDecl(DeclPrefix prefix) {
   consume(TKind::RIGHT_BRACE, DiagnosticCode::HRD_P040,
           "expected '}' after impl body");
   auto end = previous();
-  return make_shared<ImplDecl>(makeSpan(t.span, end.span), target, traits,
-                               methods, modi);
+  return make_shared<ImplDecl>(makeSpan(t.span, end.span), std::move(target),
+                               traits, methods, modi);
 }
 
 Ptr Parser::traitDecl(DeclPrefix prefix) {
@@ -475,8 +494,8 @@ Ptr Parser::enumDecl(DeclPrefix prefix) {
   AModifier modi = prefix.modi;
   Token t = prefix.startToken;
   advance(); // enum 처리
-  Token name = consume(TKind::IDENTIFIER, DiagnosticCode::HRD_P041,
-                       "expected enum name after 'enum'");
+  TypeName name = parseTypeName(DiagnosticCode::HRD_P041,
+                                "expected struct name after 'enum'");
 
   consume(TKind::LEFT_BRACE, DiagnosticCode::HRD_P043,
           "expected '{' to begin enum body");
@@ -513,46 +532,41 @@ Ptr Parser::enumDecl(DeclPrefix prefix) {
   consume(TKind::RIGHT_BRACE, DiagnosticCode::HRD_P040,
           "expected '}' after enum body");
   auto end = previous();
-  return make_shared<EnumDecl>(makeSpan(t, end), name.text, variants, modi);
+  return make_shared<EnumDecl>(makeSpan(t, end), name, variants, modi);
 }
 
-Ptr Parser::handleDecl(DeclPrefix prefix) {
-  Token t = prefix.startToken;
-  notFunc(prefix);
-  advance(); // Handle 처리
-  consume(TKind::LESS, DiagnosticCode::HRD_P049, "expected '<' after 'Handle'");
-  TypeNode::Ptr inner;
-  if (isType()) {
-    inner = parseType();
-  } else {
-    auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_P021);
-    dia.labels = {
-        {peek().span, "expected type name for Handle", true},
-    };
-    engine.emit(dia);
-    recover.recover();
-  }
-  consume(TKind::GREATER, DiagnosticCode::HRD_P050,
-          "expected '>' after type name");
-  auto end = previous();
-  Token name = consume(TKind::IDENTIFIER, DiagnosticCode::HRD_P045,
-                       "expected handle name after Handle<T>");
-  vector<TypeNode::Ptr> tys;
-  tys.push_back(inner);
-  TypeNode::Ptr type = make_shared<GenericTypeNode>(t, t.text, tys);
+// Ptr Parser::handleDecl(DeclPrefix prefix) {
+//   Token t = prefix.startToken;
+//   notFunc(prefix);
+//   advance(); // Handle 처리
+//   consume(TKind::LESS, DiagnosticCode::HRD_P049, "expected '<' after
+//   'Handle'"); TypeNode::Ptr type; if (isType()) {
+//     type = parseType();
+//   } else {
+//     auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_P021);
+//     dia.labels = {
+//         {peek().span, "expected type name for Handle", true},
+//     };
+//     engine.emit(dia);
+//     recover.recover();
+//   }
+//   auto end = previous();
+//   Token name = consume(TKind::IDENTIFIER, DiagnosticCode::HRD_P045,
+//                        "expected handle name after Handle<T>");
 
-  Expr::Ptr init = nullptr;
-  if (check(TKind::EQUAL)) {
-    advance(); //=처리
-    init = expression();
-  }
-  consume(TKind::SEMICOLON, DiagnosticCode::HRD_P044,
-          "expected ';' after handle declaration");
-  auto e = previous();
-  return make_shared<VarDecl>(makeSpan(t, e), name.text, type, contexts.back(),
-                              init, !prefix.isConst, prefix.isRoot,
-                              prefix.modi);
-}
+//   Expr::Ptr init = nullptr;
+//   if (check(TKind::EQUAL)) {
+//     advance(); //=처리
+//     init = expression();
+//   }
+//   consume(TKind::SEMICOLON, DiagnosticCode::HRD_P044,
+//           "expected ';' after handle declaration");
+//   auto e = previous();
+//   return make_shared<VarDecl>(makeSpan(t, e), name.text, type,
+//   contexts.back(),
+//                               init, !prefix.isConst, prefix.isRoot,
+//                               prefix.modi);
+// }
 
 Ptr Parser::initDecl(DeclPrefix prefix) {
   Token t = prefix.startToken;

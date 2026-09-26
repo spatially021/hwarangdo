@@ -9,11 +9,13 @@
 #include "hrd/IR/MIR/MIRNode.h"
 #include "hrd/IR/MIR/MIRProgram.h"
 #include "hrd/SemanticAnalyzer/SymbolTable/SymbolTable.h"
+#include "hrd/SemanticAnalyzer/symbol/GenericOwner.h"
 #include "hrd/SemanticAnalyzer/symbol/TypeSymbol.h"
 #include "hrd/SemanticAnalyzer/symbol/ValueSymbol.h"
 #include "hrd/compiler/CompilerContexts.h"
 #include "magic_enum/magic_enum.hpp"
 #include <memory>
+#include <optional>
 
 struct LoopContext {
   BlockID continueTarget = 0;
@@ -29,7 +31,7 @@ struct MatchContext {
 
 struct SwitchData {
   BlockID cond;
-  BlockID defaultTarget;
+  optional<BlockID> defaultTarget;
   BlockID cleanup;
   BlockID join;
   IRScope &scope;
@@ -86,6 +88,7 @@ private:
   BasicBlock *getBlock(BlockID id);
   bool hasTerminator(BlockID id);
   ValueSymbol *makeTemp(TypeSymbol *type);
+  bool isGenericDecl(GenericOnwer *owner);
 
 private:
   void lowerType(HIRTypeDecl *type);

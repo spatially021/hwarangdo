@@ -232,6 +232,12 @@ enum class DiagnosticCode {
   HRD_S134,
   HRD_S135,
   HRD_S136,
+  HRD_S137,
+  HRD_S138,
+  HRD_S139,
+  HRD_S140,
+  HRD_S141,
+  HRD_S142,
 
   HRD_H001,
   HRD_H002,

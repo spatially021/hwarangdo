@@ -1,6 +1,7 @@
 #pragma once
 
 enum class TypeKind {
+  None,
   CLASS,
   ENUM,
   STRUCT,
@@ -18,4 +19,5 @@ enum class TypeKind {
   ARRAY,
   GENERIC,
   ROOT,
+  GENERIC_PARAM,
 };

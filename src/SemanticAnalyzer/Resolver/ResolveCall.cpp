@@ -3,6 +3,7 @@
 #include "hrd/AST/Stmt.h"
 #include "hrd/SemanticAnalyzer/MethodBucket.h"
 #include "hrd/SemanticAnalyzer/Resolver.h"
+#include "hrd/SemanticAnalyzer/ResolverStruct.h"
 #include "hrd/SemanticAnalyzer/Scope.h"
 #include "hrd/SemanticAnalyzer/symbol/MethodSymbol.h"
 #include "hrd/SemanticAnalyzer/symbol/TypeSymbol.h"
@@ -12,6 +13,7 @@
 #include "hrd/util/Helper.h"
 #include <cstddef>
 #include <string>
+#include <utility>
 #include <variant>
 #include <vector>
 
@@ -19,17 +21,148 @@ inline Expr::Ptr cloneExpr(const Expr::Ptr &expr) {
   return expr ? expr->deepCopy() : nullptr;
 }
 
-MethodSymbol *
-Resolver::resolveMethodOverload(SourceSpan span,
+using GenericSubstitution = unordered_map<GenericParamSymbol *, TypeSymbol *>;
+
+TypeSymbol *
+Resolver::substituteGenericType(TypeSymbol *type,
+                                const GenericSubstitution &substitution) {
+
+  if (auto *param = dynamic_cast<GenericParamSymbol *>(type)) {
+    auto it = substitution.find(param);
+
+    // 현재 문맥에서도 아직 결정되지 않은 generic param이면
+    // symbolic 상태 그대로 유지한다.
+    if (it == substitution.end()) {
+      return param;
+    }
+
+    // T -> U 같은 경우도 있을 수 있으므로 재귀적으로 끝까지 따라간다.
+    if (it->second == param) {
+      return param;
+    }
+
+    return substituteGenericType(it->second, substitution);
+  }
+
+  if (auto *generic = dynamic_cast<GenericSymbol *>(type)) {
+    vector<TypeSymbol *> args;
+    args.reserve(generic->args.size());
+
+    bool changed = false;
+
+    for (auto *arg : generic->args) {
+      auto *resolved = substituteGenericType(arg, substitution);
+
+      args.push_back(resolved);
+
+      if (resolved != arg) {
+        changed = true;
+      }
+    }
+
+    if (!changed) {
+      return generic;
+    }
+
+    return table.registry.getOrCreateGeneric(generic->origin, args);
+  }
+
+  if (auto *array = dynamic_cast<ArrayTypeSymbol *>(type)) {
+    auto *base = substituteGenericType(array->baseType, substitution);
+
+    if (base == array->baseType) {
+      return array;
+    }
+
+    return table.registry.getOrCreateArray(base, array->sizeValue);
+  }
+
+  return type;
+}
+
+GenericSubstitution Resolver::makeGenericSubstitution(GenericSymbol *generic) {
+  GenericSubstitution substitution;
+
+  if (generic == nullptr) {
+    return substitution;
+  }
+
+  auto *origin = generic->origin;
+  auto &params = origin->getGenericParams();
+
+  if (params.size() != generic->args.size()) {
+    Error::internal("generic argument count mismatch: " + generic->name);
+  }
+
+  for (size_t i = 0; i < params.size(); ++i) {
+    substitution.emplace(params[i], generic->args[i]);
+  }
+
+  return substitution;
+}
+
+GenericSubstitution Resolver::makeMethodSubstitution(MethodSymbol *symbol,
+                                                     CallExpr *expr) {
+  GenericSubstitution substitution;
+
+  if (symbol == nullptr) {
+    return substitution;
+  }
+
+  auto &params = symbol->getGenericParams();
+
+  if (params.size() != expr->genericArgs.size()) {
+    return substitution;
+  }
+
+  for (size_t i = 0; i < params.size(); ++i) {
+    substitution.emplace(params[i], expr->genericArgs[i]->resolved);
+  }
+
+  return substitution;
+}
+
+ResolvedMethod
+Resolver::resolveMethodOverload(CallExpr *expr,
                                 const vector<MethodSymbol *> &bucket,
-                                const vector<Expr *> &args) {
-  return resolveOverload<MethodSymbol>(
-      span, bucket, args, [](MethodSymbol *m) { return m->params.size(); },
-      [](MethodSymbol *m, size_t i) { return m->params[i]->typeSymbol; },
+                                const vector<Expr *> &args, TypeSymbol *scope) {
+  GenericSubstitution typeSubstitution;
+
+  if (auto *generic = dynamic_cast<GenericSymbol *>(scope)) {
+    typeSubstitution = makeGenericSubstitution(generic);
+  }
+
+  MethodSymbol *reolved = resolveOverload<MethodSymbol>(
+      expr->span, bucket, args,
+
+      [](MethodSymbol *m) { return m->params.size(); },
+
+      [&](MethodSymbol *m, size_t i) -> TypeSymbol * {
+        auto *type = m->params[i]->typeSymbol;
+
+        if (type == nullptr) {
+          Error::internal("method param type is null: " + m->name);
+        }
+        GenericSubstitution substitution = typeSubstitution;
+
+        auto methodSubstitution = makeMethodSubstitution(m, expr);
+
+        substitution.insert(methodSubstitution.begin(),
+                            methodSubstitution.end());
+
+        return substituteGenericType(type, substitution);
+      },
+
       [](MethodSymbol *m, size_t i) {
         return get_if<std::monostate>(&m->params[i]->defaultValue) == nullptr;
       },
+
       "no matching method found", "ambiguous method call");
+
+  auto methodSubstitution = makeMethodSubstitution(reolved, expr);
+  typeSubstitution.insert(methodSubstitution.begin(), methodSubstitution.end());
+  return {reolved, substituteGenericType(reolved->returnType, typeSubstitution),
+          std::move(typeSubstitution)};
 }
 
 RuntimeSymbol *
@@ -221,15 +354,24 @@ void Resolver::resolveInit(CallExpr *expr) {
     recover.recover();
   }
 
-  auto *best = resolveMethodOverload(expr->span, bucket, args);
+  if (expr->resolvedGenericParams.empty()) {
+    expr->resolvedType = type;
+  } else {
+    expr->resolvedType =
+        table.registry.getOrCreateGeneric(type, expr->resolvedGenericParams);
+    expr->resolvedGenericParams.clear();
+  }
+
+  auto resolved = resolveMethodOverload(expr, bucket, args, expr->resolvedType);
+  auto best = resolved.method;
   for (size_t i = 0; i < best->params.size(); ++i) {
     if (auto value =
             dynamic_cast<DefaultValueExpr *>(expr->arguments[i].get())) {
       value->resolved = best->params[i]->defaultValue;
     }
   }
+
   expr->resolved = best;
-  expr->resolvedType = type;
 }
 
 void Resolver::ResolveEnumVariant(CallExpr *expr) {
@@ -241,6 +383,15 @@ void Resolver::ResolveEnumVariant(CallExpr *expr) {
     Error::internal(expr->span, "illegal symbol kindi");
   }
 
+  if (!expr->receiver || !expr->receiver->resolvedType) {
+    Error::internal(expr->span, "unresolved enum receiver type");
+  }
+
+  auto type = expr->receiver->resolvedType;
+  GenericSubstitution substitution;
+  if (auto generic = dyn_cast<GenericSymbol>(type)) {
+    substitution = makeGenericSubstitution(generic);
+  }
   if (expr->arguments.size() > 1) {
     auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S022);
     dia.labels = {
@@ -269,18 +420,38 @@ void Resolver::ResolveEnumVariant(CallExpr *expr) {
       recover.recover();
     }
 
-    if (!isAssignable(variant->payloadType, arg->resolvedType)) {
-      auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S024);
-      dia.labels = {
-          {expr->span, "expected payload of a different type", true},
-      };
-      dia.notes = {{"the payload type must match the type declared by the enum "
-                    "variant"}};
-      engine.emit(dia);
-      recover.recover();
-    }
+    {
+      TypeSymbol *payloadType = variant->payloadType;
+      if (!substitution.empty()) {
+        payloadType = substituteGenericType(payloadType, substitution);
+      }
+      if (payloadType->kind == TypeKind::CLASS) {
+        auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S016);
 
-    arg->resolvedType = implicitCasting(arg, variant->payloadType).first;
+        dia.labels = {
+            {expr->span, "entity type used here", true},
+        };
+
+        dia.notes = {
+            {"enum variant payloads cannot contain entity types"},
+        };
+
+        engine.emit(dia);
+        recover.recover();
+      }
+      if (!isAssignable(payloadType, arg->resolvedType)) {
+        auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S024);
+        dia.labels = {
+            {expr->span, "expected payload of a different type", true},
+        };
+        dia.notes = {
+            {"the payload type must match the type declared by the enum "
+             "variant"}};
+        engine.emit(dia);
+        recover.recover();
+      }
+      arg->resolvedType = implicitCasting(arg, payloadType).first;
+    }
   } else {
     if (variant->payloadType != nullptr) {
       auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S025);
@@ -292,13 +463,7 @@ void Resolver::ResolveEnumVariant(CallExpr *expr) {
       recover.recover();
     }
   }
-
-  if (!expr->receiver || !expr->receiver->resolvedType) {
-    Error::internal(expr->span, "unresolved enum receiver type");
-  }
-
-  // EnumName.Variant(...) 의 결과 타입은 enum 자체
-  expr->resolvedType = expr->receiver->resolvedType;
+  expr->resolvedType = type;
 }
 
 void Resolver::resolveCall(CallExpr *expr, TypeSymbol *scope, bool isImplict) {
@@ -357,8 +522,8 @@ void Resolver::resolveCall(CallExpr *expr, TypeSymbol *scope, bool isImplict) {
     args.push_back(a.get());
   }
 
-  auto *best = resolveMethodOverload(expr->span, *result.bucket, args);
-
+  auto resolved = resolveMethodOverload(expr, *result.bucket, args, scope);
+  auto best = resolved.method;
   checkMethodAccess(expr, best, isImplict);
 
   expr->resolved = best;
@@ -374,7 +539,8 @@ void Resolver::resolveCall(CallExpr *expr, TypeSymbol *scope, bool isImplict) {
     }
   }
 
-  expr->resolvedType = best->returnType;
+  expr->resolvedType = resolved.returnType;
+  expr->substitution = std::move(resolved.substitution);
 }
 
 int Resolver::rankOf(const ArgMatchKind &kind) {
@@ -407,34 +573,39 @@ bool Resolver::isBetterThan(const vector<ArgMatchKind> &a,
   return better;
 }
 
-ArgMatchKind Resolver::matchArgument(Expr *arg, TypeSymbol *param,
-                                     bool hasInit) {
-
-  if (dynamic_cast<DefaultValueExpr *>(arg)) {
-    if (hasInit) {
-      return ArgMatchKind::DefaultArg;
-    } else {
-      return ArgMatchKind::Invalid;
-    }
-  }
-
-  if (arg->resolvedType == param) {
+ArgMatchKind Resolver::matchType(TypeSymbol *arg, TypeSymbol *param) {
+  if (arg == param) {
     return ArgMatchKind::Exact;
   }
 
-  if (auto lit = dynamic_cast<LiteralExpr *>(arg)) {
-    if (canImplicitlyLiteralConvert(lit, param).first) {
-      return ArgMatchKind::ImplicitCast;
-    }
-
-  } else {
-    if (Helper::canImplicitlyConvert(arg->resolvedType, param).first) {
-      return ArgMatchKind::ImplicitCast;
-    }
+  if (Helper::canImplicitlyConvert(arg, param).first) {
+    return ArgMatchKind::ImplicitCast;
   }
 
   return ArgMatchKind::Invalid;
 }
+
+ArgMatchKind Resolver::matchArgument(Expr *arg, TypeSymbol *param,
+                                     bool hasInit) {
+  if (dynamic_cast<DefaultValueExpr *>(arg)) {
+    return hasInit ? ArgMatchKind::DefaultArg : ArgMatchKind::Invalid;
+  }
+
+  if (auto *lit = dynamic_cast<LiteralExpr *>(arg)) {
+    if (arg->resolvedType == param) {
+      return ArgMatchKind::Exact;
+    }
+
+    if (canImplicitlyLiteralConvert(lit, param).first) {
+      return ArgMatchKind::ImplicitCast;
+    }
+
+    return ArgMatchKind::Invalid;
+  }
+
+  return matchType(arg->resolvedType, param);
+}
+
 bool Resolver::tryResolveRuntime(CallExpr *expr) {
   if (expr->receiver == nullptr) {
     return false;
@@ -529,8 +700,8 @@ void Resolver::ResolveStaticMethod(CallExpr *expr, TypeSymbol *scope) {
     args.push_back(a.get());
   }
 
-  auto *best = resolveMethodOverload(expr->span, *result.bucket, args);
-
+  auto resolved = resolveMethodOverload(expr, *result.bucket, args, scope);
+  auto best = resolved.method;
   checkMethodAccess(expr, best, false);
 
   expr->resolved = best;
@@ -547,12 +718,22 @@ void Resolver::ResolveStaticMethod(CallExpr *expr, TypeSymbol *scope) {
     }
   }
 
-  expr->resolvedType = best->returnType;
+  expr->resolvedType = resolved.returnType;
+  expr->substitution = std::move(resolved.substitution);
 }
 
 void Resolver::visit(CallExpr *expr) {
   if (expr->callType != CallExpr::CallType::UNRESOLVED) {
     return;
+  }
+
+  for (auto &g : expr->genericArgs) {
+    g->accept(this);
+
+    if (g->resolved == nullptr) {
+      Error::internal(g->span, "generic method argument was not resolved");
+    }
+    expr->resolvedGenericParams.push_back(g->resolved);
   }
 
   if (tryResolveRuntime(expr)) {
@@ -612,13 +793,35 @@ void Resolver::visit(CallExpr *expr) {
       ResolveStaticMethod(expr, expr->receiver->resolvedType);
       return;
     } else {
-      auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S029);
-      dia.labels = {
-          {expr->span, "static methods are not supported yet", true},
-      };
-      dia.notes = {{"support for static methods has not been implemented yet"}};
-      engine.emit(dia);
-      recover.recover();
+      if (auto gen = dyn_cast<GenericSymbol>(expr->receiver->resolvedType)) {
+        if (auto enu = dyn_cast<EnumType>(gen->origin)) {
+          auto it = enu->variantMap.find(expr->methodName);
+          if (it == enu->variantMap.end()) {
+            auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S028);
+            dia.labels = {
+                {expr->span, "unknown variant referenced here", true},
+            };
+            dia.notes = {
+                {"the target enum does not declare a variant with this name"}};
+            engine.emit(dia);
+            recover.recover();
+          }
+
+          expr->callType = CallExpr::CallType::PAYLOAD_CALL;
+          expr->resolved = it->second;
+          ResolveEnumVariant(expr);
+          return;
+        }
+
+        if (gen->origin->kind == TypeKind::CLASS ||
+            gen->origin->kind == TypeKind::STRUCT) {
+
+          expr->callType = CallExpr::CallType::FUNC_CALL;
+          ResolveStaticMethod(expr, expr->receiver->resolvedType);
+          return;
+        }
+      }
+      Error::internal("illegal call kind");
     }
   } else {
     auto *ownerType = expr->receiver->resolvedType;
@@ -669,6 +872,10 @@ MethodBucket Resolver::getMethodBucket(str name, TypeSymbol *scope,
     if (sIt != obj->staticMethodMap.end()) {
       return {&sIt->second, StaticMethodAsInstance};
     }
+  }
+
+  if (auto gen = dyn_cast<GenericSymbol>(scope)) {
+    return getMethodBucket(name, gen->origin, isStatic);
   }
 
   return {nullptr, NotFound};

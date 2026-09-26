@@ -73,6 +73,19 @@ void Resolver::visit(NameExpr *expr) {
 
     if (type) {
       if (isa<EnumType>(type) || isa<ObjectType>(type)) {
+        std::vector<TypeSymbol *> resolvedGenericArgs;
+
+        for (auto &g : expr->genericArgs) {
+          g->accept(this);
+          resolvedGenericArgs.push_back(g->resolved);
+        }
+
+        if (!resolvedGenericArgs.empty()) {
+          type = table.registry.getOrCreateGeneric(type, resolvedGenericArgs);
+        }
+        if (type == nullptr) {
+          Error::internal(expr->span, "type is nullptr");
+        }
         expr->resolvedType = type;
         expr->resolved = type;
         return;
@@ -151,6 +164,7 @@ void Resolver::visit(AssignExpr *expr) {
           engine.emit(dia);
         }
       }
+      expr->resolvedType = expr->target->resolvedType;
       return;
     }
   }
@@ -202,28 +216,30 @@ void Resolver::visit(MemberExpr *expr) {
     Error::internal(expr->span, "fail to cast symbol");
   }
 
-  if (auto en = dyn_cast<EnumType>(symbol)) {
+  if (auto en = getEnumType(symbol)) {
     expr->resolved = lookupEnumVariant(en, expr->member, expr->span);
-    expr->resolvedType = symbol;
+    expr->resolvedType = expr->object->resolvedType;
     return;
   }
 
   auto *objectType = expr->object->resolvedType;
 
-  if (dynamic_cast<GenericSymbol *>(objectType)) {
-    auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S030);
-    dia.labels = {
-        {expr->object->span,
-         "handle value cannot be used for direct member access", true},
-    };
-    dia.notes = {
-        "entity members can only be accessed through an observer",
-    };
-    dia.helps = {
-        "create an observer with 'world.view' before accessing the member",
-    };
-    engine.emit(dia);
-    recover.recover();
+  if (auto gen = dynamic_cast<GenericSymbol *>(objectType)) {
+    if (gen->origin == table.registry.getHandle()) {
+      auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S030);
+      dia.labels = {
+          {expr->object->span,
+           "handle value cannot be used for direct member access", true},
+      };
+      dia.notes = {
+          "entity members can only be accessed through an observer",
+      };
+      dia.helps = {
+          "create an observer with 'world.view' before accessing the member",
+      };
+      engine.emit(dia);
+      recover.recover();
+    }
   }
 
   ValueSymbol *member = nullptr;
@@ -235,6 +251,19 @@ void Resolver::visit(MemberExpr *expr) {
         member = it->second.get();
         break;
       }
+    }
+  } else if (auto gen = dyn_cast<GenericSymbol>(symbol)) {
+    if (auto o = dyn_cast<ObjectType>(gen->origin)) {
+      for (auto *type = o; type != nullptr; type = type->base) {
+        auto it = type->memberScope->value.find(expr->member);
+
+        if (it != type->memberScope->value.end()) {
+          member = it->second.get();
+          break;
+        }
+      }
+    } else {
+      Error::internal(expr->span, "illegal type kind");
     }
   } else {
     Error::internal("illegal type kind");
@@ -311,7 +340,14 @@ void Resolver::visit(MemberExpr *expr) {
   }
 
   expr->resolved = member;
-  expr->resolvedType = member->typeSymbol;
+  if (auto *gen = dyn_cast<GenericSymbol>(symbol)) {
+    GenericSubstitution substitution = makeGenericSubstitution(gen);
+    expr->resolvedType =
+        substituteGenericType(member->typeSymbol, substitution);
+
+  } else {
+    expr->resolvedType = member->typeSymbol;
+  }
 }
 
 void Resolver::visit(CastExpr *expr) {

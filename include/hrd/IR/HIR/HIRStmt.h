@@ -123,10 +123,11 @@ struct HIRCase : HIRStmt {
 struct HIRSwitchStmt : HIRStmt {
   std::unique_ptr<HIRValueExpr> cond;
   std::vector<std::unique_ptr<HIRCase>> cases;
+  bool hasDefault = false;
   HIRSwitchStmt(SourceSpan s, std::unique_ptr<HIRValueExpr> c,
-                std::vector<std::unique_ptr<HIRCase>> ca)
+                std::vector<std::unique_ptr<HIRCase>> ca, bool d)
       : HIRStmt(s, HIRNodeKind::SwitchStmt), cond(std::move(c)),
-        cases(std::move(ca)) {}
+        cases(std::move(ca)), hasDefault(d) {}
 };
 
 struct HIRValueTransferStmt : HIRStmt {

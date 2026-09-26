@@ -25,19 +25,13 @@ std::unique_ptr<HIRValueExpr> HIRBuilder::lowerVariantValue(CallExpr *expr) {
   if (expr->resolvedType == nullptr) {
     Error::internal(expr->span, "enum variant resolved type is nullptr");
   }
-
-  auto it = program->typeDeclMap.find(expr->resolvedType);
-  if (it == program->typeDeclMap.end() || it->second == nullptr) {
-    Error::internal(expr->span,
-                    "failed to find enum type declaration for variant call");
+  if (expr->arguments[0].get() == nullptr) {
+    Error::internal(expr->span, "enum payload expr is nullptr");
   }
+  std::unique_ptr<HIRExpr> payload = lowerExpr(expr->arguments[0].get());
 
-  auto *owner = it->second;
-
-  std::unique_ptr<HIRExpr> payload = nullptr;
-
-  return std::make_unique<HIRVariantValueExpr>(expr->span, owner->type, *symbol,
-                                               std::move(payload));
+  return std::make_unique<HIRVariantValueExpr>(expr->span, expr->resolvedType,
+                                               *symbol, std::move(payload));
 }
 
 std::unique_ptr<HIRValueExpr> HIRBuilder::lowerVariantValue(MemberExpr *expr) {
@@ -52,16 +46,8 @@ std::unique_ptr<HIRValueExpr> HIRBuilder::lowerVariantValue(MemberExpr *expr) {
     Error::internal(expr->span, "enum variant resolved type is nullptr");
   }
 
-  auto it = program->typeDeclMap.find(expr->resolvedType);
-  if (it == program->typeDeclMap.end() || it->second == nullptr) {
-    Error::internal(expr->span,
-                    "failed to find enum type declaration for variant member");
-  }
-
-  auto *owner = it->second;
-
-  return std::make_unique<HIRVariantValueExpr>(expr->span, owner->type, symbol,
-                                               nullptr);
+  return std::make_unique<HIRVariantValueExpr>(expr->span, expr->resolvedType,
+                                               symbol, nullptr);
 }
 
 std::unique_ptr<HIRPlaceExpr> HIRBuilder::lowerPlace(NameExpr *expr) {
@@ -153,6 +139,10 @@ HIRBuilder::lowerArrayAccess(ArrayAccessExpr *expr) {
   } else if (auto *array =
                  dynamic_cast<ArrayAccessExpr *>(expr->object.get())) {
     object = lowerArrayAccess(array);
+  } else if (auto *member = dynamic_cast<MemberExpr *>(expr->object.get())) {
+    object = lowerMember(member);
+  } else {
+    Error::internal("illegal ast kind");
   }
 
   if (object == nullptr) {

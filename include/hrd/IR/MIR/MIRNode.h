@@ -88,7 +88,7 @@ public:
   }
 
   BasicBlock *getBlock(BlockID id) {
-    if (id > blocks.size()) {
+    if (id >= blocks.size()) {
       Error::internal("unknown id");
     } else {
       return blocks[id].get();

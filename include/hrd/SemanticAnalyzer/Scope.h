@@ -32,7 +32,7 @@ public:
   vector<std::unique_ptr<Scope>> children;
 
   unordered_map<string, unique_ptr<ValueSymbol>> value;
-
+  unordered_map<string, GenericParamSymbol *> genericParams;
   int id = 0;
   string name = "";
 };

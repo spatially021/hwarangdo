@@ -4,11 +4,13 @@
 #include "hrd/AST/Decl.h"
 #include "hrd/BuiltInType.h"
 #include "hrd/Inputs.h"
+#include "hrd/SemanticAnalyzer/symbol/GenericOwner.h"
 #include "hrd/SemanticAnalyzer/symbol/MethodSymbol.h"
 #include "hrd/SourceSpan.h"
 #include "hrd/enums/StorageKind.h"
 #include "hrd/enums/TypeKind.h"
 #include "hrd/util/Error.h"
+#include <cstddef>
 #include <cstdint>
 #include <llvm/ADT/APInt.h>
 #include <memory>
@@ -19,8 +21,9 @@
 
 class Scope;
 struct Module;
+class GenericParamSymbol;
 
-class TypeSymbol : public Symbol {
+class TypeSymbol : public Symbol, public GenericOnwer {
 public:
   TypeSymbol();
   ~TypeSymbol();
@@ -34,8 +37,21 @@ public:
 
   bool isInhereted = false;
   bool isReserved = false;
+
   pair<bool, SourceSpan> addMethod(unique_ptr<MethodSymbol> symbol);
+
   vector<MethodSymbol *> &getMethods() { return methods; }
+  std::vector<MethodSymbol *> getAllMethods() const {
+    std::vector<MethodSymbol *> result;
+    result.reserve(methodOwn.size());
+
+    for (const auto &method : methodOwn) {
+      result.push_back(method.get());
+    }
+
+    return result;
+  }
+  virtual TypeSymbol *base() { return this; }
 
 protected:
   vector<std::unique_ptr<MethodSymbol>> methodOwn;
@@ -115,6 +131,8 @@ public:
 
   unordered_map<string, EnumVariantSymbol *> variantMap;
 
+  Scope *scope = nullptr;
+
   EnumType() : TypeSymbol() { kind = TypeKind::ENUM; }
 
   ~EnumType() = default;
@@ -129,7 +147,7 @@ protected:
 
 class TraitType : public TypeSymbol {
 public:
-  unordered_map<string, vector<TraitSig *>> traitSigs;
+  unordered_map<string, vector<MethodSymbol *>> traitSigs;
 
   TraitType() : TypeSymbol() { kind = TypeKind::TRAIT; }
 
@@ -167,7 +185,7 @@ public:
   string targetName;
 
   ObjectType *target = nullptr;
-
+  Scope *scope = nullptr;
   ImplSymbol() { type = Symbol::SymbolType::IMPL; }
 
   static bool classof(const TypeSymbol *type) {
@@ -473,6 +491,8 @@ public:
   static bool classof(const TypeSymbol *type) {
     return type->kind == TypeKind::GENERIC;
   }
+
+  TypeSymbol *base() override { return origin; }
 };
 
 class ArrayTypeSymbol : public TypeSymbol {
@@ -488,6 +508,27 @@ public:
 
   static bool classof(const TypeSymbol *type) {
     return type->kind == TypeKind::ARRAY;
+  }
+};
+
+class GenericParamSymbol : public TypeSymbol {
+public:
+  GenericOnwer *owner;
+  size_t index;
+  SourceSpan span;
+  GenericParamSymbol(const Token tok, GenericOnwer *o, size_t i)
+      : owner(o), index(i), span(tok.span) {
+    name = tok.text;
+    kind = TypeKind::GENERIC_PARAM;
+  }
+  GenericParamSymbol(const string &n, GenericOnwer *o, size_t i)
+      : owner(o), index(i) {
+    name = n;
+    kind = TypeKind::GENERIC_PARAM;
+  }
+
+  static bool classof(const TypeSymbol *type) {
+    return type->kind == TypeKind::GENERIC_PARAM;
   }
 };
 

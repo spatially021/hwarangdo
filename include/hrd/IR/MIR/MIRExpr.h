@@ -167,15 +167,20 @@ struct MIRCallExpr : MIRValue {
   std::unique_ptr<MIRValue> base = nullptr;
   vector<unique_ptr<MIRValue>> args;
   MethodSymbol *method = nullptr;
+  vector<TypeSymbol *> genericArgs;
+  unordered_map<GenericParamSymbol *, TypeSymbol *> substitution;
   MIRCallExpr(unique_ptr<MIRValue> b, vector<unique_ptr<MIRValue>> a,
-              MethodSymbol *m, TypeSymbol *t)
-      : MIRValue(t), base(std::move(b)), args(std::move(a)), method(m) {}
+              vector<TypeSymbol *> g, MethodSymbol *m, TypeSymbol *t,
+              unordered_map<GenericParamSymbol *, TypeSymbol *> s)
+      : MIRValue(t), base(std::move(b)), args(std::move(a)), method(m),
+        genericArgs(std::move(g)), substitution(std::move(s)) {}
   unique_ptr<MIRValue> clone() const override {
     vector<unique_ptr<MIRValue>> ar;
     for (auto &a : args) {
       ar.push_back(a->clone());
     }
-    return make_unique<MIRCallExpr>(base->clone(), std::move(ar), method, type);
+    return make_unique<MIRCallExpr>(base->clone(), std::move(ar), genericArgs,
+                                    method, type, substitution);
   }
 };
 
@@ -210,17 +215,19 @@ struct MIRStructInitExpr : MIRValue {
   TypeSymbol *structType = nullptr;
   MethodSymbol *initMethod = nullptr;
   std::vector<unique_ptr<MIRValue>> args;
-
+  vector<TypeSymbol *> genericArgs;
   MIRStructInitExpr(TypeSymbol *s, MethodSymbol *i,
-                    vector<unique_ptr<MIRValue>> a, TypeSymbol *t)
-      : MIRValue(t), structType(s), initMethod(i), args(std::move(a)) {}
+                    vector<unique_ptr<MIRValue>> a, vector<TypeSymbol *> g,
+                    TypeSymbol *t)
+      : MIRValue(t), structType(s), initMethod(i), args(std::move(a)),
+        genericArgs(std::move(g)) {}
   unique_ptr<MIRValue> clone() const override {
     vector<unique_ptr<MIRValue>> ar;
     for (auto &a : args) {
       ar.push_back(a->clone());
     }
     return make_unique<MIRStructInitExpr>(structType, initMethod, std::move(ar),
-                                          type);
+                                          genericArgs, type);
   }
 };
 

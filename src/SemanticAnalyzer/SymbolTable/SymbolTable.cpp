@@ -57,22 +57,25 @@ SymbolTable::SymbolTable() {
   symbol = make_unique<HandleSymbol>();
   symbol->name = "Handle";
   symbol->kind = TypeKind::HANDLE;
+  symbol->isGenericDecl = true;
+  symbol->addGenericParam(
+      make_unique<GenericParamSymbol>("HT", symbol.get(), 0));
   registry.addBuilt(std::move(symbol));
 
-  symbol = make_unique<ResultSymbol>();
-  symbol->name = "Result";
-  symbol->kind = TypeKind::RESULT;
-  registry.addBuilt(std::move(symbol));
+  // symbol = make_unique<ResultSymbol>();
+  // symbol->name = "Result";
+  // symbol->kind = TypeKind::RESULT;
+  // registry.addBuilt(std::move(symbol));
 
-  symbol = make_unique<OptionSymbol>();
-  symbol->name = "Option";
-  symbol->kind = TypeKind::OPTION;
-  registry.addBuilt(std::move(symbol));
+  // symbol = make_unique<OptionSymbol>();
+  // symbol->name = "Option";
+  // symbol->kind = TypeKind::OPTION;
+  // registry.addBuilt(std::move(symbol));
 
-  symbol = make_unique<ErrorType>();
-  symbol->name = "Error";
-  symbol->kind = TypeKind::ERROR;
-  registry.addBuilt(std::move(symbol));
+  // symbol = make_unique<ErrorType>();
+  // symbol->name = "Error";
+  // symbol->kind = TypeKind::ERROR;
+  // registry.addBuilt(std::move(symbol));
 
   symbol = make_unique<TypeSymbol>();
   symbol->name = "@built";
@@ -131,8 +134,9 @@ Result SymbolTable::add(unique_ptr<Symbol> symbol) {
 }
 
 TypeSymbol *SymbolTable::getType(str name) {
-  assert(registry.getCurrentFile() &&
-         "getType requires an active file context");
+  assert(registry.getCurrentFile());
+  assert(scopeManger.current());
+
   return registry.getType(name);
 }
 

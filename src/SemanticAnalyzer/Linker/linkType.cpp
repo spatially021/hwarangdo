@@ -1,7 +1,7 @@
-#include "hrd/SemanticAnalyzer/Linker.h"
 #include "hrd/AST/Decl.h"
 #include "hrd/AST/Expr.h"
 #include "hrd/AST/Stmt.h"
+#include "hrd/SemanticAnalyzer/Linker.h"
 #include "hrd/SemanticAnalyzer/Scope.h"
 #include "hrd/SemanticAnalyzer/SymbolTable/SymbolTable.h"
 #include "hrd/SemanticAnalyzer/symbol/MethodSymbol.h"
@@ -13,129 +13,11 @@
 #include "hrd/util/Helper.h"
 #include "hrd/util/TypeResolver.h"
 #include <cassert>
+#include <cstddef>
 #include <memory>
 #include <utility>
 #include <vector>
 
-Linker::Linker(LinkerContext &ctx)
-    : table(ctx.table), currentType(ctx.table.registry.getCurrent()),
-      engine(ctx.engine), recover(*this) {}
-
-void Linker::visit(LiteralExpr *) {}
-void Linker::visit(BinaryExpr *expr) {
-  expr->left->accept(this);
-  expr->right->accept(this);
-}
-void Linker::visit(NameExpr *) {}
-void Linker::visit(UnaryExpr *expr) { expr->right->accept(this); }
-void Linker::visit(CallExpr *expr) {
-  if (expr->receiver != nullptr) {
-    expr->receiver->accept(this);
-  }
-  for (auto &a : expr->arguments) {
-    a->accept(this);
-  }
-}
-void Linker::visit(AssignExpr *expr) {
-  expr->target->accept(this);
-  expr->value->accept(this);
-}
-void Linker::visit(MemberExpr *expr) { expr->object->accept(this); }
-void Linker::visit(ArrayAccessExpr *expr) {
-  expr->object->accept(this);
-  expr->index->accept(this);
-}
-void Linker::visit(TernaryExpr *expr) {
-  expr->conditon->accept(this);
-  expr->then->accept(this);
-  expr->else_->accept(this);
-}
-void Linker::visit(ThisExpr *) {}
-void Linker::visit(SuperExpr *) {}
-void Linker::visit(RootExpr *) {}
-void Linker::visit(SelfExpr *) {}
-void Linker::visit(CastExpr *) {}
-void Linker::visit(BuiltInNameExpr *) {}
-void Linker::visit(SpawnExpr *expr) {
-  expr->left->accept(this);
-  expr->spawnType->accept(this);
-}
-void Linker::visit(ViewExpr *expr) {
-  expr->left->accept(this);
-  expr->target->accept(this);
-}
-void Linker::visit(DestroyExpr *expr) {
-  expr->storage->accept(this);
-  expr->target->accept(this);
-}
-void Linker::visit(QuitExpr *) {}
-void Linker::visit(DefaultValueExpr *) {}
-void Linker::visit(Range *expr) {
-  expr->from->accept(this);
-  expr->to->accept(this);
-  if (expr->step) {
-    expr->step->accept(this);
-  }
-}
-void Linker::visit(CaseValueExpr *expr) {
-  expr->value->accept(this);
-  if (expr->arg) {
-    expr->arg->accept(this);
-  }
-}
-void Linker::visit(MatchExpr *expr) {
-  ScopeGuard _(table, expr->blockScope);
-  expr->value->accept(this);
-  for (auto &c : expr->cases) {
-    c->accept(this);
-  }
-}
-void Linker::visit(ArrayLiteralExpr *expr) {
-  for (auto &e : expr->elements) {
-    e->accept(this);
-  }
-}
-
-// Statement Linker::visitor methods
-void Linker::visit(ExprStmt *stmt) { stmt->expr->accept(this); }
-void Linker::visit(BlockStmt *stmt) {
-  ScopeGuard _(table, stmt->blockScope);
-  for (auto s : stmt->statements) {
-    s->accept(this);
-  }
-}
-void Linker::visit(IfStmt *stmt) {
-  stmt->thenBranch->accept(this);
-  if (stmt->elseBranch != nullptr) {
-    stmt->elseBranch->accept(this);
-  }
-}
-void Linker::visit(ForStmt *stmt) {
-  ScopeGuard _(table, stmt->blockScope);
-  stmt->initializer->accept(this);
-  stmt->range->accept(this);
-  stmt->body->accept(this);
-}
-void Linker::visit(WhileStmt *stmt) { stmt->body->accept(this); }
-void Linker::visit(SwitchStmt *stmt) {
-  ScopeGuard _(table, stmt->blockScope);
-  for (auto &c : stmt->clauses) {
-    c->accept(this);
-  }
-}
-void Linker::visit(Case *c) { c->body->accept(this); }
-void Linker::visit(ReturnStmt *stmt) {
-  if (stmt->value != nullptr) {
-    stmt->value->accept(this);
-  }
-}
-void Linker::visit(ValueTransferStmt *stmt) { stmt->value->accept(this); }
-void Linker::visit(BreakStmt *) {}
-void Linker::visit(ContinueStmt *) {}
-void Linker::visit(DeclStmt *stmt) { stmt->decl->accept(this); }
-void Linker::visit(EmptyStmt *) {}
-
-// declare Linker::visitor methods
 void Linker::visit(ClassDecl *decl) {
 
   if (decl->symbol->type == Symbol::SymbolType::MAIN) {
@@ -189,29 +71,7 @@ void Linker::visit(ClassDecl *decl) {
   }
 
   if (decl->baseClass.has_value()) {
-    auto s = decl->baseClass.value();
-    if (table.isType(s.str)) {
-      auto symbol = table.getType(s.str);
-      symbol->decl->isExtended = true;
-      if (symbol->kind != TypeKind::CLASS) {
-        auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S012);
-        dia.labels = {
-            {s.span, "this type is not a class", true},
-
-        };
-        engine.emit(dia);
-        recover.recover();
-      }
-      decl->symbol->base = dyn_cast<ObjectType>(symbol);
-    } else {
-      auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S013);
-      dia.labels = {
-          {s.span, "type '" + s.str + "' not found ", true},
-
-      };
-      engine.emit(dia);
-      recover.recover();
-    }
+    decl->baseClass.value()->accept(this);
   }
   for (auto &t : decl->traits) {
     if (!table.isType(t.str)) {
@@ -270,11 +130,22 @@ void Linker::visit(StructDecl *decl) {
     i->accept(this);
   }
 }
+
 void Linker::visit(EnumDecl *decl) {
+  ScopeGuard _(table, decl->symbol->scope);
   for (auto &v : decl->variants) {
     if (v->payload.has_value()) {
       auto t = v->payload.value().get();
-      auto s = table.getType(t);
+      TypeSymbol *s = nullptr;
+      {
+        auto &map = decl->symbol->getGenericParamMap();
+        auto it = map.find(t->type);
+        if (it == map.end()) {
+          s = table.getType(t);
+        } else {
+          s = it->second;
+        }
+      }
       if (s == nullptr) {
         auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S013);
         dia.labels = {
@@ -294,34 +165,116 @@ void Linker::visit(EnumDecl *decl) {
         recover.recover();
       }
       t->resolved = s;
-      v->symbol->payloadType = table.getType(t);
+      v->symbol->payloadType = s;
     }
   }
 }
-void Linker::visit(ImplDecl *decl) {
-  auto impl = table.registry.getImpl(decl);
-  auto s = decl->target;
 
-  if (!table.isType(s.str)) {
+void Linker::visit(ImplDecl *decl) {
+  ScopeGuard _(table, decl->symbol->scope);
+  auto impl = decl->symbol;
+  auto s = decl->target;
+  Token &name = s.name;
+  if (!table.isType(name.text)) {
     auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S013);
     dia.labels = {
-        {s.span, "type '" + s.str + "' not found ", true},
+        {name.span, "type '" + s.name.text + "' not found ", true},
 
     };
     engine.emit(dia);
     recover.recover();
   }
-  auto symbol = table.getType(s.str);
+  auto symbol = table.getType(s.name.text);
   if (symbol->kind != TypeKind::STRUCT) {
     auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S017);
     dia.labels = {
-        {decl->span, "'" + s.str + "' is not a struct type", true},
+        {decl->span, "'" + name.text + "' is not a struct type", true},
     };
     engine.emit(dia);
     recover.recover();
   }
   auto obj = dyn_cast<ObjectType>(symbol);
   decl->importTarget = obj;
+  {
+    auto &params = obj->getGenericParams();
+    if (params.size() == decl->target.genericParams.size()) {
+      auto &map = impl->getGenericParamMap();
+      for (size_t i = 0; i < params.size(); ++i) {
+        auto n = decl->target.genericParams[i].name.text;
+        auto [__, inserted] = map.emplace(n, params[i]);
+        table.scopeManger.addGenericParam(n, params[i]);
+        if (!inserted) {
+          auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S137);
+          dia.labels = {
+              {decl->target.genericParams[i].name.span,
+               "this generic parameter name is already declared", true},
+          };
+          dia.notes = {
+              "generic parameter names must be unique within the same "
+              "declaration",
+          };
+          dia.helps = {
+              "rename one of the duplicate generic parameters",
+          };
+          engine.emit(dia);
+          recover.recover();
+        }
+      }
+    } else {
+      if (decl->target.genericParams.empty() && !params.empty()) {
+        auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S139);
+        dia.labels = {
+            {decl->span, "this impl does not declare generic parameters", true},
+            {obj->decl->span, "this target type is generic", false},
+        };
+        dia.notes = {
+            "an impl must match the generic structure of its target type",
+        };
+        dia.helps = {
+            "declare the generic parameters required by the target type",
+        };
+        engine.emit(dia);
+        recover.recover();
+      } else if (!decl->target.genericParams.empty() && params.empty()) {
+        auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S138);
+        dia.labels = {
+            {decl->span, "this impl declares generic parameters", true},
+            {obj->decl->span, "this target type is not generic", false},
+        };
+        dia.notes = {
+            "an impl must match the generic structure of its target type",
+        };
+        dia.helps = {
+            "remove the generic parameters from this impl",
+        };
+        engine.emit(dia);
+        recover.recover();
+      } else {
+        auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S140);
+        dia.labels = {
+            {decl->span,
+             "this impl provides " +
+                 std::to_string(decl->target.genericParams.size()) +
+                 " generic arguments",
+             true},
+            {obj->decl->span,
+             "this type requires " + std::to_string(params.size()) +
+                 " generic arguments",
+             false},
+        };
+        dia.notes = {
+            "the number of generic arguments in an impl must match the target "
+            "type's generic parameters",
+        };
+        dia.helps = {
+            "provide exactly " + std::to_string(params.size()) +
+                " generic arguments for this impl target",
+        };
+        engine.emit(dia);
+        recover.recover();
+      }
+    }
+  }
 
   for (auto &c : decl->traits) {
     auto t = table.getType(c.str);
@@ -402,102 +355,7 @@ void Linker::visit(TraitDecl *decl) {
   }
 }
 
-void Linker::visit(FuncDecl *decl) {
-
-  if (decl->returnType == nullptr) {
-    Error::internal(decl->span, "return ast node is nullptr");
-  }
-
-  decl->returnType->accept(this);
-  decl->methodSymbol->returnType = decl->returnType->resolved;
-
-  ScopeGuard _(table, decl->methodSymbol->scope);
-  for (auto &p : decl->params) {
-    p->accept(this);
-    p->symbol->typeSymbol = p->type->resolved;
-    decl->methodSymbol->params.push_back(p->symbol);
-  }
-
-  auto it = currentType->methodMap.find(decl->methodSymbol->name);
-  if (it == currentType->methodMap.end()) {
-    Error::internal(decl->span, "fail to find method map");
-  }
-
-  auto &bucket = it->second;
-  auto raw = decl->methodSymbol;
-  if (auto result = Helper::hasSameMethodSig(bucket, raw); result.result) {
-    auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S018);
-    dia.labels = {
-        {raw->decl->span, "duplicate impl method declared here", true},
-        {result.span, "previous impl method declared here", false}};
-    engine.emit(dia);
-    recover.recover();
-  }
-
-  unique_ptr<ValueSymbol> selfReceiver = make_unique<ValueSymbol>();
-  selfReceiver->typeSymbol = currentType;
-  selfReceiver->name = decl->name + "self";
-  auto rawSelf = selfReceiver.get();
-
-  table.registry.addSelf(std::move(selfReceiver));
-  raw->selfReceiver = rawSelf;
-
-  if (!raw->isExtern) {
-    decl->body->accept(this);
-  }
-}
-void Linker::visit(VarDecl *decl) {
-  decl->type->accept(this);
-  decl->symbol->typeSymbol = decl->type->resolved;
-  if (decl->init) {
-    decl->init->accept(this);
-  }
-}
-
 void Linker::visit(TypeNode *type) {
   TypeResolverContext context = {engine, table, recover};
   TypeResolver::resolveTypeNode(type, context);
 }
-void Linker::visit(ASTNode *) {}
-
-void Linker::visit(TraitSig *sig) {
-  for (auto &p : sig->params) {
-    p->accept(this);
-    sig->symbol->params.push_back(p->symbol);
-  }
-  sig->type->accept(this);
-  sig->symbol->returnType = sig->type->resolved;
-}
-void Linker::visit(Param *param) {
-  param->type->accept(this);
-  param->symbol->typeSymbol = param->type->resolved;
-  if (param->defaultValue.has_value()) {
-    auto expr = param->defaultValue.value().get();
-
-    if (auto lit = dynamic_cast<LiteralExpr *>(expr)) {
-      param->symbol->defaultValue = lit;
-    } else if (auto call = dynamic_cast<CallExpr *>(expr)) {
-      param->symbol->defaultValue = call;
-    } else {
-      Error::internal(param->span, "illegal defaultValue ast kind");
-    }
-  }
-}
-
-void Linker::visit(InitDecl *decl) {
-  ScopeGuard _(table, decl->methodSymbol->scope);
-
-  for (auto &p : decl->params) {
-    p->accept(this);
-    p->symbol->typeSymbol = p->type->resolved;
-    decl->methodSymbol->params.push_back(p->symbol);
-  }
-  decl->body->accept(this);
-}
-
-void Linker::visit(OnDestroyDecl *decl) {
-  ScopeGuard _(table, decl->methodSymbol->scope);
-  decl->body->accept(this);
-}
-
-void Linker::visit(ImportDecl *) {}

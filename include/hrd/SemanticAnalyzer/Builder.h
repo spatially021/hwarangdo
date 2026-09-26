@@ -5,11 +5,13 @@
 #include "hrd/AST/Visitor.h"
 #include "hrd/Recover/BuilderRecover.h"
 #include "hrd/SemanticAnalyzer/SymbolTable/SymbolTable.h"
+#include "hrd/SemanticAnalyzer/symbol/GenericOwner.h"
 #include "hrd/SourceSpan.h"
 #include "hrd/compiler/CompilerContexts.h"
 #include "hrd/diagnostic/DiagnosticEngine.h"
 #include <cassert>
 #include <memory>
+#include <vector>
 
 class Builder : public ASTVisitor {
 public:
@@ -41,5 +43,8 @@ private:
   unique_ptr<TypeSymbol> topLevel;
   void extracted();
   void buildMain(ClassDecl *decl);
+  void addGenericParam(TypeName &type, GenericOnwer *owner);
+  void addGenericParam(vector<GenericParamDecl> &params, GenericOnwer *owner);
+  void checkGenericShadowing(vector<GenericParamDecl> &params);
   BuilderRecover recover;
 };

@@ -16,7 +16,30 @@
 
 #include <string>
 #include <type_traits>
+#include <unordered_set>
 #include <utility>
+
+namespace {
+
+TypeSymbol *getInitType(TypeSymbol *type) {
+  while (auto *generic = dyn_cast<GenericSymbol>(type)) {
+    if (generic->origin == nullptr) {
+      Error::internal("InitChecker: generic type has no origin");
+    }
+
+    type = generic->origin;
+  }
+
+  return type;
+}
+
+bool isFieldTrackedType(TypeSymbol *type) {
+  TypeSymbol *origin = getInitType(type);
+  return origin != nullptr &&
+         (origin->kind == TypeKind::STRUCT || origin->kind == TypeKind::CLASS);
+}
+
+} // namespace
 
 InitChecker::InitChecker(InitChecerContext &ctx)
     : program(ctx.program), initFields(ctx.summary.initFields),
@@ -44,7 +67,7 @@ void InitChecker::prepareImportedSummary() {
       continue;
     }
 
-    TypeSymbol *type = method->owner;
+    TypeSymbol *type = getInitType(method->owner);
 
     if (commonFields.find(type) != commonFields.end()) {
       continue;
@@ -71,6 +94,172 @@ void InitChecker::prepareImportedSummary() {
 
     commonFields[type] = std::move(common);
   }
+}
+
+HIRMethodDecl *InitChecker::findInitDecl(MethodSymbol *method,
+                                         HIRTypeDecl **ownerType) {
+  if (method == nullptr) {
+    return nullptr;
+  }
+
+  for (auto &[_, type] : program->typeDeclMap) {
+    if (type == nullptr) {
+      continue;
+    }
+
+    for (auto &[__, init] : type->initMap) {
+      if (init == nullptr || init->symbol == nullptr) {
+        continue;
+      }
+
+      if (init->symbol == method) {
+        if (ownerType != nullptr) {
+          *ownerType = type;
+        }
+
+        return init;
+      }
+    }
+  }
+
+  return nullptr;
+}
+
+bool InitChecker::ensureInitSummary(MethodSymbol *method) {
+  if (method == nullptr) {
+    return false;
+  }
+
+  if (initFields.find(method) != initFields.end()) {
+    return true;
+  }
+
+  if (initSummaryInProgress.find(method) != initSummaryInProgress.end()) {
+    return false;
+  }
+
+  HIRTypeDecl *ownerType = nullptr;
+  HIRMethodDecl *decl = findInitDecl(method, &ownerType);
+
+  if (decl == nullptr || ownerType == nullptr) {
+    return false;
+  }
+
+  HIRTypeDecl *savedCurrentType = currentType;
+  bool savedCheckingInit = checkingInit;
+  FieldSet savedSelfFields = currentSelfFields;
+
+  currentType = ownerType;
+
+  try {
+    checkInit(decl);
+  } catch (...) {
+    currentType = savedCurrentType;
+    checkingInit = savedCheckingInit;
+    currentSelfFields = std::move(savedSelfFields);
+    throw;
+  }
+
+  currentType = savedCurrentType;
+  checkingInit = savedCheckingInit;
+  currentSelfFields = std::move(savedSelfFields);
+
+  return initFields.find(method) != initFields.end();
+}
+
+HIRTypeDecl *InitChecker::findTypeDecl(TypeSymbol *type) {
+  if (type == nullptr) {
+    return nullptr;
+  }
+
+  TypeSymbol *origin = getInitType(type);
+
+  for (auto &[_, decl] : program->typeDeclMap) {
+    if (decl == nullptr || decl->type == nullptr) {
+      continue;
+    }
+
+    if (getInitType(decl->type) == origin) {
+      return decl;
+    }
+  }
+
+  return nullptr;
+}
+
+bool InitChecker::ensureTypeSummary(TypeSymbol *type) {
+  if (type == nullptr) {
+    return false;
+  }
+
+  type = getInitType(type);
+
+  if (commonFields.find(type) != commonFields.end()) {
+    return true;
+  }
+
+  if (typeSummaryInProgress.find(type) != typeSummaryInProgress.end()) {
+    return false;
+  }
+
+  HIRTypeDecl *decl = findTypeDecl(type);
+
+  if (decl == nullptr) {
+    return false;
+  }
+
+  auto [_, inserted] = typeSummaryInProgress.insert(type);
+
+  if (!inserted) {
+    return false;
+  }
+
+  struct TypeProgressGuard {
+    std::unordered_set<TypeSymbol *> &set;
+    TypeSymbol *type;
+
+    ~TypeProgressGuard() { set.erase(type); }
+  };
+
+  TypeProgressGuard progressGuard{typeSummaryInProgress, type};
+
+  bool first = true;
+  FieldSet common;
+
+  for (auto &[__, init] : decl->initMap) {
+    if (init == nullptr || init->symbol == nullptr) {
+      continue;
+    }
+
+    if (!ensureInitSummary(init->symbol)) {
+      /*
+       * 순환 dependency 등으로 아직 initializer summary를 만들 수 없다.
+       * 일부 initializer만으로 commonFields를 만들면 보장을 과대평가할 수
+       * 있으므로 type summary 자체를 아직 확정하지 않는다.
+       */
+      return false;
+    }
+
+    auto it = initFields.find(init->symbol);
+
+    if (it == initFields.end()) {
+      return false;
+    }
+
+    if (first) {
+      common = it->second;
+      first = false;
+    } else {
+      common = mergeField(common, it->second);
+    }
+  }
+
+  if (first) {
+    common.clear();
+  }
+
+  commonFields[type] = std::move(common);
+  return true;
 }
 
 void InitChecker::checkType(HIRTypeDecl *type) {
@@ -117,7 +306,7 @@ void InitChecker::checkType(HIRTypeDecl *type) {
     common.clear();
   }
 
-  commonFields[type->type] = std::move(common);
+  commonFields[getInitType(type->type)] = std::move(common);
 
   /*
    * 이제 모든 init 정보가 준비됐으므로 일반 method 검사.
@@ -138,9 +327,32 @@ void InitChecker::checkInit(HIRMethodDecl *method) {
     Error::internal("InitChecker: init is nullptr");
   }
 
+  if (method->symbol == nullptr) {
+    Error::internal(method->span, "InitChecker: init method symbol is nullptr");
+  }
+
   if (method->body == nullptr) {
     Error::internal(method->span, "InitChecker: init body is nullptr");
   }
+
+  if (initFields.find(method->symbol) != initFields.end()) {
+    return;
+  }
+
+  auto [_, inserted] = initSummaryInProgress.insert(method->symbol);
+
+  if (!inserted) {
+    return;
+  }
+
+  struct ProgressGuard {
+    std::unordered_set<MethodSymbol *> &set;
+    MethodSymbol *method;
+
+    ~ProgressGuard() { set.erase(method); }
+  };
+
+  ProgressGuard progressGuard{initSummaryInProgress, method->symbol};
 
   checkingInit = true;
   currentSelfFields.clear();
@@ -149,31 +361,12 @@ void InitChecker::checkInit(HIRMethodDecl *method) {
 
   addMethodEntryState(method, state);
 
-  /*
-   * 선언부 field initializer.
-   *
-   * 예:
-   *
-   * struct Foo {
-   *   i32 x = 10;
-   *   i32 y;
-   * }
-   *
-   * defaultInitBlock이 self.x = 10 형태로 이미 lowering되어
-   * 있다고 가정한다.
-   */
   if (currentType != nullptr && currentType->defaultInitBlock != nullptr) {
     checkBlock(currentType->defaultInitBlock.get(), state);
   }
 
   checkBlock(method->body.get(), state);
 
-  /*
-   * 이 init이 최종적으로 보장하는 field set.
-   *
-   * "모든 field가 초기화되어야 한다"는 검사는 하지 않는다.
-   * 초기화된 field만 이 init이 제공하는 유효 field가 된다.
-   */
   initFields[method->symbol] = currentSelfFields;
 
   currentSelfFields.clear();
@@ -220,15 +413,17 @@ void InitChecker::addMethodEntryState(HIRMethodDecl *method, InitState &state) {
     state.values.insert(symbol);
 
     /*
-     * struct parameter는 호출자가 어떤 init으로 생성했는지
+     * struct/class parameter는 호출자가 어떤 init으로 생성했는지
      * 이 method만으로 알 수 없다.
      *
      * 따라서 해당 type의 모든 init이 공통으로 보장하는
      * field만 사용할 수 있다.
      */
-    if (param->type != nullptr && param->type->kind == TypeKind::STRUCT) {
+    if (isFieldTrackedType(param->type)) {
 
-      auto it = commonFields.find(param->type);
+      TypeSymbol *type = getInitType(param->type);
+      ensureTypeSummary(type);
+      auto it = commonFields.find(type);
 
       if (it != commonFields.end()) {
         state.fields[symbol] = it->second;
@@ -306,7 +501,7 @@ void InitChecker::checkStmt(HIRStmt *stmt, InitState &state) {
     }
 
     /*
-     * initializer가 없는 struct는 storage 자체는 존재하지만
+     * initializer가 없는 struct/class는 storage 자체는 존재하지만
      * 아직 초기화된 field가 하나도 없는 상태로 시작한다.
      *
      *   Foo a;
@@ -316,8 +511,7 @@ void InitChecker::checkStmt(HIRStmt *stmt, InitState &state) {
      * scalar/array는 기존처럼 미초기화 상태로 남긴다.
      */
     if (local->init == nullptr) {
-      if (local->local->type != nullptr &&
-          local->local->type->kind == TypeKind::STRUCT) {
+      if (isFieldTrackedType(local->local->type)) {
         ValueSymbol *symbol = local->local->symbol;
 
         if (symbol == nullptr) {
@@ -345,11 +539,9 @@ void InitChecker::checkStmt(HIRStmt *stmt, InitState &state) {
     state.values.insert(symbol);
 
     /*
-     * struct value라면 어떤 field들이 보장되는 값인지 같이 전달.
+     * struct/class value라면 어떤 field들이 보장되는 값인지 같이 전달.
      */
-    if (local->local->type != nullptr &&
-        local->local->type->kind == TypeKind::STRUCT) {
-
+    if (isFieldTrackedType(local->local->type)) {
       state.fields[symbol] = getExprFields(local->init.get(), state);
     }
 
@@ -379,23 +571,19 @@ void InitChecker::checkStmt(HIRStmt *stmt, InitState &state) {
 
     FieldSet rhsFields;
 
-    if (assign->lhs->type != nullptr &&
-        assign->lhs->type->kind == TypeKind::STRUCT) {
-
+    if (isFieldTrackedType(assign->lhs->type)) {
       rhsFields = getExprFields(assign->rhs.get(), state);
     }
 
     checkWrite(assign->lhs.get(), state);
 
     /*
-     * direct struct value assignment라면
+     * direct struct/class value assignment라면
      * RHS의 field guarantee를 LHS로 복사한다.
      */
     ValueSymbol *target = getValueSymbol(assign->lhs.get());
 
-    if (target != nullptr && assign->lhs->type != nullptr &&
-        assign->lhs->type->kind == TypeKind::STRUCT) {
-
+    if (target != nullptr && isFieldTrackedType(assign->lhs->type)) {
       state.fields[target] = std::move(rhsFields);
     }
 
@@ -922,7 +1110,8 @@ void InitChecker::checkRead(HIRExpr *expr, InitState &state) {
           Error::internal(expr->span, "InitChecker: current type is nullptr");
         }
 
-        auto it = commonFields.find(currentType->type);
+        TypeSymbol *type = getInitType(currentType->type);
+        auto it = commonFields.find(type);
 
         if (it == commonFields.end() || !contain(it->second, field->field)) {
 
@@ -951,7 +1140,7 @@ void InitChecker::checkRead(HIRExpr *expr, InitState &state) {
     }
 
     /*
-     * 일반 struct expression의 field.
+     * 일반 struct/class expression의 field.
      *
      * 먼저 aggregate 자체가 initialized인지 확인.
      */
@@ -971,7 +1160,8 @@ void InitChecker::checkRead(HIRExpr *expr, InitState &state) {
        *
        * type 공통 field만 안전하게 보장된다.
        */
-      TypeSymbol *type = field->receiver->type;
+      TypeSymbol *type = getInitType(field->receiver->type);
+      ensureTypeSummary(type);
 
       auto it = commonFields.find(type);
 
@@ -1091,7 +1281,7 @@ void InitChecker::checkWrite(HIRExpr *expr, InitState &state) {
     }
 
     /*
-     * 일반 struct value의 field write는 해당 field의 initialization이
+     * 일반 struct/class value의 field write는 해당 field의 initialization이
      * 될 수 있다.
      *
      *   Foo a;
@@ -1105,7 +1295,7 @@ void InitChecker::checkWrite(HIRExpr *expr, InitState &state) {
     if (owner != nullptr) {
       /*
        * receiver storage 자체는 존재해야 한다.
-       * 미초기화 struct local도 선언 시 values에 들어간다.
+       * 미초기화 struct/class local도 선언 시 values에 들어간다.
        */
       requireInitialized(owner, field->receiver.get(), state);
       state.fields[owner].insert(field->field);
@@ -1203,14 +1393,15 @@ void InitChecker::checkCasePattern(HIRCasePattern *pattern, InitState &state) {
             state.values.insert(selector.binding->symbol);
 
             /*
-             * payload 자체가 struct라면
+             * payload 자체가 struct/class라면
              * 구체적인 init provenance를 모르므로
              * type common fields만 보장.
              */
-            if (selector.binding->type != nullptr &&
-                selector.binding->type->kind == TypeKind::STRUCT) {
+            if (isFieldTrackedType(selector.binding->type)) {
 
-              auto it = commonFields.find(selector.binding->type);
+              TypeSymbol *type = getInitType(selector.binding->type);
+              ensureTypeSummary(type);
+              auto it = commonFields.find(type);
 
               if (it != commonFields.end()) {
                 state.fields[selector.binding->symbol] = it->second;
@@ -1243,7 +1434,7 @@ InitState InitChecker::mergeInit(const InitState &lhs, const InitState &rhs) {
     result.values.insert(value);
 
     /*
-     * struct field guarantee도 양쪽 경로의 교집합만 유지.
+     * struct/class field guarantee도 양쪽 경로의 교집합만 유지.
      */
     auto lhsField = lhs.fields.find(value);
 
@@ -1280,18 +1471,12 @@ FieldSet InitChecker::mergeField(const FieldSet &lhs, const FieldSet &rhs) {
 }
 
 FieldSet InitChecker::getExprFields(HIRExpr *expr, const InitState &state) {
-
-  if (expr == nullptr || expr->type == nullptr ||
-      expr->type->kind != TypeKind::STRUCT) {
+  if (expr == nullptr) {
     return {};
   }
 
-  /*
-   * local / param / load(local) 등 이미 추적 중인 value라면
-   * 그 value의 실제 field set을 그대로 가져간다.
-   */
+  // 추적 중인 직접 value
   if (ValueSymbol *symbol = getValueSymbol(expr); symbol != nullptr) {
-
     auto it = state.fields.find(symbol);
 
     if (it != state.fields.end()) {
@@ -1299,39 +1484,45 @@ FieldSet InitChecker::getExprFields(HIRExpr *expr, const InitState &state) {
     }
   }
 
-  /*
-   * 특정 struct init expression.
-   *
-   * HIRStructInitExpr에 선택된 init HIRMethodDecl*이
-   * 저장되어 있다고 가정한다.
-   */
+  // struct 생성은 실제 선택된 init을 알고 있음
   if (expr->kind == HIRNodeKind::StructInitExpr) {
-    auto *structInit =
-        expect<HIRStructInitExpr>(expr, HIRNodeKind::StructInitExpr);
+    auto *init = expect<HIRStructInitExpr>(expr, HIRNodeKind::StructInitExpr);
 
-    /*
-     * 실제 멤버명이 다르면 여기만 수정.
-     */
-    auto *selectedInit = structInit->method;
+    if (init->method != nullptr) {
+      ensureInitSummary(init->method);
 
-    if (selectedInit != nullptr) {
-      auto it = initFields.find(selectedInit);
+      auto it = initFields.find(init->method);
 
       if (it != initFields.end()) {
         return it->second;
       }
     }
+
+    TypeSymbol *type = getInitType(init->type);
+    ensureTypeSummary(type);
+    auto it = commonFields.find(type);
+
+    return it != commonFields.end() ? it->second : FieldSet{};
   }
 
-  /*
-   * 어떤 init으로 만들어졌는지 알 수 없는 struct expression.
-   *
-   * 예:
-   *   foo.getStruct()
-   *
-   * 반환 type의 common field만 안전하게 사용할 수 있다.
-   */
-  auto it = commonFields.find(expr->type);
+  // view는 entity value지만 어떤 spawn/init에서 왔는지는 모름
+  if (expr->kind == HIRNodeKind::ViewExpr) {
+    auto *view = expect<HIRViewExpr>(expr, HIRNodeKind::ViewExpr);
+
+    TypeSymbol *type = getInitType(view->entityType);
+    ensureTypeSummary(type);
+    auto it = commonFields.find(type);
+
+    return it != commonFields.end() ? it->second : FieldSet{};
+  }
+
+  if (!isFieldTrackedType(expr->type)) {
+    return {};
+  }
+
+  TypeSymbol *type = getInitType(expr->type);
+  ensureTypeSummary(type);
+  auto it = commonFields.find(type);
 
   if (it != commonFields.end()) {
     return it->second;

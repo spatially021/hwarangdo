@@ -60,6 +60,10 @@ void ImportedSymbolBuilder::build() {
     currnet = &type;
     buildType(type);
   }
+  for (auto &trait : meta.traits) {
+    currnet = nullptr;
+    buildTrait(trait);
+  }
 }
 
 void ImportedSymbolBuilder::link() {
@@ -67,31 +71,67 @@ void ImportedSymbolBuilder::link() {
     currnet = &type;
     linkType(type);
   }
+
+  for (auto &trait : meta.traits) {
+    currnet = nullptr;
+    linkTrait(trait);
+  }
 }
 
 void ImportedSymbolBuilder::resolve() {
   for (auto &type : meta.types) {
     currnet = &type;
+    auto file = getFile(type.path);
+    auto symbol = getTypeSymbol(file, type.name);
+
     for (auto &m : type.methods) {
-      resolveMethod(m);
+      resolveMethod(m, symbol);
+    }
+  }
+
+  for (auto &type : meta.traits) {
+    auto file = getFile(type.path);
+    auto symbol = getTypeSymbol(file, type.name);
+
+    for (auto &m : type.methods) {
+      resolveMethod(m, symbol);
     }
   }
 }
 
 void ImportedSymbolBuilder::load() {
   for (auto &type : meta.types) {
-    auto file = table.registry.getFile(module, type.path);
-    if (file == nullptr) {
-      auto raw = getFile(type.path);
-      table.registry.addFile(module, type.path, raw);
-      file = raw;
-    }
-    table.registry.setCurrentFile(file);
-    auto &map = getTypeMap(file);
-    auto it = map.find(type.name);
-    if (it == map.end()) {
-      Error::internal("fail to get type");
-    }
-    table.registry.addType(std::move(it->second));
+    loadType(type.path, type.name);
   }
+
+  for (auto &trait : meta.traits) {
+    loadType(trait.path, trait.name);
+  }
+}
+
+void ImportedSymbolBuilder::loadType(const SourcePath &path,
+                                     const string &name) {
+  auto *file = table.registry.getFile(module, path);
+
+  if (file == nullptr) {
+    auto *raw = getFile(path);
+    table.registry.addFile(module, path, raw);
+    file = raw;
+  }
+
+  table.registry.setCurrentFile(file);
+
+  auto &map = getTypeMap(file);
+  auto it = map.find(name);
+
+  if (it == map.end()) {
+    Error::internal("fail to get imported type: " + name);
+  }
+  {
+#if HRD_DEBUG
+    auto type = it->second.get();
+    type->name = type->name;
+#endif
+  }
+  table.registry.addType(std::move(it->second));
 }

@@ -25,6 +25,25 @@ pair<bool, SourceSpan> ScopeManager::addValue(unique_ptr<ValueSymbol> symbol) {
   }
 }
 
+void ScopeManager::addGenericParam(GenericParamSymbol *symbol) {
+  addGenericParam(symbol->name, symbol);
+}
+
+void ScopeManager::addGenericParam(const string &name,
+                                   GenericParamSymbol *symbol) {
+  currentScope->genericParams.emplace(name, symbol);
+}
+
+GenericParamSymbol *ScopeManager::getGenericParam(const string &name) {
+  for (Scope *scope = currentScope; scope != nullptr; scope = scope->parent) {
+    auto it = scope->genericParams.find(name);
+    if (it != scope->genericParams.end()) {
+      return it->second;
+    }
+  }
+  return nullptr;
+}
+
 Scope *ScopeManager::current() { return currentScope; }
 Scope *ScopeManager::getRootScope() { return rootScope.get(); }
 Scope *ScopeManager::getTopLevelScope() { return topLevel.get(); }

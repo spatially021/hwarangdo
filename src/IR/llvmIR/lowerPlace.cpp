@@ -36,7 +36,7 @@ LoweredPlace llvmCodegen::lowerLocalPlace(MIRLocalPlace *place,
     Error::internal("fail to find local place in LLVM lowering: " +
                     place->symbol->name);
   }
-  return {it->second, place->symbol->typeSymbol};
+  return {it->second, resolveType(place->symbol->typeSymbol, ctx)};
 }
 
 LoweredPlace llvmCodegen::lowerParamPlace(MIRParamPlace *place,
@@ -48,24 +48,27 @@ LoweredPlace llvmCodegen::lowerParamPlace(MIRParamPlace *place,
   if (it == ctx.params.end()) {
     Error::internal("param's symbol is nullptr");
   }
-  return {it->second, place->symbol->typeSymbol};
+  return {it->second, resolveType(place->symbol->typeSymbol, ctx)};
 }
 
 LoweredPlace llvmCodegen::lowerFieldPlace(MIRFieldPlace *place,
                                           FuncContext &ctx) {
   auto lowered = lowerPlace(place->base.get(), ctx);
-  auto base = lowered.dst;
-  auto *baseType = place->ownType;
+  auto *base = lowered.dst;
+
+  auto *baseType = resolveType(place->ownType, ctx);
   auto *baseLayoutTy = getLayoutType(baseType);
 
-  if (baseType->kind == TypeKind::CLASS &&
-      dynamic_cast<MIRLocalPlace *>(place->base.get())) {
+  if (isClass(baseType) && dynamic_cast<MIRLocalPlace *>(place->base.get())) {
     base = builder.CreateLoad(builder.getPtrTy(), base, "entity.local.ptr");
   }
+  auto *fieldType = resolveMemberType(place->symbol->typeSymbol, baseType, ctx);
 
-  return {builder.CreateStructGEP(baseLayoutTy, base, place->symbol->index,
-                                  place->symbol->name),
-          place->symbol->typeSymbol};
+  return {
+      builder.CreateStructGEP(baseLayoutTy, base, place->symbol->index,
+                              place->symbol->name),
+      fieldType,
+  };
 }
 
 LoweredPlace llvmCodegen::lowerArrayAccessPlace(MIRArrayAccessPlace *place,
@@ -76,13 +79,18 @@ LoweredPlace llvmCodegen::lowerArrayAccessPlace(MIRArrayAccessPlace *place,
   auto index = lowerValue(place->index.get(), ctx);
   auto *indexValue = index.value;
 
-  uint64_t length = 0;
+  /*
+   * 중요한 부분:
+   * 실제 base place가 반환한 타입을 기준으로 배열 여부를 판단한다.
+   */
 
-  if (auto arr = dynamic_cast<ArrayTypeSymbol *>(place->symbol->typeSymbol)) {
-    length = arr->sizeValue.getZExtValue();
-  } else {
-    Error::internal("array's base is not arrayTypeSymbol");
+  auto *arrayType = dynamic_cast<ArrayTypeSymbol *>(lowered.type);
+
+  if (arrayType == nullptr) {
+    Error::internal("array's base is not ArrayTypeSymbol");
   }
+
+  uint64_t length = arrayType->sizeValue.getZExtValue();
 
   auto *func = builder.GetInsertBlock()->getParent();
 
@@ -92,13 +100,10 @@ LoweredPlace llvmCodegen::lowerArrayAccessPlace(MIRArrayAccessPlace *place,
   auto *okBlock = llvm::BasicBlock::Create(context, "array.bounds.ok", func);
 
   auto *zero = llvm::ConstantInt::get(indexValue->getType(), 0);
-
   auto *lenValue = llvm::ConstantInt::get(indexValue->getType(), length);
 
   auto *negative = builder.CreateICmpSLT(indexValue, zero);
-
   auto *tooLarge = builder.CreateICmpSGE(indexValue, lenValue);
-
   auto *invalid = builder.CreateOr(negative, tooLarge);
 
   builder.CreateCondBr(invalid, failBlock, okBlock);
@@ -128,7 +133,7 @@ LoweredPlace llvmCodegen::lowerArrayAccessPlace(MIRArrayAccessPlace *place,
   builder.SetInsertPoint(okBlock);
 
   auto *elementPtr =
-      builder.CreateInBoundsGEP(getLayoutType(place->ownType), basePtr,
+      builder.CreateInBoundsGEP(getLayoutType(arrayType), basePtr,
                                 {
                                     builder.getInt32(0),
                                     indexValue,
@@ -136,7 +141,7 @@ LoweredPlace llvmCodegen::lowerArrayAccessPlace(MIRArrayAccessPlace *place,
 
   return {
       elementPtr,
-      place->symbol->typeSymbol,
+      arrayType->baseType,
   };
 }
 

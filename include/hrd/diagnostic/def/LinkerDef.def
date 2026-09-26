@@ -126,3 +126,36 @@ DIAG(HRD_S018,
      Error,
      "duplicate impl method declaration",
      "HRD-S018")
+
+//=============================================================================
+// Trigger
+//-----------------------------------------------------------------------------
+// An impl declaration provides generic parameters for a target type that is
+// not declared as generic.
+//=============================================================================
+DIAG(HRD_S138,
+     Error,
+     "generic impl cannot target a non-generic type",
+     "HRD-S138")
+
+//=============================================================================
+// Trigger
+//-----------------------------------------------------------------------------
+// An impl declaration targets a generic type without providing its required
+// generic parameters.
+//=============================================================================
+DIAG(HRD_S139,
+     Error,
+     "non-generic impl cannot target a generic type",
+     "HRD-S139")
+
+//=============================================================================
+// Trigger
+//-----------------------------------------------------------------------------
+// An impl declaration provides a different number of generic arguments than
+// required by its target type.
+//=============================================================================
+DIAG(HRD_S140,
+     Error,
+     "generic argument count does not match target type",
+     "HRD-S140")

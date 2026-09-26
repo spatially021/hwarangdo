@@ -201,7 +201,7 @@ Decl::Ptr Parser::declaration(DeclContext context) {
   }
 
   if (check(TKind::HANDLE)) {
-    return handleDecl(prefix);
+    return varDecl(prefix);
   }
 
   if (check(TKind::CLASS)) {

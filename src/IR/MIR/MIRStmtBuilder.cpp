@@ -11,6 +11,7 @@
 #include <cassert>
 #include <iostream>
 #include <memory>
+#include <optional>
 #include <utility>
 
 void MIRBuilder::lowerBlock(HIRBlockStmt *block) {
@@ -292,7 +293,10 @@ void MIRBuilder::lowerSwitch(HIRSwitchStmt *stmt) {
   auto *outerScope = currentScope;
   currentScope = &switchScope;
 
-  BlockID defaultTarget = makeBlock();
+  optional<BlockID> defaultTarget = nullopt;
+  if (stmt->hasDefault) {
+    defaultTarget = makeBlock();
+  }
   BlockID cleanup = makeBlock();
   BlockID join = makeBlock();
 

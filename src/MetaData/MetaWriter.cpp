@@ -74,6 +74,7 @@ void MetaWriter::writeType(const TypeMeta &meta) {
 
   stream() << typeKindName(meta.kind) << ' ';
   writeQualifiedName(meta.path, meta.name);
+  writeGenericParams(meta.genericParams);
 
   if (meta.parent.has_value()) {
     stream() << " : ";
@@ -169,7 +170,12 @@ void MetaWriter::writeMethod(const MethodMeta &meta) {
     stream() << "static ";
   }
 
-  stream() << "method " << meta.name << '(';
+  stream() << "method " << meta.name;
+  if (meta.isGenericDecl != !meta.genericParams.empty()) {
+    Error::internal("method generic declaration and parameters disagree");
+  }
+  writeGenericParams(meta.genericParams);
+  stream() << '(';
 
   for (size_t i = 0; i < meta.params.size(); ++i) {
     if (i != 0) {
@@ -261,9 +267,20 @@ void MetaWriter::writeTypeRef(const TypeRef &ref) {
     return;
   }
 
+  case TypeRefKind::GenericParam: {
+    if (ref.name.empty() || !ref.path.segments.empty() ||
+        ref.builtIn.has_value() || !ref.args.empty() ||
+        ref.arraySize.has_value()) {
+      Error::internal("invalid generic parameter TypeRef");
+    }
+
+    stream() << '@' << ref.name;
+    return;
+  }
+
   case TypeRefKind::Generic: {
-    if (ref.name.empty()) {
-      Error::internal("generic TypeRef has empty name");
+    if (ref.name.empty() || ref.args.empty()) {
+      Error::internal("generic TypeRef requires a name and arguments");
     }
 
     writeQualifiedName(ref.path, ref.name);
@@ -301,6 +318,24 @@ void MetaWriter::writeTypeRef(const TypeRef &ref) {
   }
 
   Error::internal("unknown TypeRefKind");
+}
+
+void MetaWriter::writeGenericParams(const std::vector<std::string> &params) {
+  if (params.empty()) {
+    return;
+  }
+
+  stream() << '<';
+  for (size_t i = 0; i < params.size(); ++i) {
+    if (params[i].empty()) {
+      Error::internal("generic parameter has empty name");
+    }
+    if (i != 0) {
+      stream() << ", ";
+    }
+    stream() << params[i];
+  }
+  stream() << '>';
 }
 // ============================================================
 // Default Value

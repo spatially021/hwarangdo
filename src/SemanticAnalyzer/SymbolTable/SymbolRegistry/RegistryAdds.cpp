@@ -14,14 +14,18 @@ void SymbolRegistry::addTemp(unique_ptr<ValueSymbol> symbol) {
 void SymbolRegistry::addBuilt(unique_ptr<TypeSymbol> type) {
   auto raw = type.get();
   types.push_back(std::move(type));
-  typeRaw.push_back(raw);
+  if (!raw->isGenericDecl) {
+    typeRaw.push_back(raw);
+  }
   builtIn.emplace(raw->name, raw);
 }
 
 pair<bool, SourceSpan> SymbolRegistry::addType(unique_ptr<TypeSymbol> symbol) {
   auto raw = symbol.get();
   types.push_back(std::move(symbol));
-  typeRaw.push_back(raw);
+  if (!hasGenericParam(raw)) {
+    typeRaw.push_back(raw);
+  }
   decledTypes.push_back(raw);
   raw->path = currentFile->path;
   auto it = typeMap.find(currentFile);

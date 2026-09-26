@@ -24,12 +24,14 @@ struct TypeMeta {
   std::vector<EnumVariantMeta> variants;
   std::optional<TypeRef> parent;
   std::vector<TypeRef> traits;
+  // Declared in order: Box<T, U> -> {"T", "U"}.
+  std::vector<std::string> genericParams;
 
   bool operator==(const TypeMeta &rhs) const {
     return name == rhs.name && kind == rhs.kind && path == rhs.path &&
-           fields == rhs.fields && methods == rhs.methods &&
-           variants == rhs.variants && parent == rhs.parent &&
-           traits == rhs.traits;
+           genericParams == rhs.genericParams && fields == rhs.fields &&
+           methods == rhs.methods && variants == rhs.variants &&
+           parent == rhs.parent && traits == rhs.traits;
   }
 };
 
@@ -94,11 +96,16 @@ struct MethodMeta {
    * 일반 method / trait method에서는 empty.
    */
   std::vector<std::string> initializedFields;
+  // Method parameters only; owner type parameters live on TypeMeta.
+  std::vector<std::string> genericParams;
+  // Mirrors MethodSymbol::isGenericDecl, independently of a generic owner.
+  bool isGenericDecl = false;
 
   bool operator==(const MethodMeta &rhs) const {
     return name == rhs.name && returnType == rhs.returnType &&
-           params == rhs.params && modifier == rhs.modifier &&
-           isStatic == rhs.isStatic &&
+           params == rhs.params && genericParams == rhs.genericParams &&
+           modifier == rhs.modifier && isStatic == rhs.isStatic &&
+           isGenericDecl == rhs.isGenericDecl &&
            initializedFields == rhs.initializedFields;
   }
 };

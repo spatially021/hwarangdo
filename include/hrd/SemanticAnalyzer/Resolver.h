@@ -1,11 +1,13 @@
 #pragma once
 
 #include "hrd/AST/ASTNode.h"
+#include "hrd/AST/CaseAble.h"
 #include "hrd/AST/Expr.h"
 #include "hrd/AST/Visitor.h"
 #include "hrd/Recover/ResolverRecover.h"
 #include "hrd/SemanticAnalyzer/MethodBucket.h"
 #include "hrd/SemanticAnalyzer/ResolvedLit.h"
+#include "hrd/SemanticAnalyzer/ResolverStruct.h"
 #include "hrd/SemanticAnalyzer/Scope.h"
 #include "hrd/SemanticAnalyzer/SymbolTable/SymbolTable.h"
 #include "hrd/SemanticAnalyzer/symbol/MethodSymbol.h"
@@ -32,7 +34,7 @@ public:
   SymbolTable &table;
   TypeSymbol *&currentType;
   MethodSymbol *currentMethod = nullptr;
-  ASTNode *currentSwitch = nullptr;
+  CaseAble *currentSwitch = nullptr;
   Case *currentCase = nullptr;
   DiagnosticEngine &engine;
   ResolverRecover recover;
@@ -80,6 +82,13 @@ private:
   void unmatchSymbol(Symbol *symbol);
   vector<TypeSymbol *> getPromotionCandidates(TypeSymbol *left,
                                               TypeSymbol *right);
+
+  using GenericSubstitution = unordered_map<GenericParamSymbol *, TypeSymbol *>;
+  TypeSymbol *substituteGenericType(TypeSymbol *type,
+                                    const GenericSubstitution &substitution);
+  GenericSubstitution makeGenericSubstitution(GenericSymbol *generic);
+  GenericSubstitution makeMethodSubstitution(MethodSymbol *generic,
+                                             CallExpr *expr);
 
   // pair<bool, CastingResultKind> canImplicitlyConvert(TypeSymbol *from,
   //                                                    TypeSymbol *to);
@@ -181,7 +190,7 @@ private:
 
   ValueSymbol *lookupEnumVariant(EnumType *enumType, const string &name,
                                  SourceSpan &token);
-  EnumType *getTargetType();
+  TypeSymbol *getTargetType();
 
   inline bool isTypeReceiver(Expr *expr) {
     if (auto name = dynamic_cast<NameExpr *>(expr)) {
@@ -193,16 +202,19 @@ private:
 
   // pair<bool, MethodSymbol *> lookupMethod(str name, Scope *scope,
   //                                         vector<TypeSymbol *> args);
-  pair<bool, MethodSymbol *> lookupInit(ObjectType *type,
-                                        vector<TypeSymbol *> args);
+  pair<bool, MethodSymbol *> lookupInit(TypeSymbol *type,
+                                        const vector<TypeSymbol *> &args);
 
 private:
-  MethodSymbol *resolveMethodOverload(SourceSpan span,
-                                      const vector<MethodSymbol *> &bucket,
-                                      const vector<Expr *> &args);
+  ResolvedMethod resolveMethodOverload(CallExpr *expr,
+                                       const vector<MethodSymbol *> &bucket,
+                                       const vector<Expr *> &args,
+                                       TypeSymbol *scope);
   RuntimeSymbol *resolveRuntimeOverload(SourceSpan span,
                                         const vector<RuntimeSymbol *> &bucket,
                                         const vector<Expr *> &args);
+
+  struct OverloadContext {};
   template <typename SymbolT, typename ParamCount, typename ParamType,
             typename HasDefault>
   SymbolT *
@@ -215,4 +227,10 @@ private:
   void checkMethodAccess(CallExpr *expr, MethodSymbol *method, bool isImplicit);
 
   MethodBucket getMethodBucket(str name, TypeSymbol *scope, bool isStatic);
+  bool isEntityType(TypeSymbol *type);
+  ArgMatchKind matchType(TypeSymbol *arg, TypeSymbol *param);
+
+  void checkSwitchValue(CaseAble *expr, SourceSpan &span);
+
+  EnumType *getEnumType(TypeSymbol *type);
 };

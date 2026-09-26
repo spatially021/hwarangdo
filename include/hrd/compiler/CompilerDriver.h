@@ -59,5 +59,7 @@ private:
   bool runCodegen(const std::filesystem::path &objectPath);
   bool linkExecutable();
   bool writeMeta(const std::filesystem::path &metaPath);
+  bool writeMIR(const std::filesystem::path &mirPath);
   void readMeta(const std::filesystem::path &libPath);
+  bool loadMIR();
 };

@@ -2,6 +2,7 @@
 
 #include "Symbol.h"
 #include "hrd/Inputs.h"
+#include "hrd/SemanticAnalyzer/symbol/GenericOwner.h"
 #include "hrd/SemanticAnalyzer/symbol/TypeSymbol.h"
 #include "hrd/SemanticAnalyzer/symbol/ValueSymbol.h"
 #include "hrd/enums/MethodKind.h"
@@ -9,7 +10,7 @@
 class Scope;
 struct Module;
 
-class MethodSymbol : public Symbol {
+class MethodSymbol : public Symbol, public GenericOnwer {
 public:
   MethodSymbol() { type = Symbol::SymbolType::METHOD; }
 

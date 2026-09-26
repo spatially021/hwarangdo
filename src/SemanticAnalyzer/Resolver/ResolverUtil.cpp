@@ -7,6 +7,7 @@
 #include "hrd/SemanticAnalyzer/symbol/ValueSymbol.h"
 #include "hrd/SourceSpan.h"
 #include "hrd/diagnostic/Diagnostic.h"
+#include "hrd/enums/TypeKind.h"
 #include "hrd/util/Error.h"
 #include "hrd/util/Helper.h"
 #include <cassert>
@@ -490,23 +491,47 @@ ValueSymbol *Resolver::lookupEnumVariant(EnumType *enumType, const string &name,
 //   return {false, nullptr};
 // }
 
-pair<bool, MethodSymbol *> Resolver::lookupInit(ObjectType *type,
-                                                vector<TypeSymbol *> args) {
-  auto &bucket = type->inits;
+pair<bool, MethodSymbol *>
+Resolver::lookupInit(TypeSymbol *type, const vector<TypeSymbol *> &args) {
+
+  ObjectType *origin = nullptr;
+  GenericSubstitution substitution;
+
+  if (auto *obj = dyn_cast<ObjectType>(type)) {
+    origin = obj;
+  } else if (auto *generic = dyn_cast<GenericSymbol>(type)) {
+    origin = dyn_cast<ObjectType>(generic->origin);
+
+    if (origin == nullptr) {
+      Error::internal("illegal spawn kind");
+    }
+
+    substitution = makeGenericSubstitution(generic);
+  } else {
+    Error::internal("illegal spawn kind");
+  }
+
+  auto &bucket = origin->inits;
 
   if (bucket.empty() && args.empty()) {
     return {true, nullptr};
   }
 
-  for (auto &method : bucket) {
+  for (auto *method : bucket) {
     if (method->params.size() != args.size()) {
       continue;
     }
 
     bool matches = true;
 
-    for (unsigned int i = 0; i < args.size(); ++i) {
-      if (method->params[i]->typeSymbol != args[i]) {
+    for (size_t i = 0; i < args.size(); ++i) {
+      auto *paramType = method->params[i]->typeSymbol;
+
+      if (!substitution.empty()) {
+        paramType = substituteGenericType(paramType, substitution);
+      }
+
+      if (matchType(args[i], paramType) == ArgMatchKind::Invalid) {
         matches = false;
         break;
       }
@@ -991,4 +1016,26 @@ void Resolver::castFail(CastingResultKind kind, SourceSpan &span) {
   }
 
   Error::internal(span, "unhandled casting result kind");
+}
+
+bool Resolver::isEntityType(TypeSymbol *type) {
+  if (type->kind == TypeKind::CLASS) {
+    return true;
+  }
+
+  if (auto gen = dyn_cast<GenericSymbol>(type)) {
+    return gen->origin->kind == TypeKind::CLASS;
+  }
+
+  return false;
+}
+
+EnumType *Resolver::getEnumType(TypeSymbol *type) {
+  if (isa<EnumType>(type)) {
+    return dyn_cast<EnumType>(type);
+  }
+  if (auto generic = dyn_cast<GenericSymbol>(type)) {
+    return dyn_cast<EnumType>(generic->origin);
+  }
+  return nullptr;
 }

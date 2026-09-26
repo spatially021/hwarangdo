@@ -258,7 +258,7 @@ void Verifier::visit(CaseValueExpr *expr) {
 }
 void Verifier::visit(MatchExpr *expr) {
   expr->value->accept(this);
-  for (auto &c : expr->cases) {
+  for (auto &c : expr->clauses) {
     c->accept(this);
   }
   if (!expr->resolvedType) {

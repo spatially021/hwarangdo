@@ -80,6 +80,7 @@ public:
   void setModule(Module *moudle);
   TypeSymbol *makeRoot();
   TypeSymbol *&getCurrent() { return currentType; }
+  bool hasGenericParam(TypeSymbol *symbol);
 
 private:
   TypeMap &getTypeMap(FileContext *path);

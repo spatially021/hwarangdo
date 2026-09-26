@@ -51,7 +51,7 @@ void Resolver::visit(SpawnExpr *expr) {
     Error::internal(expr->spawnType->span, "failed to resolve spawn type");
   }
 
-  if (expr->spawnType->resolved->kind != TypeKind::CLASS) {
+  if (!isEntityType(expr->spawnType->resolved)) {
     auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S105);
     dia.labels = {
         {expr->spawnType->span,
@@ -80,11 +80,8 @@ void Resolver::visit(SpawnExpr *expr) {
 
     args.push_back(arg->resolvedType);
   }
-  auto spawn = dyn_cast<ObjectType>(expr->spawnType->resolved);
-  if (spawn == nullptr) {
-    Error::internal("illegal spawn type");
-  }
-  auto [result, method] = lookupInit(spawn, args);
+
+  auto [result, method] = lookupInit(expr->spawnType->resolved, args);
 
   if (!result) {
     auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S021);

@@ -1,6 +1,8 @@
+#include "hrd/AST/CaseAble.h"
 #include "hrd/AST/Stmt.h"
 #include "hrd/SemanticAnalyzer/Resolver.h"
 #include "hrd/SemanticAnalyzer/symbol/TypeSymbol.h"
+#include "hrd/SemanticAnalyzer/symbol/ValueSymbol.h"
 #include "hrd/diagnostic/Diagnostic.h"
 #include "hrd/util/Guard.h"
 
@@ -74,38 +76,26 @@ void Resolver::visit(CaseValueExpr *expr) {
 
     CaseKey key = CaseKey(lit->resolvedLit);
 
-    if (auto s = dynamic_cast<SwitchStmt *>(currentSwitch)) {
-      if (!s->caseKeys.insert(key).second) {
-        auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S056);
-        dia.labels = {
-            {expr->value->span, "this case value is already used", true},
-        };
+    if (!currentSwitch->caseKeys.insert(key).second) {
+      auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S056);
+      dia.labels = {
+          {expr->value->span, "this case value is already used", true},
+      };
+      if (currentSwitch->sKind == SwitchKind::Switch) {
         dia.notes = {
             "each case value must be unique within the same switch",
         };
-        dia.helps = {
-            "remove this case or use a different value",
-        };
-        engine.emit(dia);
-        recover.recover();
-      }
-    }
-
-    if (auto m = dynamic_cast<MatchExpr *>(currentSwitch)) {
-      if (!m->caseKeys.insert(key).second) {
-        auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S056);
-        dia.labels = {
-            {expr->value->span, "this case value is already used", true},
-        };
+      } else {
         dia.notes = {
             "each case value must be unique within the same match",
         };
-        dia.helps = {
-            "remove this case or use a different value",
-        };
-        engine.emit(dia);
-        recover.recover();
       }
+
+      dia.helps = {
+          "remove this case or use a different value",
+      };
+      engine.emit(dia);
+      recover.recover();
     }
 
     return;
@@ -116,8 +106,8 @@ void Resolver::visit(CaseValueExpr *expr) {
     return;
   }
 
-  EnumType *enumTarget = getTargetType();
-  if (enumTarget == nullptr) {
+  TypeSymbol *target = getTargetType();
+  if (target == nullptr) {
     auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S057);
     dia.labels = {
         {expr->value->span,
@@ -143,7 +133,7 @@ void Resolver::visit(CaseValueExpr *expr) {
     name = m->member;
     m->object->accept(this);
 
-    if (m->object->resolvedType != enumTarget) {
+    if (m->object->resolvedType != target) {
       auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S058);
       dia.labels = {
           {m->object->span,
@@ -152,11 +142,10 @@ void Resolver::visit(CaseValueExpr *expr) {
            true},
       };
       dia.notes = {
-          "the case variant must belong to enum type '" + enumTarget->name +
-              "'",
+          "the case variant must belong to enum type '" + target->name + "'",
       };
       dia.helps = {
-          "use a variant declared by '" + enumTarget->name + "'",
+          "use a variant declared by '" + target->name + "'",
       };
       engine.emit(dia);
       recover.recover();
@@ -167,7 +156,7 @@ void Resolver::visit(CaseValueExpr *expr) {
     if (c->receiver != nullptr) {
       c->receiver->accept(this);
 
-      if (c->receiver->resolvedType != enumTarget) {
+      if (c->receiver->resolvedType != target) {
         auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S058);
         dia.labels = {
             {c->receiver->span,
@@ -176,11 +165,10 @@ void Resolver::visit(CaseValueExpr *expr) {
              true},
         };
         dia.notes = {
-            "the case variant must belong to enum type '" + enumTarget->name +
-                "'",
+            "the case variant must belong to enum type '" + target->name + "'",
         };
         dia.helps = {
-            "use a variant declared by '" + enumTarget->name + "'",
+            "use a variant declared by '" + target->name + "'",
         };
         engine.emit(dia);
         recover.recover();
@@ -202,26 +190,54 @@ void Resolver::visit(CaseValueExpr *expr) {
     recover.recover();
   }
 
-  auto it = enumTarget->variantMap.find(name);
-  if (it == enumTarget->variantMap.end()) {
-    auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S028);
-    dia.labels = {
-        {expr->value->span,
-         "enum '" + enumTarget->name + "' has no variant named '" + name + "'",
-         true},
-    };
-    dia.notes = {
-        "the case value must reference a variant declared by the target enum",
-    };
-    dia.helps = {
-        "use a variant declared by '" + enumTarget->name + "'",
-    };
-    engine.emit(dia);
-    recover.recover();
+  GenericSubstitution substitution;
+  TypeSymbol *payloadType = nullptr;
+  EnumVariantSymbol *variant = nullptr;
+  if (auto e = dyn_cast<EnumType>(target)) {
+    auto it = e->variantMap.find(name);
+    if (it == e->variantMap.end()) {
+      auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S028);
+      dia.labels = {
+          {expr->value->span,
+           "enum '" + e->name + "' has no variant named '" + name + "'", true},
+      };
+      dia.notes = {
+          "the case value must reference a variant declared by the target enum",
+      };
+      dia.helps = {
+          "use a variant declared by '" + e->name + "'",
+      };
+      engine.emit(dia);
+      recover.recover();
+    }
+    payloadType = it->second->payloadType;
+    variant = it->second;
+  } else if (auto generic = dyn_cast<GenericSymbol>(target)) {
+    substitution = makeGenericSubstitution(generic);
+    auto origin = dyn_cast<EnumType>(generic->origin);
+    auto it = origin->variantMap.find(name);
+    if (it == origin->variantMap.end()) {
+      auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S028);
+      dia.labels = {
+          {expr->value->span,
+           "enum '" + origin->name + "' has no variant named '" + name + "'",
+           true},
+      };
+      dia.notes = {
+          "the case value must reference a variant declared by the target enum",
+      };
+      dia.helps = {
+          "use a variant declared by '" + origin->name + "'",
+      };
+      engine.emit(dia);
+      recover.recover();
+    }
+    payloadType = substituteGenericType(it->second->payloadType, substitution);
+    variant = it->second;
   }
 
   if (expr->arg) {
-    if (it->second->payloadType == nullptr) {
+    if (variant->payloadType == nullptr) {
       auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S023);
       dia.labels = {
           {expr->arg->span, "variant '" + name + "' does not declare a payload",
@@ -236,14 +252,13 @@ void Resolver::visit(CaseValueExpr *expr) {
 
     if (auto n = dynamic_cast<NameExpr *>(expr->arg.get())) {
       unique_ptr<ValueSymbol> symbol = make_unique<ValueSymbol>();
-      symbol->typeSymbol = it->second->payloadType;
+      symbol->typeSymbol = payloadType;
       symbol->isPayload = true;
       symbol->isRoot = false;
       symbol->kind = ValueSymbol::Kind::VAR;
       symbol->owner = table.scopeManger.current();
       symbol->name = n->name;
-
-      expr->payloadType = it->second->payloadType;
+      expr->payloadType = payloadType;
 
       auto raw = symbol.get();
       expr->payload = raw;
@@ -282,59 +297,44 @@ void Resolver::visit(CaseValueExpr *expr) {
     }
   }
 
-  CaseKey key = CaseKey(it->second);
+  CaseKey key = CaseKey(variant);
 
-  if (auto s = dynamic_cast<SwitchStmt *>(currentSwitch)) {
-    if (!s->caseKeys.insert(key).second) {
-      auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S056);
-      dia.labels = {
-          {expr->value->span, "this enum variant is already used", true},
-      };
+  if (!currentSwitch->caseKeys.insert(key).second) {
+    auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S056);
+    dia.labels = {
+        {expr->value->span, "this enum variant is already used", true},
+    };
+    if (currentSwitch->sKind == SwitchKind::Switch) {
       dia.notes = {
           "each enum variant may appear only once within the same switch",
       };
-      dia.helps = {
-          "remove this case or use a different enum variant",
-      };
-      engine.emit(dia);
-      recover.recover();
-    }
-
-    s->usedVariants.insert(it->second);
-  }
-
-  if (auto m = dynamic_cast<MatchExpr *>(currentSwitch)) {
-    if (!m->caseKeys.insert(key).second) {
-      auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S056);
-      dia.labels = {
-          {expr->value->span, "this enum variant is already used", true},
-      };
+    } else {
       dia.notes = {
           "each enum variant may appear only once within the same match",
       };
-      dia.helps = {
-          "remove this case or use a different enum variant",
-      };
-      engine.emit(dia);
-      recover.recover();
     }
 
-    m->usedVariants.insert(it->second);
+    dia.helps = {
+        "remove this case or use a different enum variant",
+    };
+    engine.emit(dia);
+    recover.recover();
   }
 
-  expr->variant = it->second;
+  currentSwitch->usedVariants.insert(variant);
+  expr->variant = variant;
 }
 
-EnumType *Resolver::getTargetType() {
-  if (auto s = dynamic_cast<SwitchStmt *>(currentSwitch)) {
-    if (auto en = dyn_cast<EnumType>(s->value->resolvedType)) {
-      return en;
-    }
+TypeSymbol *Resolver::getTargetType() {
+
+  auto type = currentSwitch->value->resolvedType;
+  if (auto e = dyn_cast<EnumType>(type)) {
+    return e;
   }
 
-  if (auto m = dynamic_cast<MatchExpr *>(currentSwitch)) {
-    if (auto en = dyn_cast<EnumType>(m->value->resolvedType)) {
-      return en;
+  if (auto g = dyn_cast<GenericSymbol>(type)) {
+    if (dyn_cast<EnumType>(g->origin)) {
+      return g;
     }
   }
 
@@ -351,11 +351,11 @@ void Resolver::visit(MatchExpr *expr) {
 
   TypeSymbol *matchType = nullptr;
 
-  for (unsigned i = 0; i < expr->cases.size(); ++i) {
-    auto &c = expr->cases[i];
+  for (unsigned i = 0; i < expr->clauses.size(); ++i) {
+    auto &c = expr->clauses[i];
     c->accept(this);
 
-    if (!matchType) {
+    if (matchType == nullptr) {
       matchType = c->transferType;
     } else if (!isAssignable(matchType, c->transferType)) {
       auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S062);
@@ -376,7 +376,7 @@ void Resolver::visit(MatchExpr *expr) {
     }
 
     if (c->isWildCard) {
-      if (i != expr->cases.size() - 1) {
+      if (i != expr->clauses.size() - 1) {
         auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S063);
         dia.labels = {
             {c->span, "wildcard case appears before another case", true},
@@ -396,53 +396,7 @@ void Resolver::visit(MatchExpr *expr) {
     }
   }
 
-  auto *targetType = expr->value->resolvedType;
-
-  if (auto en = dyn_cast<EnumType>(targetType)) {
-    if (expr->usedVariants.size() != en->variants.size() && !expr->hasDefault) {
-      auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S064);
-      dia.labels = {
-          {expr->span, "this match does not handle every enum variant", true},
-      };
-      dia.notes = {
-          "match expressions must handle every possible value",
-      };
-      dia.helps = {
-          "add the missing enum cases or add a final wildcard case",
-      };
-      engine.emit(dia);
-      recover.recover();
-    }
-  } else if (targetType->kind == TypeKind::PRIMITIVE) {
-    if (!expr->hasDefault) {
-      auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S064);
-      dia.labels = {
-          {expr->span, "this match has no wildcard case", true},
-      };
-      dia.notes = {
-          "primitive values cannot be exhaustively enumerated by case values",
-      };
-      dia.helps = {
-          "add a final wildcard case",
-      };
-      engine.emit(dia);
-      recover.recover();
-    }
-  } else {
-    auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S065);
-    dia.labels = {
-        {expr->value->span,
-         "this expression has type '" + targetType->name + "'", true},
-    };
-    dia.notes = {
-        "match expressions only support primitive and enum target values",
-    };
-    dia.helps = {
-        "use a primitive or enum expression as the match target",
-    };
-    engine.emit(dia);
-    recover.recover();
-  }
+  checkSwitchValue(expr, expr->span);
 
   expr->resolvedType = matchType;
   currentSwitch = prev;

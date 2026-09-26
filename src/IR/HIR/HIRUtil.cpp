@@ -16,12 +16,15 @@
 #include <cassert>
 #include <memory>
 #include <utility>
+#include <vector>
 using std::unique_ptr;
 
 unique_ptr<HIRSelfExpr> HIRBuilder::lowerImplictSelf() {
   assert(currentType);
 
-  auto type = currentType->type;
+  TypeSymbol *type = nullptr;
+  type = currentType->type;
+
   SourceSpan span;
   return make_unique<HIRSelfExpr>(
       span,

@@ -1213,3 +1213,14 @@ DIAG(HRD_S136,
      Error,
      "instance method requires an instance receiver",
      "HRD-S136")
+
+//=============================================================================
+// Trigger
+//-----------------------------------------------------------------------------
+// A declaration introduces a name that is already used by a generic parameter
+// in the same generic scope.
+//=============================================================================
+DIAG(HRD_S141,
+     Error,
+     "declaration shadows a generic parameter",
+     "HRD-S141")

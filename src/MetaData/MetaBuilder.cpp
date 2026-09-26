@@ -14,6 +14,7 @@
 #include "hrd/compiler/CompilerContexts.h"
 #include "hrd/util/Error.h"
 
+#include <algorithm>
 #include <variant>
 
 MetaBuilder::MetaBuilder(MetaBuilderContext &ctx)
@@ -41,6 +42,17 @@ TypeMeta MetaBuilder::buildType(TypeSymbol *type) {
 
   meta.name = type->name;
   meta.path = type->path;
+  for (auto *param : type->getGenericParams()) {
+    if (param == nullptr) {
+      Error::internal("type has null generic parameter: " + type->name);
+    }
+    meta.genericParams.push_back(param->name);
+  }
+
+  if (type->isGenericDecl != !meta.genericParams.empty()) {
+    Error::internal("type generic declaration and parameters disagree: " +
+                    type->name);
+  }
 
   if (type->kind == TypeKind::CLASS || type->kind == TypeKind::STRUCT ||
       type->kind == TypeKind::ENUM) {
@@ -93,7 +105,7 @@ TraitMeta MetaBuilder::buildTrait(TypeSymbol *type) {
 
   for (auto &sig : tra->traitSigs) {
     for (auto m : sig.second) {
-      meta.methods.push_back(buildMethod(m->symbol));
+      meta.methods.push_back(buildMethod(m));
     }
   }
 
@@ -116,6 +128,18 @@ MethodMeta MetaBuilder::buildMethod(MethodSymbol *symbol) {
   meta.name = symbol->name;
   meta.modifier = symbol->modifier;
   meta.isStatic = symbol->isStatic;
+  meta.isGenericDecl = symbol->isGenericDecl;
+  for (auto *param : symbol->getGenericParams()) {
+    if (param == nullptr) {
+      Error::internal("method has null generic parameter: " + symbol->name);
+    }
+    meta.genericParams.push_back(param->name);
+  }
+
+  if (meta.isGenericDecl != !meta.genericParams.empty()) {
+    Error::internal("method generic declaration and parameters disagree: " +
+                    symbol->name);
+  }
 
   if (auto func = dynamic_cast<FuncDecl *>(symbol->decl)) {
     for (auto &p : func->params) {
@@ -276,18 +300,23 @@ TypeRef MetaBuilder::buildTypeRef(TypeSymbol *symbol) {
     break;
   }
 
-  case TypeKind::GENERIC: {
+  case TypeKind::GENERIC_PARAM: {
+    ref.kind = TypeRefKind::GenericParam;
     ref.name = symbol->name;
+    break;
+  }
+
+  case TypeKind::GENERIC: {
     ref.kind = TypeRefKind::Generic;
-    ref.path = symbol->path;
 
     auto gen = dynamic_cast<GenericSymbol *>(symbol);
 
-    if (gen == nullptr) {
+    if (gen == nullptr || gen->origin == nullptr) {
       Error::internal("illegal generic type : " + symbol->name);
     }
 
-    ref.args.push_back(buildTypeRef(gen->origin));
+    ref.name = gen->origin->name;
+    ref.path = gen->origin->path;
 
     for (auto a : gen->args) {
       ref.args.push_back(buildTypeRef(a));

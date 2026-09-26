@@ -7,10 +7,17 @@
 #include <llvm/IR/Type.h>
 
 void llvmCodegen::buildTypes() {
-  for (auto &t : table.registry.getTypes()) {
+
+  auto &rawTypes = table.registry.getTypes();
+
+  for (auto &t : rawTypes) {
 
     if (auto p = dynamic_cast<PrimtiveType *>(t)) {
       types.emplace(t, buildPrimitiveType(p));
+      continue;
+    }
+
+    if (t->isGenericDecl) {
       continue;
     }
 
@@ -74,19 +81,23 @@ void llvmCodegen::buildTypes() {
     }
   }
 
-  for (auto &t : table.registry.getTypes()) {
+  for (auto &t : rawTypes) {
     if (auto arr = dynamic_cast<ArrayTypeSymbol *>(t)) {
       buildArrayType(arr);
     }
   }
 
-  for (auto &t : table.registry.getTypes()) {
+  for (auto &t : rawTypes) {
     if (auto arr = dynamic_cast<ArrayTypeSymbol *>(t)) {
       declareArrayDestroy(arr);
     }
   }
 
-  for (auto &t : table.registry.getTypes()) {
+  for (auto &t : rawTypes) {
+
+    if (t->isGenericDecl) {
+      continue;
+    }
 
     if (dynamic_cast<PrimtiveType *>(t)) {
       continue;
@@ -190,6 +201,9 @@ void llvmCodegen::buildTypes() {
   }
 
   for (auto &t : table.registry.getTypes()) {
+    if (t->isGenericDecl) {
+      continue;
+    }
     if (auto arr = dynamic_cast<ArrayTypeSymbol *>(t)) {
       emitArrayDestroy(arr);
     }

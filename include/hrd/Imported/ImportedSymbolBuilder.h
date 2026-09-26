@@ -32,25 +32,33 @@ private:
   ValueSymbol *buildField(FieldMeta &meta, ObjectType *symbol);
   void buildMethod(MethodMeta &meta, TypeSymbol *symbol);
   void buildParam(ParamMeta &meta, MethodSymbol *symbol, Scope *scope);
-  void buildVariant(EnumVariantMeta &meta, EnumType *type);
+  void buildVariant(EnumVariantMeta &meta, EnumType *type, uint32_t ordinal);
+  void buildTrait(TraitMeta &meta);
+  void buildTraitMethod(MethodMeta &meta, TraitType *trait);
 
 private:
   void link();
   void linkType(TypeMeta &meta);
   void linkField(FieldMeta &meta);
-  void linkMethod(MethodMeta &meta);
+  void linkMethod(MethodMeta &meta, TypeSymbol *owner);
   void linkVariant(EnumVariantMeta &meta);
+  void linkTrait(TraitMeta &meta);
+  void linkTraitMethod(MethodMeta &meta, TraitType *trait);
 
 private:
   void resolve();
-  void resolveMethod(MethodMeta &meta);
-  Expr::Ptr resolveDefault(DefaultValueMeta &meta);
+  void resolveMethod(MethodMeta &meta, TypeSymbol *onwer);
+  Expr::Ptr resolveDefault(DefaultValueMeta &meta, MethodSymbol *method);
   MethodSymbol *resolveInit(TypeSymbol *type,
-                            std::vector<DefaultValueMeta> &args);
+                            std::vector<DefaultValueMeta> &args,
+                            MethodSymbol *method);
+  void resolveTrait(TraitMeta &meta);
+
   ArgMatchKind matchArgument(TypeSymbol *from, TypeSymbol *to);
 
 private:
   void load();
+  void loadType(const SourcePath &path, const string &name);
 
 private:
   ModuleMeta &meta;
@@ -67,8 +75,8 @@ private:
   unordered_map<TypeMeta, unordered_map<FieldMeta, ValueSymbol *, FieldHash>,
                 TypeMetaHash>
       fieldMap;
-  unordered_map<TypeMeta, unordered_map<MethodMeta, MethodSymbol *, MethodHash>,
-                TypeMetaHash>
+  unordered_map<TypeSymbol *,
+                unordered_map<MethodMeta, MethodSymbol *, MethodHash>>
       methodMap;
   unordered_map<
       TypeMeta,
@@ -81,8 +89,10 @@ private:
   FileContext *getFile(const SourcePath &path);
   unordered_map<string, unique_ptr<TypeSymbol>> &getTypeMap(FileContext *file);
   TypeSymbol *getTypeSymbol(FileContext *file, str name);
-  TypeSymbol *getOrCreateTypeRef(TypeRef &ref);
+  TypeSymbol *getOrCreateTypeRef(TypeRef &ref, MethodSymbol *symbol = nullptr);
   ValueSymbol *getField(FieldMeta &meta);
-  MethodSymbol *getMethod(MethodMeta &meta);
+  MethodSymbol *getMethod(TypeSymbol *owner, MethodMeta &ref);
   EnumVariantSymbol *getVariant(EnumVariantMeta &meta);
+  TraitType *getTraitSymbol(TraitMeta &meta);
+  TypeSymbol *substituteOwnerType(TypeSymbol *type, GenericSymbol *owner);
 };

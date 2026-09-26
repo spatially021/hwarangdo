@@ -119,12 +119,12 @@ void HIRBuilder::visit(CallExpr *expr) {
                       "type receiver did not resolve to TypeSymbol");
     }
 
-    if (type->kind == TypeKind::ENUM) {
+    if (isa<EnumType>(type->base())) {
       exprResult = lowerVariantValue(expr);
       return;
     }
 
-    if (isa<ObjectType>(type)) {
+    if (isa<ObjectType>(type->base())) {
       exprResult = lowerCall(expr);
       return;
     }
@@ -160,7 +160,7 @@ void HIRBuilder::visit(MemberExpr *expr) {
                       "member type receiver has no resolved type");
     }
 
-    if (expr->object->resolvedType->kind == TypeKind::ENUM) {
+    if (isa<EnumType>(expr->object->resolvedType->base())) {
       exprResult = lowerVariantValue(expr);
       return;
     }
@@ -369,8 +369,15 @@ void HIRBuilder::visit(StructDecl *decl) {
   }
 }
 
-void HIRBuilder::visit(EnumDecl *) {
-  // Lowered during linker two-pass processing.
+void HIRBuilder::visit(EnumDecl *decl) {
+  auto it = program->typeDeclMap.find(decl->symbol);
+
+  if (it == program->typeDeclMap.end() || it->second == nullptr) {
+    Error::internal(decl->span, "struct HIR type shell was not created");
+  }
+
+  TypeGuard typeGuard(currentType, it->second);
+  setDefaultInit(currentType);
 }
 
 void HIRBuilder::visit(ImplDecl *decl) {

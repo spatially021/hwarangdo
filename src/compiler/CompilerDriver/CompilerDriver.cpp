@@ -1,5 +1,7 @@
 #include "hrd/InitChecker/InitChecker.h"
 #include "hrd/MetaData/MetaReader.h"
+#include "hrd/Serialize/MIRSerialization.h"
+#include "hrd/Serialize/MIRSerializationAdapter.h"
 
 #ifndef NDEBUG
 #define HRD_DEBUG 1
@@ -154,7 +156,7 @@ int CompilerDriver::run(int argc, char **argv) {
   storage.module =
       make_unique<Module>(moudleName, projectInput.projectFilePath);
   storage.table.registry.setModule(storage.module.get());
-  constexpr std::size_t stageCount = 9;
+  constexpr std::size_t stageCount = 10;
   size_t current = 1;
   std::cout << "Building project: " << projectInput.config.name << "\n\n";
   std::cout << "project root : " << projectInput.rootPath << "\n";
@@ -206,25 +208,33 @@ int CompilerDriver::run(int argc, char **argv) {
     return 1;
   }
 
+  printStage(current++, stageCount, "Load lib MIR");
+  if (!loadMIR()) {
+    return 1;
+  }
+
   const auto objectPath =
       projectInput.rootPath / "build" / "obj" / (moudleName + ".o");
 
   const auto metaPath =
       projectInput.rootPath / "build" / "obj" / (moudleName + ".hmeta");
+  const auto mirPath =
+      projectInput.rootPath / "build" / "obj" / (moudleName + ".hmir");
 
-  printStage(7, stageCount, "Code generation");
+  printStage(current++, stageCount, "Code generation");
   if (!runCodegen(objectPath)) {
     return 1;
   }
 
-  if (invocation.options.isCompile)
+  if (invocation.options.isCompile) {
     if (!writeMeta(metaPath)) {
       return 1;
     }
 
-  std::cout << '\r' << "\033[2K" << Color::GREEN << "[7/7] Compilation complete"
-            << Color::RESET << '\n';
-
+    if (!writeMIR(mirPath)) {
+      return 1;
+    }
+  }
   if (!invocation.options.isCompile) {
     std::cout << "[link] Linking...";
     std::cout.flush();
@@ -624,7 +634,6 @@ bool CompilerDriver::runCodegen(const std::filesystem::path &objectPath) {
     codegen.generate();
 #if HRD_DEBUG
     std::error_code ec;
-
     llvm::raw_fd_ostream out("hwarangdo.ll", ec, llvm::sys::fs::OF_Text);
 
     if (ec) {
@@ -664,12 +673,28 @@ bool CompilerDriver::writeMeta(const std::filesystem::path &metaPath) {
   MetaWriter writer = MetaWriter();
   try {
     writer.write(storage.module->name, storage.moduleMeta, metaOut);
+
   } catch (const std::runtime_error &e) {
     std::cerr << e.what() << '\n';
     return false;
   } catch (const Failure &) {
     return false;
   }
+  return true;
+}
+
+bool CompilerDriver::writeMIR(const std::filesystem::path &mirPath) {
+  fs::create_directories(mirPath.parent_path());
+
+  try {
+    auto adapter = makeMIRSerializationAdapter(storage.table);
+
+    MIRSerializer::writeFile(mirPath, *storage.mirProgram, adapter.adapter);
+  } catch (const std::runtime_error &e) {
+    std::cerr << e.what() << '\n';
+    return false;
+  }
+
   return true;
 }
 
@@ -717,4 +742,53 @@ void CompilerDriver::readMeta(const std::filesystem::path &libPath) {
                   "duplicated metadata module: " + result.moduleName);
     }
   }
+}
+
+bool CompilerDriver::loadMIR() {
+  try {
+    const auto libPath = projectInput.rootPath / "lib";
+    auto *program = storage.mirProgram.get();
+#if HRD_DEBUG
+    for (auto *type : storage.table.registry.getTypes()) {
+      std::cout << "[typeRaw] "
+                << (type->module ? type->module->name : "<null>")
+                << "::" << type->name << '\n';
+    }
+#endif
+
+    auto adapter = makeMIRSerializationAdapter(storage.table);
+
+    for (const auto &entry : fs::directory_iterator(libPath)) {
+      if (!entry.is_regular_file()) {
+        continue;
+      }
+
+      if (entry.path().extension() != ".hmir") {
+        continue;
+      }
+
+      auto mir = MIRDeserializer::readFile(entry.path(), adapter.adapter);
+
+      for (auto &func : mir->genericOrigin) {
+        program->genericOrigin.push_back(std::move(func));
+      }
+
+      for (auto &it : mir->genericMap) {
+        auto [_, inserted] = program->genericMap.emplace(it.first, it.second);
+
+        if (!inserted) {
+          Error::internal("duplicated generic MIR owner");
+        }
+      }
+    }
+
+#if HRD_DEBUG
+
+#endif
+  } catch (const std::runtime_error &e) {
+    std::cerr << e.what() << '\n';
+    return false;
+  }
+
+  return true;
 }

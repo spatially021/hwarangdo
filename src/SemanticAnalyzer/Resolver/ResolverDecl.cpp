@@ -24,8 +24,9 @@ void Resolver::visit(ClassDecl *decl) {
   ScopeGuard _(table, decl->symbol->memberScope);
   TypeContextGuard __(currentType, decl->symbol);
 
-  for (auto a : decl->fields)
+  for (auto a : decl->fields) {
     a->accept(this);
+  }
   for (auto a : decl->methods) {
     a->accept(this);
   }
@@ -70,6 +71,7 @@ void Resolver::visit(StructDecl *decl) {
 void Resolver::visit(EnumDecl *) {}
 void Resolver::visit(ImplDecl *decl) {
   auto impl = table.registry.getImpl(decl);
+  ScopeGuard _(table, decl->symbol->scope);
   TypeContextGuard __(currentType, impl->target);
   auto prev = currentSelf;
   currentSelf = impl->target->memberScope;

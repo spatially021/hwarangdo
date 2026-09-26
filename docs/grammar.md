@@ -36,9 +36,9 @@
 -->
 
 ## 0.1 문서 메타데이터
-- 문서 버전: `0.2`
-- 마지막 수정일: `2026-05-29`
-- 대상 구현 버전: `0.0`
+- 문서 버전: `0.2.1`
+- 마지막 수정일: `2026-09-11`
+- 대상 구현 버전: `0.2`
 - 기준 단계:
   - [x] Lexer
   - [x] Parser
@@ -47,8 +47,8 @@
   - [x] Resolver
   - [x] Verifier
   - [x] HIR
-  - [ ] MIR
-  - [ ] LLVM IR
+  - [x] MIR
+  - [x] LLVM IR
 
 ## 0.2 표기 규칙
 <!--
@@ -1550,7 +1550,7 @@ world.quit();
 
 ---
 
-## 9. 함수와 메서드
+# 9. 함수와 메서드
 <!-- 함수/메서드의 차이, 멤버 스코프, 오버로딩 정책을 정리 -->
 메서드 선언은 다음의 구조를 가진다.
 ```
@@ -1561,13 +1561,13 @@ world.quit();
 타입에는 value 객체의 타입과 enum타입, 그리고 추론 타입인 func이 위치할 수 있다.
 observer는 반환타입이 될 수 없으며 handle<T>는 가능하다.
 
-### 9.1 전역 함수
+## 9.1 전역 함수
 전역 함수는 존재하지 않는다.
 모든 함수는 타입(class/struct)에 소속된 메서드이다.
-### 9.2 메서드
+## 9.2 메서드
 본 언어에서 함수는 존재하지 않으며 명시되는 모든 함수는 메서드이다.
 
-### 9.3 매개변수 규칙
+## 9.3 매개변수 규칙
 <!-- 네가 "_" 표기를 중요하게 보고 있었으니 여기에 확실히 적기 -->
 
 매개변수 선언은 변수 선언 규칙을 따르며 ',' 로 각각의 매개변수를 구분한다.
@@ -1575,23 +1575,23 @@ observer는 반환타입이 될 수 없으며 handle<T>는 가능하다.
 '_'는 기본값이 설정된 매게변수에서만 사용할 수 있다.
 '_'는 위치 기반으로만 해석되며, 이름 기반 매칭은 지원하지 않는다.
 
-### 9.4 반환 규칙
+## 9.4 반환 규칙
 함수의 반환은 선언시 정의되는 타입을 따른다.
 모든 반환값은 함수의 반환 타입에 대해 암묵적 형변환이 가능한 타입이여야 한다.
 `func`으로 선언된 함수는 내부 return 의 반환 값을 통해 반환 타입이 결정되며 return이 없거나 return;형태라면 void로 취급한다.
 
-### 9.5 오버로딩 규칙
+## 9.5 오버로딩 규칙
 가장 정확히 일치하는 오버로드가 선택된다.
 모호한 경우 컴파일 오류가 발생한다.
 오버로딩된 함수 호출시 매게변수의 타입과 갯수로 함수를 찾으며 같은 갯수의 인자를 가지는 함수가 있을 경우 '_'를 사용할 수 없다.
 
-### 9.6 접근 제한자
+## 9.6 접근 제한자
 접근 제어자는 public/protected/private이 있다.
 public은 모든 위치에서 접근 가능하다.
 protected는 상속관계에서 super혹은 암묵적 super에 의한 멤버 접근으로만 접근 가능하다.
 private는 해당 객체 내부에서만 접근 가능하다.
 
-### 9.7 override / async / frame 등 수식자
+## 9.7 override / async / frame 등 수식자
 <!-- 각 modifier의 허용 위치와 의미를 적기 -->
 
 override는 extends로 상속한 객체의 함수를 재작성할때 사용하는 수식자이다.
@@ -1604,22 +1604,22 @@ async는 비동기 처리 함수를 선언할 때 사용하는 수식자이다.
 * 세부 사항은 미정이다. 
 ---
 
-## 10 case/default 세부 규칙
+# 10 case/default 세부 규칙
 <!-- CaseValueExpr 규칙을 여기서 명세화 -->
 
-### 10.1 case 값 규칙
+## 10.1 case 값 규칙
 case value는 리터럴과 enum variant만 위치할 수 있다.
 switch에서 case value는 복수의 값을 가질 수 있다.
 단 payload는 예외적으로 단독 값만 허용한다.
 match에서 case value는 단일 값만 허용한다.
 
-### 10.2 default 규칙
+## 10.2 default 규칙
 default 및 와일드카드 _ 는 case중 마지막 위치에만 위치할 수 있다.
 default 및 와일드카드 _는 case에서 처리하지 못한 값을 처리할때 사용한다.
 default는 switch문에서만 사용가능하며 match문에서는 금지한다.
 와일드 카드 _는 match문에서만 사용가능하며 switch문에서는 금지한다.
 
-### 10.3 exhaustiveness 검사  
+## 10.3 exhaustiveness 검사  
 <!-- 필수인지, verifier에서 검사하는지 -->
 
 exhaustiveness 검사는 swtich와 match에서 모든 가능성을 포함하는지를 확인하는 검사이다.
@@ -1627,7 +1627,7 @@ match는 verifier 단계에서 모든 가능성을 포함하는지 확인하며 
 switch는 verifier 단계에서 variant의 모든 가능성을 포함하는지 확인하며 모든 가능성을 포함하지 않으면 오류를 발생시킨다.
 
 ---
-## 11. enum
+# 11. enum
 
 `enum`은 **유한한 값 집합**을 표현하는 타입이다.
 
@@ -1648,7 +1648,7 @@ enum은 다음의 구조를 가진다.
 - `enum` payload에 value 객체의 타입만 허용한다.
 enum 값은 일반 표현식에서 사용 가능한 값 타입이다.
 
-### 11.1 enum variant
+## 11.1 enum variant
 
 enum variant는 enum에서 정의된 상수 값을 의미한다.
 enum variant는 다음의 구조를 가진다.
@@ -1666,7 +1666,7 @@ variant 생성은 다음의 구조를 따른다.
 <EnumName>.<VariantName>(<expression>)
 ```
 ---
-## 12. impl
+# 12. impl
 
 `impl`은 다음 역할을 수행한다.
 
@@ -1718,7 +1718,7 @@ impl Vec2 {
 - `impl` 내부의 `func`는 전역 함수가 아니다.
 - 메서드는 **암묵적인 self 문맥**을 가진다.
 
-### 12.1 self 문맥
+## 12.1 self 문맥
 
 - `self`는 impl 메서드 내부에서만 존재하는 **암묵적 객체 참조**이다.
 - `self`의 타입은 impl 대상 타입이다.
@@ -1754,7 +1754,7 @@ impl 메서드 내부에서 식별자는 다음 순서로 해석된다.
 - class는 선언과 동시에 메서드를 정의하며, impl을 사용하지 않는다.
 ---
 
-## 13. trait
+# 13. trait
 
 `trait`는 **인터페이스 전용 타입**이다.
 
@@ -1798,7 +1798,7 @@ trait을 구현하는 타입은 trait에 선언된 모든 메서드를 구현해
 
 ---
 
-## 14. 모듈과 import
+# 14. 모듈과 import
 
 본 언어에서 파일은 하나의 독립적인 모듈 단위이자 이름 공간을 구성한다.
 
@@ -2851,3 +2851,813 @@ import math.vector.{Vec2 as Position2, Vec3};
 * 선택적 타입 import는 `Original as Alias` 형태의 타입 alias를 지원한다.
 * 파일 모듈 alias와 qualified type name은 현재 지원하지 않는다.
 * 파일 모듈에는 Main이 없어도 되며, 실행 프로그램 전체에서만 Main을 검사한다.
+
+# 15. 제너릭 타입
+
+## 15.1 개요
+
+제너릭 타입은 하나 이상의 타입 매개변수(type parameter)를 가지는 타입이다.
+
+제너릭 타입 선언은 별도의 선언 종류로 취급하지 않는다.
+
+`struct`, `class`, `enum`과 같은 기존 타입 선언에 타입 매개변수를 추가하여 제너릭 타입을 선언한다.
+
+```hwarangdo
+struct Box<T> {
+    T value;
+}
+```
+
+위 선언에서 `Box<T>`는 `T`라는 타입 매개변수를 가지는 하나의 타입 선언이다.
+
+제너릭 선언은 템플릿과 실제 타입을 별도의 언어 요소로 분리하지 않는다.
+
+컴파일러 내부에서는 제너릭 매개변수를 포함하는 원본 타입 선언과, 해당 타입에 실제 타입 인자를 적용한 제너릭 타입을 구분할 수 있다.
+
+예:
+
+```hwarangdo
+Box<T>
+Box<int>
+Box<string>
+```
+
+`Box<T>`는 제너릭 원본 타입 선언이며, `Box<int>`와 `Box<string>`은 해당 타입에 실제 타입 인자를 적용한 타입이다.
+
+---
+
+## 15.2 제너릭 타입 선언 문법
+
+제너릭 타입의 타입 매개변수는 타입 이름 바로 뒤의 `< >` 내부에 선언한다.
+
+```ebnf
+GenericParamList
+    := "<" GenericParam ("," GenericParam)* ">"
+
+GenericParam
+    := Identifier
+```
+
+예:
+
+```hwarangdo
+struct Box<T> {
+}
+
+struct Pair<T, U> {
+}
+
+class Storage<T> {
+}
+
+enum Option<T> {
+}
+```
+
+타입 매개변수 이름은 일반 식별자 규칙을 따른다.
+
+따라서 `T`, `U`와 같은 단일 문자 이름을 강제하지 않는다.
+
+```hwarangdo
+struct Pair<Key, Value> {
+    Key key;
+    Value value;
+}
+```
+
+---
+
+## 15.3 제너릭 선언 가능 타입
+
+현재 제너릭 선언은 다음 타입에 허용한다.
+
+* `struct`
+* `class`
+* `enum`
+
+예:
+
+```hwarangdo
+struct Box<T> {
+    T value;
+}
+
+class Pool<T> {
+}
+
+enum Option<T> {
+    Some(T),
+    None
+}
+```
+
+`trait`의 제너릭 선언 문법은 현재 미정으로 둔다.
+
+```hwarangdo
+trait Converter<T> {
+}
+```
+
+위와 같은 제너릭 trait은 현재 제너릭 타입 명세의 범위에 포함하지 않는다.
+
+---
+
+## 15.4 타입 매개변수
+
+제너릭 타입 선언의 `< >` 내부에서 선언된 식별자는 타입 매개변수이다.
+
+```hwarangdo
+struct Pair<T, U> {
+    T first;
+    U second;
+}
+```
+
+위 선언에서 `T`와 `U`는 일반 값이나 상수가 아니라 타입을 나타낸다.
+
+타입 매개변수는 해당 제너릭 타입 선언 내부에서 일반 타입과 동일한 타입 위치에 사용할 수 있다.
+
+예:
+
+```hwarangdo
+struct Box<T> {
+    T value;
+
+    public T get(T fallback) {
+        return value;
+    }
+}
+```
+
+타입 매개변수는 다음 위치에서 사용할 수 있다.
+
+* field 타입
+* method parameter 타입
+* method return 타입
+* 다른 제너릭 타입의 타입 인자
+* enum variant payload 타입
+
+예:
+
+```hwarangdo
+struct Node<T> {
+    T value;
+    Option<T> next;
+}
+```
+
+---
+
+## 15.5 타입 매개변수 스코프
+
+타입 매개변수는 해당 제너릭 타입 선언 내부에서만 유효한 타입 이름이다.
+
+```hwarangdo
+struct Box<T> {
+    T value;
+}
+```
+
+위의 `T`는 `Box` 내부에서 사용할 수 있다.
+
+다른 타입 선언에서는 사용할 수 없다.
+
+```hwarangdo
+struct Box<T> {
+    T value;
+}
+
+struct Other {
+    T value; // 오류
+}
+```
+
+제너릭 타입에 연결된 `impl` 내부에서는 원본 타입의 타입 매개변수를 사용할 수 있다.
+
+---
+
+## 15.6 타입 매개변수 중복
+
+하나의 제너릭 타입 선언에서 동일한 이름의 타입 매개변수를 두 번 이상 선언할 수 없다.
+
+금지:
+
+```hwarangdo
+struct Pair<T, T> {
+}
+```
+
+각 타입 매개변수는 하나의 제너릭 선언 내에서 서로 다른 이름을 가져야 한다.
+
+---
+
+## 15.7 타입 인자
+
+제너릭 타입을 사용할 때에는 `< >` 내부에 실제 타입 인자를 작성한다.
+
+```hwarangdo
+Box<int> value;
+Pair<string, int> pair;
+```
+
+타입 인자의 개수는 제너릭 타입 선언의 타입 매개변수 개수와 일치해야 한다.
+
+```hwarangdo
+struct Pair<T, U> {
+}
+```
+
+허용:
+
+```hwarangdo
+Pair<int, string> value;
+```
+
+금지:
+
+```hwarangdo
+Pair<int> value;
+Pair<int, string, bool> value;
+```
+
+---
+
+## 15.8 타입 동일성
+
+제너릭 타입의 동일성은 원본 타입과 모든 타입 인자를 기준으로 판단한다.
+
+```txt
+Box<int> == Box<int>
+Box<int> != Box<string>
+
+Pair<int, string> == Pair<int, string>
+Pair<int, string> != Pair<string, int>
+```
+
+타입 인자의 순서 또한 타입 동일성의 일부이다.
+
+---
+
+## 15.9 타입 매개변수에 대한 연산
+
+제약이 없는 타입 매개변수는 구체적인 타입의 멤버나 연산을 보장하지 않는다.
+
+따라서 타입 매개변수라는 사실만으로 임의의 메서드를 호출할 수 없다.
+
+금지:
+
+```hwarangdo
+struct Box<T> {
+    public void run(T value) {
+        value.move();
+    }
+}
+```
+
+위 코드에서 `T`가 `move()` 메서드를 가진다는 보장이 없으므로 사용할 수 없다.
+
+타입 매개변수에 특정 trait을 요구하여 멤버 또는 연산을 보장하는 constraint 문법은 추후 별도로 정의한다.
+
+현재 제너릭 타입 선언의 기본 형태에서는 constraint를 지원하지 않는다.
+
+---
+
+## 15.10 제너릭 struct의 impl
+
+제너릭 struct는 일반 struct와 동일하게 `impl`을 사용할 수 있다.
+
+```hwarangdo
+struct Box<T> {
+    T value;
+}
+
+impl Box<T> {
+    public T get() {
+        return value;
+    }
+}
+```
+
+`impl Box<T>`는 새로운 제너릭 타입이나 새로운 타입 매개변수를 선언하지 않는다.
+
+`impl Box<T>`는 기존에 선언된 `Box<T>` 타입에 메서드 구현을 추가한다.
+
+개념적으로 다음과 같다.
+
+```txt
+Box<T>
+├── field
+│   └── value : T
+└── method
+    └── get() : T
+```
+
+`impl` 내부의 `T`는 `Box<T>` 선언에 존재하는 타입 매개변수와 동일한 타입 매개변수를 의미한다.
+
+따라서 `impl`을 처리하기 위해 별도의 제너릭 타입을 생성하지 않는다.
+
+---
+
+## 15.11 제너릭 impl의 의미
+
+다음 선언:
+
+```hwarangdo
+impl Box<T> {
+    public T get() {
+        return value;
+    }
+}
+```
+
+은 특정한 하나의 `Box` 타입에 대한 구현이 아니라 `Box<T>` 제너릭 원본 타입에 대한 공통 구현이다.
+
+따라서 해당 메서드는 모든 유효한 `Box<T>` 타입 인스턴스에서 사용할 수 있다.
+
+예:
+
+```hwarangdo
+Box<int> a;
+Box<string> b;
+```
+
+두 타입 모두 `Box<T>`에 정의된 `get()` 메서드를 가진다.
+
+실제 타입 인자가 결정되면 메서드에서 사용되는 타입 매개변수도 해당 타입으로 치환된다.
+
+개념적으로:
+
+```txt
+Box<T>
+T get()
+
+T = int
+    ↓
+
+Box<int>
+int get()
+```
+
+---
+
+## 15.12 impl 대상 타입 규칙
+
+제너릭 타입의 공통 구현을 작성할 때에는 제너릭 원본 타입을 대상으로 한다.
+
+```hwarangdo
+impl Box<T> {
+}
+```
+
+구체적인 타입 인자에 대해서만 별도의 구현을 제공하는 specialization은 현재 지원하지 않는다.
+
+따라서 다음과 같은 형태는 허용하지 않는다.
+
+```hwarangdo
+impl Box<int> {
+}
+```
+
+또한 일부 타입 매개변수만 구체화하는 partial specialization 역시 지원하지 않는다.
+
+```hwarangdo
+impl Pair<T, int> {
+}
+```
+
+현재 `impl`은 원본 제너릭 타입 전체에 공통으로 적용되는 구현만 정의할 수 있다.
+
+---
+
+## 15.13 제너릭 타입의 내부 의미
+
+제너릭 타입 선언은 별도의 템플릿 선언으로 취급하지 않는다.
+
+제너릭 매개변수를 가지는 타입 선언 자체가 타입 시스템에 등록되는 원본 타입이다.
+
+예:
+
+```hwarangdo
+struct Vec<T> {
+    T value;
+}
+```
+
+컴파일러 내부에서는 개념적으로 다음과 같은 타입을 가진다.
+
+```txt
+Vec<T>
+├── generic parameter
+│   └── T
+├── fields
+└── methods
+```
+
+`Vec<int>`와 같이 실제 타입 인자가 사용되면 원본 타입과 타입 인자를 기반으로 제너릭 타입을 구성한다.
+
+개념적으로:
+
+```txt
+Vec<T>
+  +
+T = int
+  ↓
+Vec<int>
+```
+
+원본 타입에 연결된 field와 method의 타입 매개변수는 실제 타입 인자에 따라 치환된다.
+
+---
+
+## 15.14 구현 모델
+
+컴파일러에서 타입 매개변수는 일반 타입과 동일하게 타입 위치에서 사용할 수 있는 심볼로 표현한다.
+
+개념적으로 다음과 같은 구조를 사용할 수 있다.
+
+```cpp
+class GenericParamSymbol : public TypeSymbol {
+    // generic parameter 정보
+};
+```
+
+실제 타입 인자가 적용된 제너릭 타입은 기존 제너릭 타입 표현을 사용한다.
+
+```cpp
+class GenericSymbol : public TypeSymbol {
+public:
+    TypeSymbol *origin = nullptr;
+    std::vector<TypeSymbol *> args;
+};
+```
+
+예:
+
+```txt
+Vec<int>
+
+GenericSymbol
+├── origin -> Vec<T>
+└── args
+    └── int
+```
+
+`impl Vec<T>`는 새로운 `GenericSymbol`을 생성하지 않는다.
+
+해당 구현은 `origin`에 해당하는 원본 제너릭 타입 선언에 연결된다.
+
+---
+
+
+---
+
+## 15.15 제너릭 메서드
+
+제너릭 메서드는 메서드 자체가 하나 이상의 타입 매개변수를 가지는 메서드이다.
+
+제너릭 타입의 타입 매개변수와 달리, 제너릭 메서드의 타입 매개변수는 해당 메서드 선언이 직접 소유한다.
+
+예:
+
+```hwarangdo
+struct Serializer {
+    public T read<T>() {
+        ...
+    }
+}
+```
+
+위 선언에서 `T`는 `Serializer`의 타입 매개변수가 아니라 `read` 메서드의 타입 매개변수이다.
+
+제너릭 메서드는 제너릭 타입과 일반 타입 모두에서 선언할 수 있다.
+
+```hwarangdo
+struct Factory {
+    public T create<T>() {
+        ...
+    }
+}
+
+struct Container<T> {
+    public U convert<U>(T value) {
+        ...
+    }
+}
+```
+
+두 번째 예시에서 `T`는 `Container<T>`가 소유하는 타입 매개변수이며, `U`는 `convert<U>` 메서드가 소유하는 타입 매개변수이다.
+
+### 15.15.1 선언 문법
+
+제너릭 메서드의 타입 매개변수는 메서드 이름 바로 뒤의 `< >` 내부에 선언한다.
+
+```ebnf
+GenericMethodDecl
+    := MethodName GenericParamList "(" ParameterList? ")" MethodBody
+```
+
+예:
+
+```hwarangdo
+public T get<T>();
+public U convert<T, U>(T value);
+```
+
+타입 매개변수 이름과 중복 규칙은 제너릭 타입의 타입 매개변수 규칙을 따른다.
+
+### 15.15.2 타입 매개변수 스코프
+
+메서드 타입 매개변수는 해당 메서드의 시그니처와 본문 내부에서만 유효하다.
+
+다음 위치에서 사용할 수 있다.
+
+* 메서드 parameter 타입
+* 메서드 return 타입
+* 지역 변수 타입
+* 다른 제너릭 타입의 타입 인자
+* 메서드 본문 내부의 타입 위치
+
+메서드 외부에서는 해당 타입 매개변수를 사용할 수 없다.
+
+```hwarangdo
+struct Factory {
+    public T create<T>() {
+        T value;
+        return value;
+    }
+
+    public void other() {
+        T value; // 오류
+    }
+}
+```
+
+### 15.15.3 제너릭 타입과 제너릭 메서드의 타입 매개변수
+
+제너릭 타입 내부의 제너릭 메서드는 타입 선언의 타입 매개변수와 메서드의 타입 매개변수를 동시에 사용할 수 있다.
+
+```hwarangdo
+struct Converter<T> {
+    public U convert<U>(T value) {
+        ...
+    }
+}
+```
+
+위 코드에서:
+
+```txt
+T -> Converter<T>가 소유
+U -> convert<U>가 소유
+```
+
+서로 다른 선언이 소유하는 타입 매개변수는 서로 독립된 타입 매개변수이다.
+
+동일한 이름으로 외부 타입 매개변수를 가리는 선언은 허용하지 않는다.
+
+금지:
+
+```hwarangdo
+struct Box<T> {
+    public T convert<T>(T value) {
+        ...
+    }
+}
+```
+
+### 15.15.4 호출 규칙
+
+제너릭 메서드를 호출할 때에는 메서드 이름 뒤에 실제 타입 인자를 명시한다.
+
+```hwarangdo
+Serializer serializer;
+Player player = serializer.read<Player>();
+```
+
+제너릭 메서드 호출의 타입 인자 개수는 선언된 타입 매개변수 개수와 정확히 일치해야 한다.
+
+```hwarangdo
+public U convert<T, U>(T value);
+```
+
+허용:
+
+```hwarangdo
+converter.convert<int, string>(10);
+```
+
+금지:
+
+```hwarangdo
+converter.convert<int>(10);
+converter.convert<int, string, bool>(10);
+```
+
+현재 제너릭 메서드의 타입 인자는 호출 시 명시적으로 작성해야 한다.
+타입 인자 추론은 지원하지 않는다.
+
+### 15.15.5 타입 치환
+
+제너릭 메서드 호출 시 메서드의 타입 매개변수는 호출에 지정된 실제 타입 인자로 치환된다.
+
+```hwarangdo
+public T read<T>();
+
+Player value = serializer.read<Player>();
+```
+
+개념적으로 다음과 같다.
+
+```txt
+read<T>()
+T = Player
+    ↓
+read<Player>() -> Player
+```
+
+제너릭 타입 내부의 제너릭 메서드는 타입 수준 치환과 메서드 수준 치환을 함께 적용한다.
+
+```txt
+Container<T>::convert<U>(T value)
+T = int
+U = string
+    ↓
+Container<int>::convert<string>(int value) -> string
+```
+
+### 15.15.6 구현 모델
+
+컴파일러 내부에서 메서드가 선언한 타입 매개변수는 `GenericParamSymbol`로 표현하며, 해당 매개변수의 소유자는 메서드이다.
+
+따라서 `GenericParamSymbol`의 소유자는 제너릭 타입 선언 또는 제너릭 메서드 선언이 될 수 있다.
+
+제너릭 메서드 원형은 실제 코드 생성 대상이 아니다.
+실제 타입 인자가 적용되어 모든 타입 매개변수가 구체화된 메서드 인스턴스만 코드 생성 대상이 된다.
+
+제너릭 메서드 인스턴스의 동일성은 다음 요소를 기준으로 판단한다.
+
+* 원본 메서드
+* 메서드가 속한 구체화된 owner 타입
+* 모든 메서드 타입 인자
+
+예:
+
+```txt
+Serializer::read<Player> != Serializer::read<Enemy>
+Container<int>::convert<string> != Container<float>::convert<string>
+```
+
+### 15.15.7 현재 제한
+
+제너릭 메서드는 현재 다음 기능을 지원하지 않는다.
+
+* 타입 인자 추론
+* 메서드 specialization
+* 메서드 partial specialization
+* const generic parameter
+* 런타임 generic dispatch
+
+제너릭 constraint는 제너릭 타입과 동일하게 별도 명세에서 정의한다.
+
+제너릭 메서드는 정적 타입 기능이며, 모든 타입 인자는 컴파일 타임에 결정되어야 한다.
+
+## 15.16 현재 지원하지 않는 제너릭 기능
+
+현재 제너릭 타입 설계에서는 다음 기능을 지원하지 않는다.
+
+### 제너릭 constraint
+
+```hwarangdo
+struct Box<T : Trait> {
+}
+```
+
+세부 문법은 미정이다.
+
+### 제너릭 trait
+
+```hwarangdo
+trait Converter<T> {
+}
+```
+
+세부 규칙은 미정이다.
+
+### const generic
+
+```hwarangdo
+struct Array<T, N> {
+}
+```
+
+`N`과 같은 컴파일 타임 값 매개변수는 지원하지 않는다.
+
+모든 제너릭 매개변수는 타입 매개변수이다.
+
+### specialization
+
+```hwarangdo
+impl Box<int> {
+}
+```
+
+특정 타입 인자에만 적용되는 구현은 지원하지 않는다.
+
+### partial specialization
+
+```hwarangdo
+impl Pair<T, int> {
+}
+```
+
+일부 타입 인자만 구체화하는 구현은 지원하지 않는다.
+
+---
+
+## 15.17 기본 예시
+
+### 단일 타입 매개변수
+
+```hwarangdo
+struct Box<T> {
+    T value;
+}
+
+impl Box<T> {
+    public T get() {
+        return value;
+    }
+}
+```
+
+### 복수 타입 매개변수
+
+```hwarangdo
+struct Pair<T, U> {
+    T first;
+    U second;
+}
+
+impl Pair<T, U> {
+    public T getFirst() {
+        return first;
+    }
+
+    public U getSecond() {
+        return second;
+    }
+}
+```
+
+### 제너릭 enum
+
+```hwarangdo
+enum Option<T> {
+    Some(T),
+    None
+}
+
+enum Result<T, E> {
+    Ok(T),
+    Err(E)
+}
+```
+
+### 제너릭 타입의 중첩
+
+```hwarangdo
+struct Container<T> {
+    Option<T> value;
+}
+```
+
+사용:
+
+```hwarangdo
+Container<int> value;
+Option<string> text;
+Result<int, Error> result;
+```
+
+---
+
+## 15.18 핵심 규칙 요약
+
+* 제너릭은 기존 타입 선언에 타입 매개변수를 추가하는 기능이다.
+* 타입 매개변수는 타입 이름 뒤의 `< >`에 선언한다.
+* 제너릭 매개변수는 모두 타입 매개변수이다.
+* 제너릭 타입 선언 자체가 타입 시스템의 원본 타입으로 취급된다.
+* 타입 매개변수는 해당 타입 내부에서 일반 타입처럼 사용할 수 있다.
+* `struct`, `class`, `enum`에서 제너릭 선언을 지원한다.
+* 제너릭 `trait`은 현재 미정이다.
+* 제너릭 메서드는 일반 타입과 제너릭 타입 모두에서 선언할 수 있다.
+* 제너릭 메서드의 타입 매개변수는 메서드가 직접 소유하며 해당 메서드 내부에서만 유효하다.
+* 제너릭 메서드 호출 시 타입 인자는 명시적으로 작성하며 현재 타입 인자 추론은 지원하지 않는다.
+* 제너릭 타입 사용은 `Type<Args...>` 형식을 따른다.
+* 제너릭 타입 동일성은 원본 타입과 모든 타입 인자를 기준으로 판단한다.
+* 제약 없는 타입 매개변수에 대해 임의의 멤버 또는 연산을 사용할 수 없다.
+* `impl Vec<T>`는 새로운 제너릭을 선언하지 않고 기존 `Vec<T>`에 구현을 추가한다.
+* `impl`의 타입 매개변수는 원본 제너릭 타입의 매개변수를 의미한다.
+* `impl Vec<T>`에 정의된 메서드는 모든 `Vec<T>` 타입 인스턴스에 공통으로 적용된다.
+* 특정 타입 인자에 대한 specialization과 partial specialization은 지원하지 않는다.
+* const generic과 generic constraint는 현재 지원하지 않는다.

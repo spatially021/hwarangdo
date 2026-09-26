@@ -312,6 +312,11 @@ void MetaReader::tokenize(std::string_view source) {
       push(TokenKind::RAngle, ">", tokenLine, tokenColumn);
       continue;
 
+    case '@':
+      advanceChar();
+      push(TokenKind::At, "@", tokenLine, tokenColumn);
+      continue;
+
     case ',':
       advanceChar();
       push(TokenKind::Comma, ",", tokenLine, tokenColumn);
@@ -420,6 +425,7 @@ TypeMeta MetaReader::readType(TypeKind kind) {
 
   result.name = std::move(name.name);
   result.path = std::move(name.path);
+  result.genericParams = readGenericParams();
 
   if (match(TokenKind::Colon)) {
     if (kind != TypeKind::CLASS) {
@@ -571,6 +577,8 @@ MethodMeta MetaReader::readMethod() {
   MethodMeta result;
 
   result.name = expectIdentifier("expected method name").text;
+  result.genericParams = readGenericParams();
+  result.isGenericDecl = !result.genericParams.empty();
 
   expect(TokenKind::LParen, "expected '(' after method name");
 
@@ -651,24 +659,29 @@ EnumVariantMeta MetaReader::readVariant() {
 TypeRef MetaReader::readTypeRef() {
   TypeRef result;
 
-  QualifiedName name = readQualifiedName();
+  if (match(TokenKind::At)) {
+    result.kind = TypeRefKind::GenericParam;
+    result.name = expectIdentifier("expected generic parameter after '@'").text;
+  } else {
+    QualifiedName name = readQualifiedName();
 
-  // Builtin은 path를 가질 수 없음.
-  if (name.path.segments.empty()) {
-    const auto builtin = builtInFromName(name.name);
+    // Builtin은 path를 가질 수 없음.
+    if (name.path.segments.empty()) {
+      const auto builtin = builtInFromName(name.name);
 
-    if (builtin.has_value()) {
-      result.kind = TypeRefKind::BuiltIn;
-      result.builtIn = *builtin;
+      if (builtin.has_value()) {
+        result.kind = TypeRefKind::BuiltIn;
+        result.builtIn = *builtin;
+      } else {
+        result.kind = TypeRefKind::Declared;
+        result.name = std::move(name.name);
+        result.path = std::move(name.path);
+      }
     } else {
       result.kind = TypeRefKind::Declared;
       result.name = std::move(name.name);
       result.path = std::move(name.path);
     }
-  } else {
-    result.kind = TypeRefKind::Declared;
-    result.name = std::move(name.name);
-    result.path = std::move(name.path);
   }
 
   // ------------------------------------------------------------
@@ -676,8 +689,9 @@ TypeRef MetaReader::readTypeRef() {
   // ------------------------------------------------------------
 
   if (match(TokenKind::LAngle)) {
-    if (result.kind == TypeRefKind::BuiltIn) {
-      fail(previous(), "builtin type cannot have generic arguments");
+    if (result.kind == TypeRefKind::BuiltIn ||
+        result.kind == TypeRefKind::GenericParam) {
+      fail(previous(), "type cannot have generic arguments");
     }
 
     result.kind = TypeRefKind::Generic;
@@ -718,6 +732,28 @@ TypeRef MetaReader::readTypeRef() {
   }
 
   return result;
+}
+
+std::vector<std::string> MetaReader::readGenericParams() {
+  std::vector<std::string> params;
+  if (!match(TokenKind::LAngle)) {
+    return params;
+  }
+
+  if (check(TokenKind::RAngle)) {
+    fail(peek(), "generic declaration requires at least one parameter");
+  }
+
+  do {
+    const Token &param = expectIdentifier("expected generic parameter name");
+    if (std::find(params.begin(), params.end(), param.text) != params.end()) {
+      fail(param, "duplicate generic parameter name");
+    }
+    params.push_back(param.text);
+  } while (match(TokenKind::Comma));
+
+  expect(TokenKind::RAngle, "expected '>' after generic parameters");
+  return params;
 }
 
 // ============================================================

@@ -1,3 +1,4 @@
+#include "hrd/AST/CaseAble.h"
 #include "hrd/AST/Decl.h"
 #include "hrd/AST/Expr.h"
 #include "hrd/AST/Stmt.h"
@@ -153,54 +154,7 @@ void Resolver::visit(SwitchStmt *stmt) {
       recover.recover();
     }
   }
-
-  auto *targetType = stmt->value->resolvedType;
-
-  if (auto en = dyn_cast<EnumType>(targetType)) {
-    if (stmt->usedVariants.size() != en->variants.size() && !stmt->hasDefault) {
-      auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S081);
-      dia.labels = {
-          {stmt->span, "this switch does not handle every enum variant", true},
-      };
-      dia.notes = {
-          "switch statements must handle every possible enum variant",
-      };
-      dia.helps = {
-          "add the missing enum cases or add a final default case",
-      };
-      engine.emit(dia);
-      recover.recover();
-    }
-  } else if (targetType->kind == TypeKind::PRIMITIVE) {
-    if (!stmt->hasDefault) {
-      auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S081);
-      dia.labels = {
-          {stmt->span, "this switch has no default case", true},
-      };
-      dia.notes = {
-          "primitive values cannot be exhaustively enumerated by case values",
-      };
-      dia.helps = {
-          "add a final default case",
-      };
-      engine.emit(dia);
-      recover.recover();
-    }
-  } else {
-    auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S082);
-    dia.labels = {
-        {stmt->value->span, "switch target has type '" + targetType->name + "'",
-         true},
-    };
-    dia.notes = {
-        "switch statements only support primitive and enum target values",
-    };
-    dia.helps = {
-        "use a primitive or enum expression as the switch target",
-    };
-    engine.emit(dia);
-    recover.recover();
-  }
+  checkSwitchValue(stmt, stmt->span);
 
   currentSwitch = before;
 }
@@ -245,7 +199,7 @@ void Resolver::visit(Case *stmt) {
   table.scopeManger.exit();
   stmt->body->accept(this);
 
-  if (dynamic_cast<MatchExpr *>(currentSwitch)) {
+  if (currentSwitch->sKind == SwitchKind::Match) {
     if (stmt->transfers.empty()) {
       auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S084);
       dia.labels = {
@@ -361,7 +315,7 @@ void Resolver::visit(ValueTransferStmt *stmt) {
     recover.recover();
   }
 
-  if (dynamic_cast<SwitchStmt *>(currentSwitch)) {
+  if (currentSwitch->sKind == SwitchKind::Switch) {
     auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_S088);
     dia.labels = {
         {stmt->span, "value transfer statement appears inside a switch case",
@@ -376,10 +330,6 @@ void Resolver::visit(ValueTransferStmt *stmt) {
     };
     engine.emit(dia);
     recover.recover();
-  }
-
-  if (!dynamic_cast<MatchExpr *>(currentSwitch)) {
-    Error::internal("value transfer reached an invalid switch context");
   }
 
   stmt->value->accept(this);

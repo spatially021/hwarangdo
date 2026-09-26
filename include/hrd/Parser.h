@@ -52,6 +52,7 @@ private:
   const std::vector<Token> &tokens;
   DiagnosticEngine &engine;
   size_t current = 0;
+  size_t pendingGenericClose = 0;
   bool endImport = false;
   TokenStream &stream;
 
@@ -103,7 +104,6 @@ private:
   Decl::Ptr enumDecl(DeclPrefix prefix);
   Decl::Ptr functionDecl(DeclPrefix prefix, bool isDynamic = false);
   Decl::Ptr varDecl(DeclPrefix prefix);
-  Decl::Ptr handleDecl(DeclPrefix prefix);
   Decl::Ptr initDecl(DeclPrefix prefix);
   Decl::Ptr onDestroyDecl(DeclPrefix prefix);
   Decl::Ptr importDecl();
@@ -133,8 +133,13 @@ private:
   bool looksLikeDecl();
 
   TypeNode::Ptr parseType();
+  TypeNode::Ptr parseGenericType(Token base);
+  TypeName parseTypeName(DiagnosticCode nameDiag, const string &message);
+  std::vector<Expr::Ptr> parseCallArgs();
 
   Expr::Ptr parseCaseValue();
+  bool isGenericArgs();
+  std::vector<TypeNode::Ptr> parseGenericArgs();
 
 private:
   void notFunc(DeclPrefix prefix);

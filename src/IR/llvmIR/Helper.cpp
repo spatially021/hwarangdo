@@ -10,8 +10,9 @@ vector<Cleanup> llvmCodegen::lowerArgs(vector<llvm::Value *> &args,
 
   for (auto *v : values) {
     auto lv = lowerValue(v, ctx);
+    auto *type = resolveType(v->type, ctx);
 
-    if (isString(v->type)) {
+    if (isString(type)) {
       if (lv.addr == nullptr) {
         Error::internal("string argument has no address");
       }
@@ -23,8 +24,8 @@ vector<Cleanup> llvmCodegen::lowerArgs(vector<llvm::Value *> &args,
     }
 
     if (lv.category == MIRValueCategory::OwnedTemp && lv.addr != nullptr &&
-        needsDestroy(v->type)) {
-      out.push_back({lv.addr, v->type});
+        needsDestroy(type)) {
+      out.push_back({lv.addr, type});
     }
   }
 
@@ -33,7 +34,7 @@ vector<Cleanup> llvmCodegen::lowerArgs(vector<llvm::Value *> &args,
 
 llvm::Value *llvmCodegen::lowerReceiverPtr(MIRPlace *place, FuncContext &ctx) {
   auto *addr = lowerPlace(place, ctx).dst;
-  auto *ty = place->symbol->typeSymbol;
+  auto *ty = resolveType(place->symbol->typeSymbol, ctx);
 
   if (ty->kind == TypeKind::CLASS && dynamic_cast<MIRLocalPlace *>(place)) {
     return builder.CreateLoad(builder.getPtrTy(), addr, "receiver.ptr");

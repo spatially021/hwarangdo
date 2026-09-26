@@ -2,12 +2,11 @@
 
 #include "ASTNode.h"
 #include "Visitor.h"
-#include "hrd/AST/CaseKey.h"
+#include "hrd/AST/CaseAble.h"
 #include "hrd/SourceSpan.h"
 #include "hrd/Token.h"
 #include <memory>
 #include <optional>
-#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -137,21 +136,13 @@ public:
   TypeSymbol *transferType = nullptr;
 };
 
-class SwitchStmt : public Stmt {
+class SwitchStmt : public Stmt, public CaseAble {
 public:
-  ExprPtr value;                         // switch (value)
-  std::vector<shared_ptr<Case>> clauses; // CaseStmt 또는 DefaultStmt 의 집합
-
-  bool hasDefault = false;
-
   SwitchStmt(SourceSpan t, ExprPtr val, std::vector<shared_ptr<Case>> c)
-      : Stmt(NKind::SWITCH_STMT, t), value(std::move(val)),
-        clauses(std::move(c)) {}
+      : Stmt(NKind::SWITCH_STMT, t),
+        CaseAble(std::move(val), std::move(c), SwitchKind::Switch) {}
 
   void accept(ASTVisitor *visitor) override { visitor->visit(this); }
-
-  unordered_set<CaseKey, CaseKeyHash> caseKeys;
-  std::unordered_set<EnumVariantSymbol *> usedVariants;
 };
 
 class CatchClause : public Stmt {

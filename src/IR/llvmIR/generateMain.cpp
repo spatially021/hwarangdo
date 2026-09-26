@@ -1,4 +1,6 @@
 #include "hrd/IR/llvmIR/llvmCodegen.h"
+#include "hrd/util/Error.h"
+#include <llvm/IR/Function.h>
 
 MethodSymbol *llvmCodegen::getMainMethod(const string &name) {
 
@@ -50,7 +52,15 @@ void llvmCodegen::generateEntryMain(MainSymbol *mainType) {
   llvm::Value *mainObj = builder.CreateAlloca(mainLlvmTy);
 
   auto init = getMainMethod("init");
-  auto mainUpdate = funcs.at(getMainMethod("update"));
+  auto mainMethod = getMainMethod("update");
+  llvm::Function *mainUpdate = nullptr;
+  {
+    auto it = funcs.find(mainMethod);
+    if (it == funcs.end()) {
+      Error::internal("fail to get update");
+    }
+    mainUpdate = it->second;
+  }
 
   auto defaultInit = defaultInits.at(mainType);
   builder.CreateCall(defaultInit, {mainObj});

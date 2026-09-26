@@ -20,7 +20,9 @@ pair<bool, SourceSpan> TypeSymbol::addMethod(unique_ptr<MethodSymbol> symbol) {
     return {false, span};
   }
   bucket.push_back(raw);
-  methods.push_back(raw);
+  if (!raw->isGenericDecl) {
+    methods.push_back(raw);
+  }
   methodOwn.push_back(std::move(symbol));
   return {true, {}};
 }
@@ -41,7 +43,9 @@ pair<bool, SourceSpan> ObjectType::addMethod(unique_ptr<MethodSymbol> symbol,
   } else {
     bucket.push_back(raw);
   }
-  methods.push_back(raw);
+  if (!raw->isGenericDecl) {
+    methods.push_back(raw);
+  }
   methodOwn.push_back(std::move(symbol));
   return {true, {}};
 }

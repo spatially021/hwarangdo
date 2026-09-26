@@ -25,7 +25,7 @@ void ImportedSymbolBuilder::linkType(TypeMeta &type) {
   }
 
   for (auto &m : type.methods) {
-    linkMethod(m);
+    linkMethod(m, symbol);
   }
 
   for (auto &v : type.variants) {
@@ -38,16 +38,16 @@ void ImportedSymbolBuilder::linkField(FieldMeta &field) {
   symbol->typeSymbol = getOrCreateTypeRef(field.type);
 }
 
-void ImportedSymbolBuilder::linkMethod(MethodMeta &method) {
-  auto symbol = getMethod(method);
+void ImportedSymbolBuilder::linkMethod(MethodMeta &method, TypeSymbol *owner) {
+  auto symbol = getMethod(owner, method);
 
-  symbol->returnType = getOrCreateTypeRef(method.returnType);
+  symbol->returnType = getOrCreateTypeRef(method.returnType, symbol);
 
   for (size_t i = 0; i < symbol->params.size(); ++i) {
     auto pSymbol = symbol->params[i];
     auto &pMeta = method.params[i];
 
-    pSymbol->typeSymbol = getOrCreateTypeRef(pMeta.type);
+    pSymbol->typeSymbol = getOrCreateTypeRef(pMeta.type, symbol);
   }
 
   if (method.name != "init") {
@@ -80,5 +80,28 @@ void ImportedSymbolBuilder::linkVariant(EnumVariantMeta &variant) {
   auto symbol = getVariant(variant);
   if (variant.payload.has_value()) {
     symbol->payloadType = getOrCreateTypeRef(variant.payload.value());
+  }
+}
+
+void ImportedSymbolBuilder::linkTrait(TraitMeta &ref) {
+  auto *trait = getTraitSymbol(ref);
+
+  for (auto &method : ref.methods) {
+    linkTraitMethod(method, trait);
+  }
+}
+
+void ImportedSymbolBuilder::linkTraitMethod(MethodMeta &ref, TraitType *trait) {
+  auto *symbol = getMethod(trait, ref);
+
+  symbol->returnType = getOrCreateTypeRef(ref.returnType, symbol);
+
+  if (symbol->params.size() != ref.params.size()) {
+    Error::internal("imported trait method parameter count mismatch");
+  }
+
+  for (size_t i = 0; i < ref.params.size(); ++i) {
+    symbol->params[i]->typeSymbol =
+        getOrCreateTypeRef(ref.params[i].type, symbol);
   }
 }

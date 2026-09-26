@@ -49,7 +49,8 @@ void llvmCodegen::lowerCleanup(MIRCleanupStmt *stmt, FuncContext &ctx) {
   for (auto it = locals.rbegin(); it != locals.rend(); ++it) {
 
     ValueSymbol *sym = *it;
-    if (!needsDestroy(sym->typeSymbol)) {
+    auto *type = resolveType(sym->typeSymbol, ctx);
+    if (!needsDestroy(type)) {
       continue;
     }
     {
@@ -59,10 +60,10 @@ void llvmCodegen::lowerCleanup(MIRCleanupStmt *stmt, FuncContext &ctx) {
       }
     }
     llvm::Value *slot = ctx.locals.at(sym);
-    auto i = defaultDestroys.find(sym->typeSymbol);
+    auto i = defaultDestroys.find(type);
     if (i == defaultDestroys.end()) {
       Error::internal("fail to find default destroy : " + sym->name + "[" +
-                      sym->typeSymbol->name + "]");
+                      type->name + "]");
     }
     auto *destroy = i->second;
     builder.CreateCall(destroy, {slot});

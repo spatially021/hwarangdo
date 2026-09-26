@@ -179,12 +179,15 @@ struct HIRMethodCallExpr : HIRValueExpr {
   unique_ptr<HIRValueExpr> receiver = nullptr;
   MethodSymbol *method = nullptr;
   std::vector<std::unique_ptr<HIRExpr>> args;
-
+  vector<TypeSymbol *> genericArgs;
+  unordered_map<GenericParamSymbol *, TypeSymbol *> substitution;
   HIRMethodCallExpr(SourceSpan s, unique_ptr<HIRValueExpr> recv,
                     MethodSymbol *m, std::vector<std::unique_ptr<HIRExpr>> a,
-                    TypeSymbol *r)
+                    vector<TypeSymbol *> g, TypeSymbol *r,
+                    unordered_map<GenericParamSymbol *, TypeSymbol *> sub)
       : HIRValueExpr(s, HIRNodeKind::MethodCallExpr, r),
-        receiver(std::move(recv)), method(m), args(std::move(a)) {}
+        receiver(std::move(recv)), method(m), args(std::move(a)),
+        genericArgs(std::move(g)), substitution(std::move(sub)) {}
 };
 
 struct HIRRuntimeCall : HIRValueExpr {
@@ -199,22 +202,23 @@ struct HIRRuntimeCall : HIRValueExpr {
 struct HIRStructInitExpr : HIRValueExpr {
   MethodSymbol *method = nullptr;
   std::vector<std::unique_ptr<HIRExpr>> args;
+  vector<TypeSymbol *> genericArgs;
   bool isDefault = false;
   HIRStructInitExpr(SourceSpan s, MethodSymbol *m,
-                    std::vector<std::unique_ptr<HIRExpr>> a, TypeSymbol *r,
-                    bool d = false)
+                    std::vector<std::unique_ptr<HIRExpr>> a,
+                    vector<TypeSymbol *> g, TypeSymbol *r, bool d = false)
       : HIRValueExpr(s, HIRNodeKind::StructInitExpr, r), method(m),
-        args(std::move(a)), isDefault(d) {}
+        args(std::move(a)), genericArgs(std::move(g)), isDefault(d) {}
 };
 
 struct HIRSpawnExpr : HIRValueExpr {
   StorageKind storage = StorageKind::World;
   TypeSymbol *entityType = nullptr;
-  HIRMethodDecl *initMethod = nullptr; // 없으면 기본 생성 의미
+  MethodSymbol *initMethod = nullptr; // 없으면 기본 생성 의미
   std::vector<unique_ptr<HIRExpr>> args;
 
   HIRSpawnExpr(SourceSpan s, TypeSymbol *outType, StorageKind st,
-               TypeSymbol *ent, HIRMethodDecl *init,
+               TypeSymbol *ent, MethodSymbol *init,
                std::vector<unique_ptr<HIRExpr>> a)
       : HIRValueExpr(s, HIRNodeKind::SpawnExpr, outType), storage(st),
         entityType(ent), initMethod(init), args(std::move(a)) {}
@@ -234,11 +238,11 @@ struct HIRViewExpr : HIRValueExpr {
 struct HIRMatchExpr : HIRValueExpr {
   unique_ptr<HIRValueExpr> cond = nullptr;
   vector<unique_ptr<HIRCase>> cases;
-
+  bool hasDefault = false;
   HIRMatchExpr(SourceSpan s, TypeSymbol *ty, unique_ptr<HIRValueExpr> c,
-               vector<unique_ptr<HIRCase>> ca)
+               vector<unique_ptr<HIRCase>> ca, bool d)
       : HIRValueExpr(s, HIRNodeKind::MatchExpr, ty), cond(std::move(c)),
-        cases(std::move(ca)) {}
+        cases(std::move(ca)), hasDefault(d) {}
 };
 
 struct HIRDefaultValueExpr : HIRValueExpr {

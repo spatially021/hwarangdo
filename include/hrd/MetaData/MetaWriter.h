@@ -30,6 +30,7 @@ private:
 
   // recursive values
   void writeTypeRef(const TypeRef &ref);
+  void writeGenericParams(const std::vector<std::string> &params);
   void writeDefaultValue(const DefaultValueMeta &value);
   void writeLiteral(const ResolvedLit &lit);
 

@@ -14,7 +14,7 @@ void llvmCodegen::lowerStringSwitch(const SwitchTerminator &t,
   auto *checkBB = builder.GetInsertBlock();
   auto *parentFunc = checkBB->getParent();
 
-  auto *type = t.cond->type;
+  auto *type = resolveType(t.cond->type, ctx);
   auto *strTy = getLayoutType(type); // %string8 = { ptr, i64, i64 }
   auto *ptrTy = llvm::PointerType::getUnqual(context);
 
@@ -143,7 +143,7 @@ void llvmCodegen::lowerNativeSwitch(const SwitchTerminator &t,
 
 void llvmCodegen::lowerEnumSwitch(const SwitchTerminator &t, FuncContext &ctx) {
   auto cond = lowerValue(t.cond.get(), ctx);
-  auto *tag = extractEnumTag(cond, t.cond->type);
+  auto *tag = extractEnumTag(cond, resolveType(t.cond->type, ctx));
 
   if (t.cases.size() > std::numeric_limits<unsigned>::max()) {
     Error::internal("too many enum switch cases");

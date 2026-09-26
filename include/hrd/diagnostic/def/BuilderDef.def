@@ -78,3 +78,23 @@ DIAG(HRD_S007,
      Error,
      "duplicate method declaration",
      "HRD-S007")
+
+//=============================================================================
+// Trigger
+//-----------------------------------------------------------------------------
+// A generic parameter list declares the same parameter name more than once.
+//=============================================================================
+DIAG(HRD_S137,
+     Error,
+     "duplicate generic parameter name",
+     "HRD-S137")
+
+//=============================================================================
+// Trigger
+//-----------------------------------------------------------------------------
+// An extern method is declared with one or more generic parameters.
+//=============================================================================
+DIAG(HRD_S142,
+     Error,
+     "extern methods cannot be generic",
+     "HRD-S142")

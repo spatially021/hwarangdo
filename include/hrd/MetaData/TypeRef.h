@@ -11,21 +11,25 @@
 enum class TypeRefKind {
   BuiltIn,
   Declared,
+  // An application of a declared generic type, e.g. Box<i32>.
   Generic,
   Array,
+  // A reference to a parameter declared by the enclosing type or method.
+  GenericParam,
 };
 
 struct TypeRef {
   TypeRefKind kind;
 
-  // Declared / Generic
+  // Declared / Generic: declared type name and source path.
+  // GenericParam: parameter name; path must be empty.
   std::string name;
   SourcePath path;
 
   // BuiltIn
   std::optional<BuiltInType> builtIn;
 
-  // Generic: generic arguments
+  // Generic: generic arguments (which may themselves be GenericParam).
   // Array: args[0] == element type
   std::vector<TypeRef> args;
 

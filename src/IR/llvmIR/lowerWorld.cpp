@@ -3,9 +3,22 @@
 #include "hrd/SemanticAnalyzer/symbol/TypeSymbol.h"
 
 LoweredValue llvmCodegen::lowerSpawnExpr(MIRSpawnExpr *expr, FuncContext &ctx) {
-  ObjectType *entityType = dyn_cast<ObjectType>(expr->entityType);
+  auto *entityType = resolveType(expr->entityType, ctx);
 
-  llvm::Type *llvmEntityTy = getLayoutType(entityType);
+  llvm::Type *llvmEntityTy = nullptr;
+
+  if (auto *generic = dynamic_cast<GenericSymbol *>(entityType)) {
+    llvmEntityTy = getOrCreateGeneric(generic);
+  } else {
+    llvmEntityTy = getLayoutType(entityType);
+  }
+
+  auto *entityOrigin = entityType;
+
+  if (auto *generic = dynamic_cast<GenericSymbol *>(entityType)) {
+    entityOrigin = generic->origin;
+  }
+
   llvm::Value *size = getSizeOf(llvmEntityTy);
 
   llvm::FunctionCallee mallocFn = getOrDeclareMalloc();
@@ -15,21 +28,33 @@ LoweredValue llvmCodegen::lowerSpawnExpr(MIRSpawnExpr *expr, FuncContext &ctx) {
   builder.CreateMemSet(obj, llvm::ConstantInt::get(builder.getInt8Ty(), 0),
                        size, llvm::MaybeAlign(8));
 
+  std::vector<llvm::Value *> args;
+  args.push_back(obj);
+  vector<MIRValue *> values;
+  for (auto &arg : expr->args) {
+    values.push_back(arg.get());
+  }
+
+  auto out = lowerArgs(args, values, ctx);
+
   auto initFieldIt = defaultInits.find(entityType);
   if (initFieldIt != defaultInits.end()) {
     builder.CreateCall(initFieldIt->second, {obj});
   }
 
   if (expr->initMethod != nullptr) {
-    llvm::Function *initFn = funcs.at(expr->initMethod);
-
-    std::vector<llvm::Value *> args;
-    args.push_back(obj);
-    vector<MIRValue *> values;
-    for (auto &arg : expr->args) {
-      values.push_back(arg.get());
+    llvm::Function *initFn = nullptr;
+    if (auto *generic = dynamic_cast<GenericSymbol *>(entityType)) {
+      auto key = GenericMethodKey(generic, expr->initMethod);
+      auto methodIt = genericMethodMap.find(key);
+      if (methodIt == genericMethodMap.end()) {
+        Error::internal("generic struct init method not found: " +
+                        expr->initMethod->name);
+      }
+      initFn = methodIt->second;
+    } else {
+      initFn = getOrDeclareFunction(expr->initMethod);
     }
-    auto out = lowerArgs(args, values, ctx);
 
     builder.CreateCall(initFn, args);
 
@@ -42,16 +67,25 @@ LoweredValue llvmCodegen::lowerSpawnExpr(MIRSpawnExpr *expr, FuncContext &ctx) {
   if (destroyIt == defaultDestroys.end()) {
     throw std::runtime_error("fail to find entity destroy");
   }
-  auto *on = entityType->onDestroy.get();
+  auto *on = dynamic_cast<ObjectType *>(entityOrigin)->onDestroy.get();
 
   llvm::Function *onDestroyFn = nullptr;
 
   if (on != nullptr) {
-    auto onDestroyIt = funcs.find(on);
-    if (onDestroyIt == funcs.end()) {
-      throw std::runtime_error("fail to find entity onDestroy");
+    if (auto *generic = dynamic_cast<GenericSymbol *>(entityType)) {
+      auto key = GenericMethodKey(generic, on);
+      auto onDestroyIt = genericMethodMap.find(key);
+      if (onDestroyIt == genericMethodMap.end()) {
+        throw std::runtime_error("fail to find generic entity onDestroy");
+      }
+      onDestroyFn = onDestroyIt->second;
+    } else {
+      auto onDestroyIt = funcs.find(on);
+      if (onDestroyIt == funcs.end()) {
+        throw std::runtime_error("fail to find entity onDestroy");
+      }
+      onDestroyFn = onDestroyIt->second;
     }
-    onDestroyFn = onDestroyIt->second;
   }
 
   llvm::Value *onDestroyArg =

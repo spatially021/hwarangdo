@@ -1,13 +1,17 @@
 #include "hrd/IR/MIR/MIRExpr.h"
 #include "hrd/IR/MIR/MIRNode.h"
+#include "hrd/IR/llvmIR/CodegenStructs.h"
 #include "hrd/IR/llvmIR/llvmCodegen.h"
 #include "hrd/SemanticAnalyzer/symbol/MethodSymbol.h"
 #include "hrd/SemanticAnalyzer/symbol/TypeSymbol.h"
+#include "hrd/enums/TypeKind.h"
 #include "hrd/util/Error.h"
 #include <llvm/IR/DerivedTypes.h>
 #include <llvm/IR/Function.h>
 #include <llvm/IR/Type.h>
 #include <llvm/IR/Value.h>
+#include <unordered_map>
+#include <vector>
 
 LoweredValue llvmCodegen::castTo(LoweredValue value, TypeSymbol *sourceType,
                                  TypeSymbol *targetType) {
@@ -184,6 +188,7 @@ llvm::Type *llvmCodegen::getType(TypeSymbol *t) {
     if (dynamic_cast<HandleSymbol *>(g->origin)) {
       return getHrdHandleType();
     }
+    return getOrCreateGeneric(g);
   }
 
   if (t->kind == TypeKind::CLASS) {
@@ -194,6 +199,13 @@ llvm::Type *llvmCodegen::getType(TypeSymbol *t) {
 }
 
 llvm::Type *llvmCodegen::getLayoutType(TypeSymbol *t) {
+  if (auto *generic = dynamic_cast<GenericSymbol *>(t)) {
+    if (dynamic_cast<HandleSymbol *>(generic->origin)) {
+      return getHrdHandleType();
+    }
+    return getOrCreateGeneric(generic);
+  }
+
   if (auto it = types.find(t); it != types.end()) {
     return it->second;
   }
@@ -251,7 +263,7 @@ std::string llvmCodegen::getStringSuffix(TypeSymbol *type) {
   Error::internal("invalid string type");
 }
 
-llvm::Function *llvmCodegen::getOrgetOrDeclareFunction(MethodSymbol *method) {
+llvm::Function *llvmCodegen::getOrDeclareFunction(MethodSymbol *method) {
   auto it = funcs.find(method);
   if (it != funcs.end()) {
     return it->second;
@@ -289,13 +301,145 @@ bool llvmCodegen::needSelf(MethodSymbol *m) {
   return !(m->isExtern || m->isStatic);
 }
 
-llvm::Function *llvmCodegen::getOrCreateFunc(MethodSymbol *symbol) {
+llvm::Function *llvmCodegen::getOrCreateFunc(MethodSymbol *symbol,
+                                             MethodContext &ctx) {
+  if (ctx.isGenericDecl) {
+    if (ctx.key == nullptr || ctx.substitution == nullptr) {
+      Error::internal("illegal generic method");
+    }
+
+    auto it = genericMethodMap.find(*ctx.key);
+    if (it != genericMethodMap.end()) {
+      return it->second;
+    }
+
+    llvm::IRBuilderBase::InsertPointGuard insertPointGuard(builder);
+
+    auto resolved = resolveGenericType(symbol->returnType, *ctx.substitution);
+    auto rt = getType(resolved);
+
+    if (rt == nullptr) {
+      Error::internal("null llvm return type: " + symbol->name);
+    }
+
+    vector<llvm::Type *> params;
+
+    bool hasSelf = needSelf(symbol);
+
+    if (hasSelf) {
+      params.push_back(llvm::PointerType::get(context, 0));
+    }
+
+    for (auto &p : symbol->params) {
+      auto t = resolveGenericType(p->typeSymbol, *ctx.substitution);
+      auto pt = getType(t);
+
+      if (pt == nullptr) {
+        Error::internal("null llvm param type: " + p->name);
+      }
+
+      params.push_back(pt);
+    }
+
+    auto fnType = llvm::FunctionType::get(rt, params, false);
+
+    auto fn =
+        llvm::Function::Create(fnType, llvm::GlobalValue::LinkOnceODRLinkage,
+                               mangle(symbol, *ctx.key), llvmModule.get());
+
+    // Generic method용 prologue block.
+    // MIR block보다 먼저 만들어야 function entry block이 된다.
+    auto *genericEntry = llvm::BasicBlock::Create(context, "genericentry", fn);
+
+    unordered_map<BlockID, llvm::BasicBlock *> blocks;
+
+    MIRFunction *m = nullptr;
+
+    {
+      auto &methodMap = program->genericMap[symbol->owner].methodMap;
+      auto i = methodMap.find(symbol);
+
+      if (i == methodMap.end()) {
+        Error::internal("fail to get origin MIRFunction");
+      }
+
+      m = i->second;
+    }
+
+    for (auto &block : m->blocks) {
+      blocks.emplace(block->id,
+                     llvm::BasicBlock::Create(
+                         context, "bb" + std::to_string(block->id), fn));
+    }
+
+    localMap locals;
+
+    ParamMap paramMap;
+
+    std::vector<Cleanup> cleanupStack;
+
+    std::unordered_set<llvm::Value *> canceledCleanups;
+
+    auto argIt = fn->arg_begin();
+
+    llvm::Argument *self = nullptr;
+
+    if (hasSelf) {
+      self = &*argIt++;
+      self->setName("self");
+      paramMap.emplace(symbol->selfReceiver, self);
+    }
+
+    auto selfType = resolveGenericType(symbol->owner, *ctx.substitution);
+
+    FuncContext fctx = {
+        fn,       blocks,       locals,           paramMap,        self,
+        selfType, cleanupStack, canceledCleanups, ctx.substitution};
+
+    // 아래 parameter store와 entry branch는 반드시 새 generic method 안에
+    // 생성되어야 한다.
+    builder.SetInsertPoint(genericEntry);
+
+    for (auto *param : symbol->params) {
+      llvm::Argument *arg = &*argIt++;
+
+      arg->setName(param->name);
+
+      auto *paramType =
+          getType(resolveGenericType(param->typeSymbol, *ctx.substitution));
+
+      if (paramType == nullptr) {
+        Error::internal("null llvm param type: " + param->name);
+      }
+
+      auto *slot = createEntryAlloca(fn, paramType, param->name);
+
+      builder.CreateStore(arg, slot);
+
+      fctx.params.emplace(param, slot);
+    }
+
+    builder.CreateBr(blocks.at(m->entry));
+
+    for (auto &block : m->blocks) {
+      lowerBlock(block.get(), fctx);
+    }
+
+    genericMethodMap.emplace(*ctx.key, fn);
+
+    return fn;
+  }
+
   auto it = funcs.find(symbol);
+
   if (it != funcs.end()) {
     return it->second;
   }
+
   auto fn = createFuncShell(symbol);
+
   funcs.emplace(symbol, fn);
+
   return fn;
 }
 
@@ -320,4 +464,11 @@ llvm::Function *llvmCodegen::createFuncShell(MethodSymbol *symbol) {
   auto fn = llvm::Function::Create(fnType, llvm::GlobalValue::ExternalLinkage,
                                    mangle(symbol), llvmModule.get());
   return fn;
+}
+
+bool llvmCodegen::isClass(TypeSymbol *type) {
+  if (auto gen = dyn_cast<GenericSymbol>(type)) {
+    return gen->origin->kind == TypeKind::CLASS;
+  }
+  return type->kind == TypeKind::CLASS;
 }

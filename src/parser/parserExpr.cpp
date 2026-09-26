@@ -186,29 +186,23 @@ Ptr Parser::postfix() {
 
   while (true) {
     if (check(TKind::DOT)) {
-      Token t = advance(); //.처리
+      advance(); // . 처리
 
-      if (expr->kind == NKind::BUILTIN_NAME_EXPR) { // built in method 처리
-        if (check(TKind::IDENTIFIER) && peek().text == "spawn" &&
-            expr->kind == NKind::BUILTIN_NAME_EXPR) {
+      if (expr->kind == NKind::BUILTIN_NAME_EXPR) {
+        if (check(TKind::IDENTIFIER) && peek().text == "spawn") {
           advance(); // spawn 처리
-          TypeNode::Ptr type = parseType();
-          consume(TKind::LEFT_PAREN, DiagnosticCode::HRD_P046,
-                  "expected '(' after type name");
-          std::vector<Expr::Ptr> args;
-          if (!check(TKind::RIGHT_PAREN)) {
-            do {
-              args.push_back(ternary());
-            } while (match({TKind::COMMA}));
-          }
 
-          consume(TKind::RIGHT_PAREN, DiagnosticCode::HRD_P047,
-                  "expected ')' to close argument list");
+          TypeNode::Ptr type = parseType();
+          std::vector<Expr::Ptr> args = parseCallArgs();
+
           auto end = previous();
+
           return make_shared<SpawnExpr>(makeSpan(expr->span, end.span), expr,
                                         type, args);
+
         } else if (check(TKind::IDENTIFIER) && peek().text == "view") {
           advance(); // view 처리
+
           consume(TKind::LEFT_PAREN, DiagnosticCode::HRD_P046,
                   "expected '(' after 'view'");
 
@@ -218,10 +212,13 @@ Ptr Parser::postfix() {
                   "expected ')' to close view argument");
 
           auto end = previous();
+
           return make_shared<ViewExpr>(makeSpan(expr->span, end.span), expr,
                                        target);
+
         } else if (check(TKind::IDENTIFIER) && peek().text == "destroy") {
           advance(); // destroy 처리
+
           consume(TKind::LEFT_PAREN, DiagnosticCode::HRD_P046,
                   "expected '(' after 'destroy'");
 
@@ -229,28 +226,40 @@ Ptr Parser::postfix() {
 
           consume(TKind::RIGHT_PAREN, DiagnosticCode::HRD_P047,
                   "expected ')' to close destroy argument");
+
           auto end = previous();
+
           return make_shared<DestroyExpr>(makeSpan(expr->span, end.span), expr,
                                           target);
+
         } else if (check(TKind::IDENTIFIER) && peek().text == "quit") {
           advance(); // quit 처리
+
           consume(TKind::LEFT_PAREN, DiagnosticCode::HRD_P046,
                   "expected '(' after 'quit'");
+
           consume(TKind::RIGHT_PAREN, DiagnosticCode::HRD_P047,
                   "expected ')' to close quit argument");
+
           auto end = previous();
+
           return make_shared<QuitExpr>(makeSpan(expr->span, end.span));
+
         } else {
           auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_P060);
+
           dia.labels = {
               {peek().span, "unknown world method '" + peek().text + "'", true},
           };
+
           dia.notes = {
               "only built-in world methods can be called through 'world'",
           };
+
           dia.helps = {
               "use 'spawn', 'view', 'destroy', or 'quit'",
           };
+
           engine.emit(dia);
           recover.recover();
         }
@@ -258,55 +267,129 @@ Ptr Parser::postfix() {
 
       Token member = consume(TKind::IDENTIFIER, DiagnosticCode::HRD_P054,
                              "expected member name after '.'");
+
       auto end = previous();
+
       expr = make_shared<MemberExpr>(makeSpan(expr->span, end.span), expr,
                                      member.text);
-    } else if (check(TKind::LEFT_PAREN)) {
-      Token t = advance(); //(처리
-      std::vector<Expr::Ptr> args;
-      if (!check(TKind::RIGHT_PAREN)) {
-        do {
-          args.push_back(ternary());
-        } while (match({TKind::COMMA}));
+
+    } else if (check(TKind::LESS) && isGenericArgs()) {
+      std::vector<TypeNode::Ptr> genericArgs = parseGenericArgs();
+
+      /*
+       * foo<int>(...)
+       * obj.foo<int>(...)
+       *
+       * <...> 뒤에 바로 '('가 오면 기존 generic call.
+       */
+      if (check(TKind::LEFT_PAREN)) {
+        std::vector<Expr::Ptr> args = parseCallArgs();
+
+        auto end = previous();
+
+        if (expr->kind == NKind::MEMBER_EXPR) {
+          auto member = static_pointer_cast<MemberExpr>(expr);
+
+          expr = make_shared<CallExpr>(makeSpan(expr->span, end.span),
+                                       member->object, member->member, args,
+                                       std::move(genericArgs));
+
+        } else if (expr->kind == NKind::NAME_EXPR) {
+          expr =
+              make_shared<CallExpr>(makeSpan(expr->span, end.span), nullptr,
+                                    static_pointer_cast<NameExpr>(expr)->name,
+                                    args, std::move(genericArgs));
+
+        } else {
+          auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_P034);
+
+          dia.labels = {
+              {previous().span, "cannot call this expression", true},
+          };
+
+          engine.emit(dia);
+          recover.recover();
+        }
+
+      } else {
+        /*
+         * State<int>.idle(...)
+         *
+         * 여기서 <int>는 call의 generic argument가 아니라
+         * 이름 State 자체의 generic argument.
+         */
+        if (expr->kind == NKind::NAME_EXPR) {
+          auto name = static_pointer_cast<NameExpr>(expr);
+
+          name->genericArgs = std::move(genericArgs);
+
+        } else {
+          auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_P034);
+
+          dia.labels = {
+              {previous().span,
+               "generic type arguments cannot be applied to this expression",
+               true},
+          };
+
+          engine.emit(dia);
+          recover.recover();
+        }
       }
 
-      consume(TKind::RIGHT_PAREN, DiagnosticCode::HRD_P047,
-              "expected ')' to close argument list");
+    } else if (check(TKind::LEFT_PAREN)) {
+      std::vector<Expr::Ptr> args = parseCallArgs();
+
       auto end = previous();
+
       if (expr->kind == NKind::MEMBER_EXPR) {
         auto member = static_pointer_cast<MemberExpr>(expr);
 
         expr = make_shared<CallExpr>(makeSpan(expr->span, end.span),
-                                     member->object, member->member, args);
+                                     member->object, member->member, args,
+                                     std::vector<TypeNode::Ptr>{});
+
       } else if (expr->kind == NKind::NAME_EXPR) {
         expr = make_shared<CallExpr>(makeSpan(expr->span, end.span), nullptr,
                                      static_pointer_cast<NameExpr>(expr)->name,
-                                     args);
+                                     args, std::vector<TypeNode::Ptr>{});
+
       } else {
         auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_P034);
+
         dia.labels = {
             {previous().span, "cannot call this expression", true},
         };
+
         engine.emit(dia);
         recover.recover();
       }
 
     } else if (check(TKind::LEFT_BRACKET)) {
-      Token t = advance(); //[처리
+      advance(); // [ 처리
+
       Expr::Ptr index = ternary();
+
       consume(TKind::RIGHT_BRACKET, DiagnosticCode::HRD_P053,
               "expected ']' after array index");
+
       auto end = previous();
+
       expr = make_shared<ArrayAccessExpr>(makeSpan(expr->span, end.span), expr,
                                           index);
+
     } else if (check(TKind::CAST)) {
-      Token t = advance(); // as처리
+      advance(); // as 처리
+
       TypeNode::Ptr type = parseType();
+
       auto end = previous();
-      // TODO: 추후 자료형은 약어만으로 타입 지정하도록 수정요망
+
       expr = make_shared<CastExpr>(makeSpan(expr->span, end.span), expr, type);
-    } else
+
+    } else {
       break;
+    }
   }
 
   return expr;
@@ -317,8 +400,11 @@ Ptr Parser::primary() {
 
   if (isLit())
     return make_shared<LiteralExpr>(t.span, t, advance().text);
-  if (check(TKind::IDENTIFIER))
+  if (check(TKind::IDENTIFIER)) {
+    vector<TypeNode::Ptr> genericArgs;
     return make_shared<NameExpr>(t.span, advance().text);
+  }
+
   if (check(TKind::LEFT_PAREN)) {
     advance();
     Expr::Ptr expr = expression();

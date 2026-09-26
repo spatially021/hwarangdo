@@ -9,6 +9,7 @@
 #include "hrd/SemanticAnalyzer/symbol/TypeSymbol.h"
 #include "hrd/util/Error.h"
 #include <memory>
+#include <optional>
 #include <utility>
 #include <vector>
 
@@ -129,7 +130,10 @@ unique_ptr<MIRValue> MIRBuilder::lowerMatch(HIRMatchExpr *expr) {
   currentScope = &switchScope;
 
   BlockID cond = makeBlock();
-  BlockID defaultTarget = makeBlock();
+  optional<BlockID> defaultTarget = nullopt;
+  if (expr->hasDefault) {
+    defaultTarget = makeBlock();
+  }
   BlockID cleanup = makeBlock();
   BlockID join = makeBlock();
 
@@ -207,7 +211,8 @@ unique_ptr<MIRValue> MIRBuilder::lowerCall(HIRMethodCallExpr *expr) {
 
   return make_unique<MIRCallExpr>(
       expr->receiver == nullptr ? nullptr : lowerExpr(expr->receiver.get()),
-      std::move(args), expr->method, expr->type);
+      std::move(args), expr->genericArgs, expr->method, expr->type,
+      expr->substitution);
 }
 
 unique_ptr<MIRValue> MIRBuilder::lowerSpawn(HIRSpawnExpr *expr) {
@@ -216,7 +221,7 @@ unique_ptr<MIRValue> MIRBuilder::lowerSpawn(HIRSpawnExpr *expr) {
     args.push_back(lowerExpr(a.get()));
   }
   return make_unique<MIRSpawnExpr>(
-      expr->entityType, expr->initMethod ? expr->initMethod->symbol : nullptr,
+      expr->entityType, expr->initMethod ? expr->initMethod : nullptr,
       std::move(args), expr->type);
 }
 
@@ -230,9 +235,9 @@ unique_ptr<MIRValue> MIRBuilder::lowerStructInit(HIRStructInitExpr *expr) {
   for (auto &a : expr->args) {
     args.push_back(lowerExpr(a.get()));
   }
-  return make_unique<MIRStructInitExpr>(expr->type,
-                                        expr->method ? expr->method : nullptr,
-                                        std::move(args), expr->type);
+  return make_unique<MIRStructInitExpr>(
+      expr->type, expr->method ? expr->method : nullptr, std::move(args),
+      expr->genericArgs, expr->type);
 }
 
 unique_ptr<MIRValue> MIRBuilder::lowerVariantValue(HIRVariantValueExpr *expr) {

@@ -2,6 +2,7 @@
 
 #include "ASTNode.h"
 #include "Visitor.h"
+#include "hrd/AST/CaseAble.h"
 #include "hrd/AST/CaseKey.h"
 #include "hrd/SemanticAnalyzer/ResolvedLit.h"
 #include "hrd/SourceSpan.h"
@@ -10,7 +11,6 @@
 #include "hrd/util/Error.h"
 #include <memory>
 #include <string>
-#include <unordered_set>
 #include <utility>
 #include <variant>
 #include <vector>
@@ -19,6 +19,7 @@ class ValueSymbol;
 class TypeSymbol;
 class MethodSymbol;
 class EnumVariantSymbol;
+class GenericParamSymbol;
 class RuntimeSymbol;
 class Symbol;
 class Stmt;
@@ -63,6 +64,7 @@ public:
 class NameExpr : public Expr {
 public:
   string name;
+  vector<TypeNode::Ptr> genericArgs;
   NameExpr(SourceSpan t, const string &n)
       : Expr(NKind::NAME_EXPR, t), name(n) {}
   void accept(ASTVisitor *visitor) override { visitor->visit(this); }
@@ -227,6 +229,7 @@ public:
   Expr::Ptr receiver = nullptr;
   string methodName;
   std::vector<Expr::Ptr> arguments;
+  vector<TypeNode::Ptr> genericArgs;
 
   enum class CallType {
     FUNC_CALL,
@@ -238,9 +241,9 @@ public:
   } callType = CallExpr::CallType::UNRESOLVED;
 
   CallExpr(SourceSpan t, Expr::Ptr r, const string n,
-           const std::vector<Expr::Ptr> &a)
+           const std::vector<Expr::Ptr> &a, const vector<TypeNode::Ptr> g)
       : Expr(NKind::CALL_EXPR, t), receiver(std::move(r)), methodName(n),
-        arguments(a) {}
+        arguments(a), genericArgs(g) {}
 
   void accept(ASTVisitor *visitor) override { visitor->visit(this); }
 
@@ -250,15 +253,21 @@ public:
     for (const auto &arg : arguments) {
       copiedArgs.push_back(arg ? arg->deepCopy() : nullptr);
     }
+    vector<TypeNode::Ptr> copiedGenerics;
+    for (const auto &arg : genericArgs) {
+      copiedGenerics.push_back(arg);
+    }
 
     return make_shared<CallExpr>(span,
                                  receiver ? receiver->deepCopy() : nullptr,
-                                 methodName, copiedArgs);
+                                 methodName, copiedArgs, copiedGenerics);
   }
 
   variant<std::monostate, MethodSymbol *, EnumVariantSymbol *, RuntimeSymbol *>
       resolved;
   bool isStatic = false;
+  unordered_map<GenericParamSymbol *, TypeSymbol *> substitution;
+  vector<TypeSymbol *> resolvedGenericParams;
 };
 
 class TernaryExpr : public Expr {
@@ -344,24 +353,19 @@ public:
   TypeSymbol *resolved = nullptr;
 };
 
-class MatchExpr : public Expr {
+class MatchExpr : public Expr, public CaseAble {
 public:
-  Ptr value;
-  vector<shared_ptr<Case>> cases;
   MatchExpr(SourceSpan t, Ptr v, vector<shared_ptr<Case>> c)
-      : Expr(NKind::MATCH_EXPR, t), value(std::move(v)), cases(std::move(c)) {}
+      : Expr(NKind::MATCH_EXPR, t),
+        CaseAble(std::move(v), std::move(c), SwitchKind::Match) {}
   void accept(ASTVisitor *visitor) override { visitor->visit(this); }
   Scope *blockScope = nullptr;
   Ptr deepCopy() const override {
     vector<shared_ptr<Case>> copiedCases;
-    copiedCases.reserve(cases.size());
+    copiedCases.reserve(clauses.size());
     return make_shared<MatchExpr>(span, value ? value->deepCopy() : nullptr,
                                   std::move(copiedCases));
   }
-  unordered_set<CaseKey, CaseKeyHash> caseKeys;
-  std::unordered_set<EnumVariantSymbol *> usedVariants;
-
-  bool hasDefault = false;
 };
 
 // class EnumVariantExpr : public Expr {

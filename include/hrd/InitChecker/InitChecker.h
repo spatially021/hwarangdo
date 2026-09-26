@@ -88,4 +88,15 @@ private:
 
   DiagnosticEngine &engine;
   InitCheckerRecover recover = InitCheckerRecover(*this);
+
+  std::unordered_set<MethodSymbol *> initSummaryInProgress;
+
+  HIRMethodDecl *findInitDecl(MethodSymbol *method,
+                              HIRTypeDecl **ownerType = nullptr);
+
+  bool ensureInitSummary(MethodSymbol *method);
+  HIRTypeDecl *findTypeDecl(TypeSymbol *type);
+  bool ensureTypeSummary(TypeSymbol *type);
+
+  std::unordered_set<TypeSymbol *> typeSummaryInProgress;
 };

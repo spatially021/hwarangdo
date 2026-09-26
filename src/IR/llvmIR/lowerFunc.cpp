@@ -13,16 +13,19 @@ void llvmCodegen::buildMethods() {
 
       auto *fn = llvm::Function::Create(
           fnType, llvm::GlobalValue::ExternalLinkage,
-          m->owner->name + "default.init.field", llvmModule.get());
+          mangleType(m->owner) + "default.init.field", llvmModule.get());
       defaultInits.emplace(m->owner, fn);
       continue;
     }
-
+    if (m->symbol->isGenericDecl) {
+      continue;
+    }
     auto fn = createFuncShell(m->symbol);
     funcs.emplace(m->symbol, fn);
   }
 
   for (auto &m : program->functions) {
+
     if (m->isDefaultInit) {
       auto fn = defaultInits.at(m->owner);
       auto entry = llvm::BasicBlock::Create(context, "entry", fn);
@@ -60,6 +63,9 @@ void llvmCodegen::buildMethods() {
 
       continue;
     }
+    if (m->symbol->isGenericDecl) {
+      continue;
+    }
     if (!m->symbol->isExtern) {
       emitFuncBody(m.get());
     }
@@ -70,33 +76,75 @@ string llvmCodegen::mangle(MethodSymbol *symbol) {
   if (symbol->isExtern) {
     return symbol->linkName;
   }
+
   string name = "__hrd_" + symbol->module->name;
+
   for (auto &p : symbol->path.segments) {
     name += "_" + p;
   }
-  name += "_" + symbol->owner->name + "_" + symbol->name;
+
+  name += "_" + mangleType(symbol->owner);
+  name += "_" + symbol->name;
 
   for (auto *p : symbol->params) {
-    name += "_" + p->typeSymbol->name;
+    name += "_" + mangleType(p->typeSymbol);
+  }
+
+  return name;
+}
+
+string llvmCodegen::mangle(MethodSymbol *symbol, const GenericMethodKey &key) {
+
+  if (symbol->isExtern) {
+    return symbol->linkName;
+  }
+
+  string name = "__hrd_" + symbol->module->name;
+
+  for (auto &p : symbol->path.segments) {
+    name += "_" + p;
+  }
+
+  name += "_" + mangleType(key.owner);
+  name += "_" + symbol->name;
+
+  for (auto *arg : key.genericArgs) {
+    name += "_" + mangleType(arg);
   }
 
   return name;
 }
 
 string llvmCodegen::mangleType(TypeSymbol *type) {
-  if (type->kind == TypeKind::BUILTIN)
+  if (isa<PrimtiveType>(type))
     return type->name;
+
+  if (auto *generic = dynamic_cast<GenericSymbol *>(type)) {
+    auto *origin = generic->origin;
+    if (origin->module == nullptr) {
+      Error::internal("type's module is nullptr : " + origin->name);
+    }
+
+    string name = "hrd" + origin->module->name;
+    for (auto &p : origin->path.segments)
+      name += "_" + p;
+
+    name += "_" + origin->name;
+    for (auto *arg : generic->args) {
+      name += "_" + mangleType(arg);
+    }
+    return name;
+  }
 
   if (type->module == nullptr) {
     Error::internal("type's module is nullptr : " + type->name);
   }
-  string name = type->module->name;
+  string name = "hrd" + type->module->name;
 
   for (auto &p : type->path.segments)
     name += "_" + p;
 
   name += "_" + type->name;
-
   return name;
 }
 

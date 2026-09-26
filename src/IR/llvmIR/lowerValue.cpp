@@ -1,10 +1,12 @@
 #include "hrd/IR/MIR/MIRExpr.h"
+#include "hrd/IR/llvmIR/CodegenStructs.h"
 #include "hrd/IR/llvmIR/llvmCodegen.h"
 #include "hrd/SemanticAnalyzer/symbol/TypeSymbol.h"
 #include "hrd/enums/Operator.h"
 #include "hrd/util/Error.h"
 #include <llvm/IR/Constants.h>
 #include <llvm/IR/DerivedTypes.h>
+#include <llvm/IR/Type.h>
 #include <llvm/IR/Value.h>
 #include <llvm/IR/Verifier.h>
 #include <memory>
@@ -107,24 +109,27 @@ LoweredValue llvmCodegen::lowerBinaryExpr(MIRBinaryExpr *expr,
     return lowerLogicalOr(expr, ctx);
   }
 
-  auto type = isCompare(expr->op) ? expr->operandType : expr->type;
+  auto *type =
+      resolveType(isCompare(expr->op) ? expr->operandType : expr->type, ctx);
   auto lhsRaw = lowerValue(expr->lhs.get(), ctx);
-  LoweredValue lhs = castTo(lhsRaw, expr->lhs->type, type);
+  LoweredValue lhs = castTo(lhsRaw, resolveType(expr->lhs->type, ctx), type);
 
   auto rawRhs = lowerValue(expr->rhs.get(), ctx);
 
-  bool usePowi = expr->op == Operator::POW && isInt(expr->rhs->type) &&
-                 isFloat(expr->type);
+  auto *rhsType = resolveType(expr->rhs->type, ctx);
+  auto *exprType = resolveType(expr->type, ctx);
+  bool usePowi =
+      expr->op == Operator::POW && isInt(rhsType) && isFloat(exprType);
 
   LoweredValue rhs =
-      usePowi ? castTo(rawRhs, expr->rhs->type, table.registry.getBuilt("i32"))
-              : castTo(rawRhs, expr->rhs->type, type);
+      usePowi ? castTo(rawRhs, rhsType, table.registry.getBuilt("i32"))
+              : castTo(rawRhs, rhsType, type);
   switch (expr->op) {
 
   case Operator::ADD:
     if (isString(type)) {
-      auto *sTy = getType(expr->type);
-      auto name = expr->type->name;
+      auto *sTy = getType(exprType);
+      auto name = exprType->name;
       auto *ptrTy = llvm::PointerType::getUnqual(context);
       auto *voidTy = builder.getVoidTy();
       auto *out = builder.CreateAlloca(sTy, nullptr, name + ".add.out");
@@ -180,19 +185,19 @@ LoweredValue llvmCodegen::lowerBinaryExpr(MIRBinaryExpr *expr,
     return {builder.CreateSRem(lhs.value, rhs.value)};
   }
   case Operator::POW: {
-    if (isInt(expr->lhs->type) && isInt(expr->rhs->type)) {
+    if (isInt(resolveType(expr->lhs->type, ctx)) && isInt(rhsType)) {
       Error::internal("not developed int ** int");
     }
 
     if (usePowi) {
       auto pow = llvm::Intrinsic::getOrInsertDeclaration(
-          llvmModule.get(), llvm::Intrinsic::powi, {getType(expr->type)});
+          llvmModule.get(), llvm::Intrinsic::powi, {getType(exprType)});
 
       return {builder.CreateCall(pow, {lhs.value, rhs.value})};
     }
 
     auto pow = llvm::Intrinsic::getOrInsertDeclaration(
-        llvmModule.get(), llvm::Intrinsic::pow, {getType(expr->type)});
+        llvmModule.get(), llvm::Intrinsic::pow, {getType(exprType)});
 
     return {builder.CreateCall(pow, {lhs.value, rhs.value})};
   }
@@ -297,14 +302,16 @@ LoweredValue llvmCodegen::lowerBinaryExpr(MIRBinaryExpr *expr,
   }
 
   case Operator::LSH: {
-    llvm::Value *amount = castTo(rhs, expr->rhs->type, expr->lhs->type).value;
+    llvm::Value *amount =
+        castTo(rhs, rhsType, resolveType(expr->lhs->type, ctx)).value;
     return {builder.CreateShl(lhs.value, amount)};
   }
 
   case Operator::RSH: {
-    llvm::Value *amount = castTo(rhs, expr->rhs->type, expr->lhs->type).value;
+    llvm::Value *amount =
+        castTo(rhs, rhsType, resolveType(expr->lhs->type, ctx)).value;
 
-    return {isUnsigned(expr->lhs->type)
+    return {isUnsigned(resolveType(expr->lhs->type, ctx))
                 ? builder.CreateLShr(lhs.value, amount)
                 : builder.CreateAShr(lhs.value, amount)};
   }
@@ -390,9 +397,10 @@ LoweredValue llvmCodegen::lowerLogicalOr(MIRBinaryExpr *expr,
 }
 
 LoweredValue llvmCodegen::lowerLoad(MIRLoad *expr, FuncContext &ctx) {
-  auto ptr = lowerPlace(expr->place.get(), ctx).dst;
-  llvm::Type *valueTy = getType(expr->type);
-  return {builder.CreateLoad(valueTy, ptr, "loadtmp"), ptr,
+  auto lowered = lowerPlace(expr->place.get(), ctx);
+  auto resolved = resolveType(lowered.type, ctx);
+  llvm::Type *valueTy = getType(resolved);
+  return {builder.CreateLoad(valueTy, lowered.dst, "loadtmp"), lowered.dst,
           MIRValueCategory::Borrowed};
 }
 
@@ -409,22 +417,39 @@ LoweredValue llvmCodegen::lowerPayloadExtractExpr(MIRPayloadExtractExpr *expr,
     Error::internal("payload extract source must be place load");
   }
 
-  auto *enumType = expr->enumValue->type;
-
-  if (!enumType || enumType->kind != TypeKind::ENUM) {
-    Error::internal("payload extract source is not enum");
+  auto *enumType = resolveType(expr->enumValue->type, ctx);
+  if (enumType == nullptr || !isa<EnumType>(enumType->base())) {
+    Error::internal("not enumType");
   }
-
+  std::unordered_map<GenericParamSymbol *, TypeSymbol *> substitution;
   auto *enumAddr = lowerPlace(load->place.get(), ctx).dst;
-  auto *enumLayoutTy = getLayoutType(enumType);
+  llvm::Type *enumLayoutTy = nullptr;
+
+  if (auto generic = dyn_cast<GenericSymbol>(enumType)) {
+    auto params = generic->origin->getGenericParams();
+    auto &args = generic->args;
+
+    if (params.size() != args.size()) {
+      Error::internal("generic param/arg size mismatch");
+    }
+
+    for (size_t i = 0; i < params.size(); ++i) {
+      auto *arg = resolveType(args[i], ctx);
+      substitution.emplace(params[i], arg);
+    }
+    enumLayoutTy = getOrCreateGeneric(generic);
+  } else {
+    enumLayoutTy = getLayoutType(enumType);
+  }
 
   auto *payloadSlot =
       builder.CreateStructGEP(enumLayoutTy, enumAddr, 1, "payload.slot");
 
   auto *payloadAddr =
       builder.CreateLoad(builder.getPtrTy(), payloadSlot, "payload.addr");
-
-  auto *payloadTy = getType(variant->payloadType);
+  ctx.substitution = &substitution;
+  auto *payloadType = resolveType(variant->payloadType, ctx);
+  auto *payloadTy = getType(payloadType);
 
   auto *payloadValue =
       builder.CreateLoad(payloadTy, payloadAddr, "payload.value");
@@ -438,7 +463,8 @@ LoweredValue llvmCodegen::lowerPayloadExtractExpr(MIRPayloadExtractExpr *expr,
 LoweredValue llvmCodegen::lowerLiteralExpr(MIRLiteralExpr *expr,
                                            FuncContext &ctx) {
   auto lit = expr->literal;
-  llvm::Type *ty = getType(expr->type);
+  auto *literalType = resolveType(expr->type, ctx);
+  llvm::Type *ty = getType(literalType);
 
   if (lit.isBool()) {
     return {llvm::ConstantInt::getBool(context, lit.asBool())};
@@ -483,8 +509,9 @@ LoweredValue llvmCodegen::lowerLiteralExpr(MIRLiteralExpr *expr,
   }
 
   if (lit.isString()) {
-    auto value = lowerStringLiteral(lit.asString(), lit.type);
-    ctx.cleanupStack.push_back({value.addr, lit.type});
+    auto *stringType = resolveType(lit.type, ctx);
+    auto value = lowerStringLiteral(lit.asString(), stringType);
+    ctx.cleanupStack.push_back({value.addr, stringType});
     return value;
   }
 
@@ -502,8 +529,9 @@ LoweredValue llvmCodegen::lowerUnaryExpr(MIRUnaryExpr *expr, FuncContext &ctx) {
   case Operator::PLUS:
     return operand;
   case Operator::MINUS:
-    return {isFloat(expr->type) ? builder.CreateFNeg(operand.value)
-                                : builder.CreateNeg(operand.value)};
+    return {isFloat(resolveType(expr->type, ctx))
+                ? builder.CreateFNeg(operand.value)
+                : builder.CreateNeg(operand.value)};
 
   default:
     Error::internal("expect unary but use binary");
@@ -512,17 +540,50 @@ LoweredValue llvmCodegen::lowerUnaryExpr(MIRUnaryExpr *expr, FuncContext &ctx) {
 
 LoweredValue llvmCodegen::lowerCastExpr(MIRCastExpr *expr, FuncContext &ctx) {
   auto operand = lowerValue(expr->operrand.get(), ctx);
-  return castTo(operand, expr->from, expr->to);
+  return castTo(operand, resolveType(expr->from, ctx),
+                resolveType(expr->to, ctx));
 }
 
 LoweredValue llvmCodegen::lowerCallExpr(MIRCallExpr *expr, FuncContext &ctx) {
-  auto callee = getOrCreateFunc(expr->method);
+  llvm::Function *callee = nullptr;
+
+  TypeSymbol *owner = nullptr;
+  GenericSymbol *genericOwner = nullptr;
+
+  if (expr->base != nullptr) {
+    owner = resolveType(expr->base->type, ctx);
+    genericOwner = dynamic_cast<GenericSymbol *>(owner);
+  } else {
+    owner = ctx.selfType;
+  }
+
+  if (genericOwner == nullptr) {
+    if (auto *selfGeneric = dynamic_cast<GenericSymbol *>(ctx.selfType)) {
+      if (expr->method->owner == selfGeneric->origin) {
+        genericOwner = selfGeneric;
+        owner = selfGeneric;
+      }
+    }
+  }
+
+  if (genericOwner != nullptr) {
+    // Generic owner specialization의 method들을 생성/cache.
+    getOrCreateGeneric(genericOwner);
+  }
+
+  bool isGenericDecl = genericOwner != nullptr || expr->method->isGenericDecl;
+
+  GenericMethodKey key(owner, expr->method, expr->genericArgs);
+  MethodContext mctx = {isGenericDecl, isGenericDecl ? &key : nullptr,
+                        isGenericDecl ? &expr->substitution : nullptr};
+
+  callee = getOrCreateFunc(expr->method, mctx);
 
   std::vector<llvm::Value *> args;
 
   // self
   if (needSelf(expr->method)) {
-    if (auto l = dynamic_cast<MIRLoad *>(expr->base.get())) {
+    if (auto *l = dynamic_cast<MIRLoad *>(expr->base.get())) {
       args.push_back(lowerReceiverPtr(l->place.get(), ctx));
     } else {
       Error::internal("fail to get receiver");
@@ -531,9 +592,11 @@ LoweredValue llvmCodegen::lowerCallExpr(MIRCallExpr *expr, FuncContext &ctx) {
 
   // 일반 인자
   vector<MIRValue *> values;
+
   for (auto &arg : expr->args) {
     values.push_back(arg.get());
   }
+
   auto out = lowerArgs(args, values, ctx);
 
   auto call = builder.CreateCall(callee, args);
@@ -547,7 +610,26 @@ LoweredValue llvmCodegen::lowerCallExpr(MIRCallExpr *expr, FuncContext &ctx) {
 
 LoweredValue llvmCodegen::lowerStructInitExpr(MIRStructInitExpr *expr,
                                               FuncContext &ctx) {
-  auto *structTy = getLayoutType(expr->structType); // %Vec2 같은 struct type
+  TypeSymbol *structType = nullptr;
+  llvm::Type *structTy = nullptr;
+
+  if (!expr->genericArgs.empty()) {
+    vector<TypeSymbol *> genericArgs;
+    genericArgs.reserve(expr->genericArgs.size());
+
+    for (auto *arg : expr->genericArgs) {
+      genericArgs.push_back(resolveType(arg, ctx));
+    }
+
+    auto *generic =
+        table.registry.getOrCreateGeneric(expr->structType, genericArgs);
+
+    structType = generic;
+    structTy = getOrCreateGeneric(generic);
+  } else {
+    structType = resolveType(expr->structType, ctx);
+    structTy = getLayoutType(structType);
+  }
 
   // 1. 임시 struct 공간 생성
   llvm::AllocaInst *tmp =
@@ -562,7 +644,7 @@ LoweredValue llvmCodegen::lowerStructInitExpr(MIRStructInitExpr *expr,
   }
   auto out = lowerArgs(args, values, ctx);
 
-  auto it = defaultInits.find(expr->structType);
+  auto it = defaultInits.find(structType);
   if (it != defaultInits.end()) {
     auto dInit = it->second;
     builder.CreateCall(dInit, {tmp});
@@ -570,7 +652,18 @@ LoweredValue llvmCodegen::lowerStructInitExpr(MIRStructInitExpr *expr,
 
   // 3. init 호출
   if (expr->initMethod != nullptr) {
-    auto initFn = getOrgetOrDeclareFunction(expr->initMethod);
+    llvm::Function *initFn = nullptr;
+    if (auto *generic = dynamic_cast<GenericSymbol *>(structType)) {
+      auto methodIt = genericMethodMap.find(
+          GenericMethodKey(generic, expr->initMethod, vector<TypeSymbol *>()));
+      if (methodIt == genericMethodMap.end()) {
+        Error::internal("generic struct init method not found: " +
+                        expr->initMethod->name);
+      }
+      initFn = methodIt->second;
+    } else {
+      initFn = getOrDeclareFunction(expr->initMethod);
+    }
     builder.CreateCall(initFn, args);
   }
 
@@ -592,13 +685,39 @@ void llvmCodegen::lowerStructInitTo(MIRStructInitExpr *expr, llvm::Value *dst,
   }
 
   if (expr->initMethod != nullptr) {
-    builder.CreateCall(funcs.at(expr->initMethod), args);
+    auto *structType = resolveType(expr->structType, ctx);
+    llvm::Function *initFn = nullptr;
+    if (auto *generic = dynamic_cast<GenericSymbol *>(structType)) {
+      getOrCreateGeneric(generic);
+      auto methodIt = genericMethodMap.find(
+          GenericMethodKey(generic, expr->initMethod, vector<TypeSymbol *>()));
+      if (methodIt == genericMethodMap.end()) {
+        Error::internal("generic struct init method not found: " +
+                        expr->initMethod->name);
+      }
+      initFn = methodIt->second;
+    } else {
+      initFn = funcs.at(expr->initMethod);
+    }
+    builder.CreateCall(initFn, args);
   }
 }
+
 LoweredValue llvmCodegen::lowerVariantExpr(MIRVariantExpr *expr,
                                            FuncContext &ctx) {
-  auto *enumType = expr->type;
-  auto *enumLayoutTy = getLayoutType(enumType);
+
+  TypeSymbol *enumType = nullptr;
+  llvm::Type *enumLayoutTy = nullptr;
+
+  {
+    if (auto gen = dyn_cast<GenericSymbol>(expr->type)) {
+      enumType = gen;
+      enumLayoutTy = getOrCreateGeneric(gen);
+    } else {
+      enumType = resolveType(expr->type, ctx);
+      enumLayoutTy = getLayoutType(enumType);
+    }
+  }
 
   // enum 값 자체는 임시값이므로 스택에 생성
   auto *enumAddr =
@@ -631,7 +750,7 @@ LoweredValue llvmCodegen::lowerVariantExpr(MIRVariantExpr *expr,
     };
   }
 
-  auto *payloadType = expr->variant->payloadType;
+  auto *payloadType = resolveType(expr->payload->type, ctx);
 
   if (payloadType == nullptr) {
     Error::internal("enum variant payload expression has no payload type");
@@ -669,7 +788,8 @@ LoweredValue llvmCodegen::lowerVariantExpr(MIRVariantExpr *expr,
    *
    * 구분은 assign() 내부에서 payloadValue.category를 보고 처리한다.
    */
-  assign({payloadAddr, expr->payload->type}, payloadValue, payloadType, ctx);
+  assign({payloadAddr, resolveType(expr->payload->type, ctx)}, payloadValue,
+         payloadType, ctx);
 
   // enum이 새 heap payload를 소유
   builder.CreateStore(payloadAddr, payloadPtr);
@@ -730,10 +850,11 @@ llvm::Function *llvmCodegen::getOrDeclareRuntimeFunction(RuntimeSymbol *rt) {
 
 LoweredValue llvmCodegen::lowerArrayInitExpr(MIRArrayInitExpr *expr,
                                              FuncContext &ctx) {
-  auto *arrayTy = getType(expr->type);
+  auto *arrayType = resolveType(expr->type, ctx);
+  auto *arrayTy = getType(arrayType);
   auto *arr = createEntryAlloca(ctx.func, arrayTy, "array.literal");
 
-  auto *elementType = expr->elementType;
+  auto *elementType = resolveType(expr->elementType, ctx);
 
   // assign()이 destroy부터 수행하는 타입이 있으므로 초기 상태 보장
   if (needsDestroy(elementType)) {
@@ -744,7 +865,8 @@ LoweredValue llvmCodegen::lowerArrayInitExpr(MIRArrayInitExpr *expr,
     auto raw = lowerValue(expr->elements[i].get(), ctx);
 
     // Resolver가 정한 공통 element type으로 맞춤
-    auto value = castTo(raw, expr->elements[i]->type, elementType);
+    auto value =
+        castTo(raw, resolveType(expr->elements[i]->type, ctx), elementType);
 
     auto *slot = builder.CreateGEP(
         arrayTy, arr,
@@ -753,8 +875,8 @@ LoweredValue llvmCodegen::lowerArrayInitExpr(MIRArrayInitExpr *expr,
     assign({slot, elementType}, value, elementType, ctx);
   }
 
-  if (needsDestroy(expr->type)) {
-    addClean(arr, expr->type, ctx);
+  if (needsDestroy(arrayType)) {
+    addClean(arr, arrayType, ctx);
   }
 
   return {

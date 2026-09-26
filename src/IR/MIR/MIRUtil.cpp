@@ -6,6 +6,7 @@
 #include "hrd/SemanticAnalyzer/SymbolTable/SymbolTable.h"
 #include "hrd/SemanticAnalyzer/symbol/TypeSymbol.h"
 #include "hrd/SemanticAnalyzer/symbol/ValueSymbol.h"
+#include "hrd/util/Error.h"
 #include <memory>
 #include <string>
 #include <utility>
@@ -51,7 +52,10 @@ void MIRBuilder::makeSwitch(SwitchData &data) {
     BlockID id;
     if (c->defaultKind == HIRDefaultKind::Default ||
         c->defaultKind == HIRDefaultKind::WildCard) {
-      id = data.defaultTarget;
+      if (!data.defaultTarget.has_value()) {
+        Error::internal("fahas default but nullopt default target");
+      }
+      id = data.defaultTarget.value();
       hasDefault = true;
     } else {
       id = makeBlock();
@@ -102,13 +106,14 @@ void MIRBuilder::makeSwitch(SwitchData &data) {
     currentScope = &data.scope;
   }
 
-  if (hasDefault && !hasTerminator(data.defaultTarget)) {
-    getBlock(data.defaultTarget)->terminator = GotoTerminator(data.cleanup);
+  if (hasDefault && !hasTerminator(data.defaultTarget.value())) {
+    getBlock(data.defaultTarget.value())->terminator =
+        GotoTerminator(data.cleanup);
   }
 
   getBlock(data.cond)->terminator = SwitchTerminator(
       make_unique<MIRLoad>(make_unique<MIRLocalPlace>(temp), temp->typeSymbol),
-      std::move(cases), hasDefault ? data.defaultTarget : data.cleanup);
+      std::move(cases), hasDefault ? data.defaultTarget.value() : data.cleanup);
 
   currentBlock = data.cleanup;
   emitCleanup(&data.scope);

@@ -4,8 +4,10 @@
 #include "hrd/IR/MIR/MIRNode.h"
 #include "hrd/IR/MIR/MIRProgram.h"
 #include "hrd/IR/MIR/MIRStmt.h"
+#include "hrd/IR/llvmIR/CodegenStructs.h"
 #include "hrd/SemanticAnalyzer/ResolvedLit.h"
 #include "hrd/SemanticAnalyzer/SymbolTable/SymbolTable.h"
+#include "hrd/SemanticAnalyzer/symbol/GenericOwner.h"
 #include "hrd/SemanticAnalyzer/symbol/MethodSymbol.h"
 #include "hrd/SemanticAnalyzer/symbol/RuntimeSymbol.h"
 #include "hrd/SemanticAnalyzer/symbol/TypeSymbol.h"
@@ -26,37 +28,10 @@
 #include <llvm/IR/Value.h>
 #include <memory>
 #include <unordered_map>
-#include <vector>
 
 using BlockMap = unordered_map<BlockID, llvm::BasicBlock *>;
 using localMap = unordered_map<ValueSymbol *, llvm::AllocaInst *>;
 using ParamMap = unordered_map<ValueSymbol *, llvm::Value *>;
-
-struct Cleanup {
-  llvm::Value *addr = nullptr;
-  TypeSymbol *type = nullptr;
-};
-struct FuncContext {
-  llvm::Function *func;
-  BlockMap blocks;
-  localMap locals;
-  ParamMap params;
-  llvm::Value *self = nullptr;
-  TypeSymbol *selfType = nullptr;
-  std::vector<Cleanup> cleanupStack;
-  std::unordered_set<llvm::Value *> canceledCleanups;
-};
-
-struct LoweredValue {
-  llvm::Value *value = nullptr; // 실제 SSA value
-  llvm::Value *addr = nullptr;  // cleanup/release 가능한 주소
-  MIRValueCategory category = MIRValueCategory::Plain;
-};
-
-struct LoweredPlace {
-  llvm::Value *dst = nullptr;
-  TypeSymbol *type = nullptr;
-};
 
 class llvmCodegen {
   using Str = const string &;
@@ -75,6 +50,9 @@ public:
   unordered_map<RuntimeSymbol *, llvm::Function *> runtimes;
   unordered_map<TypeSymbol *, llvm::Function *> defaultInits;
   unordered_map<TypeSymbol *, llvm::Function *> defaultDestroys;
+  unordered_map<GenericOnwer *, llvm::Type *> genericMap;
+  unordered_map<GenericMethodKey, llvm::Function *, GenericMethodKeyHash>
+      genericMethodMap;
 
   llvmCodegen(CodegenContext &context);
   void generate();
@@ -135,6 +113,8 @@ private:
 
   void emitFuncBody(MIRFunction *func);
   string mangle(MethodSymbol *symbol);
+
+  string mangle(MethodSymbol *symbol, const GenericMethodKey &key);
   string mangleType(TypeSymbol *type);
 
   LoweredValue lowerBinaryExpr(MIRBinaryExpr *expr, FuncContext &ctx);
@@ -173,13 +153,30 @@ private:
   LoweredPlace lowerRootPlace(MIRRootPlace *place, FuncContext &ctx);
   LoweredValue lowerRuntime(MIRRuntimeCallExpr *expr, FuncContext &ctx);
   llvm::Function *getOrDeclareRuntimeFunction(RuntimeSymbol *rt);
-  llvm::Function *getOrgetOrDeclareFunction(MethodSymbol *method);
+  llvm::Function *getOrDeclareFunction(MethodSymbol *method);
   llvm::AllocaInst *createEntryAlloca(llvm::Function *fn, llvm::Type *ty,
                                       llvm::StringRef name);
 
   llvm::Type *getType(TypeSymbol *type);
   llvm::Type *getLayoutType(TypeSymbol *type);
   llvm::Type *getFieldType(TypeSymbol *type);
+
+  llvm::Type *getOrCreateGeneric(GenericSymbol *symbol);
+  TypeSymbol *resolveGenericType(
+      TypeSymbol *type,
+      unordered_map<GenericParamSymbol *, TypeSymbol *> &substitution);
+  TypeSymbol *resolveType(TypeSymbol *type, FuncContext &ctx) {
+    if (ctx.substitution == nullptr) {
+      return type;
+    }
+
+    return resolveGenericType(type, *ctx.substitution);
+  }
+
+  GenericSymbol *getOrCreateGenericSymbol(TypeSymbol *origin,
+                                          const vector<TypeSymbol *> &args);
+  TypeSymbol *resolveMemberType(TypeSymbol *type, TypeSymbol *ownerType,
+                                FuncContext &ctx);
 
   llvm::Type *buildArrayType(ArrayTypeSymbol *arr);
   void declareArrayDestroy(ArrayTypeSymbol *arr);
@@ -196,6 +193,7 @@ private:
   bool isFloat(TypeSymbol *type);
   bool isInt(TypeSymbol *type);
   bool isString(TypeSymbol *type);
+  bool isClass(TypeSymbol *type);
 
   llvm::Value *getSizeOf(llvm::Type *type);
   llvm::FunctionCallee getOrDeclareMalloc();
@@ -207,7 +205,7 @@ private:
   void generateEntryMain(MainSymbol *mainType);
   llvm::Function *getRuntimeFunc(const std::string &name,
                                  llvm::FunctionType *type);
-  llvm::Function *getOrCreateFunc(MethodSymbol *symbol);
+  llvm::Function *getOrCreateFunc(MethodSymbol *symbol, MethodContext &ctx);
   llvm::Function *createFuncShell(MethodSymbol *symbol);
   MethodSymbol *getMainMethod(const std::string &name);
   void emitFieldZeroInit(TypeSymbol *owner, llvm::Value *self);

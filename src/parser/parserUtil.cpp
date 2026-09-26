@@ -147,7 +147,6 @@ bool Parser::isFunc() {
     if (check(TKind::EXTERN, offset)) {
       ++offset;
 
-      // extern("symbol") 형태라면 괄호 부분까지 건너뜀.
       if (following(offset).kind == TKind::LEFT_PAREN) {
         int depth = 0;
 
@@ -161,7 +160,6 @@ bool Parser::isFunc() {
           }
 
           ++offset;
-
         } while (depth > 0 && following(offset).kind != TKind::END);
       }
 
@@ -187,14 +185,44 @@ bool Parser::isFunc() {
     return false;
   }
 
-  return following(offset + 1).kind == TKind::IDENTIFIER &&
-         following(offset + 2).kind == TKind::LEFT_PAREN;
+  ++offset;
+
+  if (following(offset).kind != TKind::IDENTIFIER) {
+    return false;
+  }
+
+  ++offset;
+
+  // Skip method generic parameter list.
+  if (following(offset).kind == TKind::LESS) {
+    int depth = 0;
+
+    do {
+      auto genericKind = following(offset).kind;
+
+      if (genericKind == TKind::LESS) {
+        ++depth;
+      } else if (genericKind == TKind::GREATER) {
+        --depth;
+      }
+
+      ++offset;
+    } while (depth > 0 && following(offset).kind != TKind::END);
+
+    if (depth != 0) {
+      return false;
+    }
+  }
+
+  return following(offset).kind == TKind::LEFT_PAREN;
 }
 
 TypeNode::Ptr Parser::typeNodeConvertor(Token ty, Token size) {
   TypeNode::Ptr node;
   if (ty.kind == TKind::IDENTIFIER) {
     node = make_shared<IdentifierTypeNode>(ty, ty.text);
+  } else if (ty.kind == TKind::HANDLE) {
+    return nullptr;
   } else {
     switch (ty.kind) {
     case TKind::INT:
@@ -329,6 +357,13 @@ TypeNode::Ptr Parser::parseType() {
       Error::internal(size.span, "unreachable parseType");
     }
   }
+
+  TypeNode::Ptr type = typeNodeConvertor(ty, size);
+
+  if (check(TKind::LESS)) {
+    type = parseGenericType(ty);
+  }
+
   std::vector<std::pair<Token, Expr::Ptr>> dims;
   while (check(TKind::LEFT_BRACKET)) {
     Token bracket = advance();
@@ -338,13 +373,88 @@ TypeNode::Ptr Parser::parseType() {
     dims.push_back({bracket, std::move(sizeExpr)});
   }
 
-  TypeNode::Ptr type = typeNodeConvertor(ty, size);
-
   for (auto it = dims.rbegin(); it != dims.rend(); ++it) {
     type = make_shared<ArrayTypeNode>(it->first, type, std::move(it->second));
   }
 
   return type;
+}
+
+TypeNode::Ptr Parser::parseGenericType(Token base) {
+  advance(); // <
+
+  if (check(TKind::GREATER) || check(TKind::DOUBLE_RIGHT_ANGLE_BUCKET)) {
+    auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_P050);
+    dia.labels = {
+        {peek().span, "expected generic type argument", true},
+    };
+    engine.emit(dia);
+    recover.recover();
+  }
+
+  vector<TypeNode::Ptr> args;
+  args.push_back(parseType());
+
+  while (check(TKind::COMMA)) {
+    advance();
+
+    if (check(TKind::GREATER) || check(TKind::DOUBLE_RIGHT_ANGLE_BUCKET)) {
+      auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_P050);
+      dia.labels = {
+          {peek().span, "expected type argument after ','", true},
+      };
+      engine.emit(dia);
+      recover.recover();
+    }
+
+    args.push_back(parseType());
+  }
+
+  if (pendingGenericClose > 0) {
+    --pendingGenericClose;
+  } else if (check(TKind::GREATER)) {
+    advance();
+  } else if (check(TKind::DOUBLE_RIGHT_ANGLE_BUCKET)) {
+    advance();
+    pendingGenericClose = 1;
+  } else {
+    auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_P050);
+    dia.labels = {
+        {peek().span, "expected '>' after generic type arguments", true},
+    };
+    engine.emit(dia);
+    recover.recover();
+  }
+
+  return make_shared<GenericTypeNode>(base, base.text, std::move(args));
+}
+
+TypeName Parser::parseTypeName(DiagnosticCode nameDiag, const string &message) {
+  TypeName result;
+
+  result.name = consume(TKind::IDENTIFIER, nameDiag, message);
+
+  if (!check(TKind::LESS))
+    return result;
+
+  advance(); // <
+
+  result.genericParams.push_back(
+      GenericParamDecl{consume(TKind::IDENTIFIER, DiagnosticCode::HRD_P041,
+                               "expected generic parameter name")});
+
+  while (check(TKind::COMMA)) {
+    advance();
+
+    result.genericParams.push_back(
+        GenericParamDecl{consume(TKind::IDENTIFIER, DiagnosticCode::HRD_P041,
+                                 "expected generic parameter name")});
+  }
+
+  consume(TKind::GREATER, DiagnosticCode::HRD_P050,
+          "expected '>' after generic parameters");
+
+  return result;
 }
 
 void Parser::notFunc(DeclPrefix prefix) {
@@ -445,6 +555,7 @@ Expr::Ptr Parser::parseCaseValue() {
   }
   return make_shared<CaseValueExpr>(value->span, value, arg);
 }
+
 bool Parser::looksLikeDecl() {
   size_t pos = current;
 
@@ -459,6 +570,33 @@ bool Parser::looksLikeDecl() {
   // statement()에서 호출되는 시점에는 IDENTIFIER임.
   ++pos;
 
+  // Generic: Type<A>, Type<A<B>>, ...
+  if (at(pos).kind == TKind::LESS) {
+    size_t depth = 1;
+    ++pos;
+
+    while (depth > 0) {
+      switch (at(pos).kind) {
+      case TKind::LESS:
+        ++depth;
+        break;
+
+      case TKind::GREATER:
+        --depth;
+        break;
+
+      case TKind::END:
+        return false;
+
+      default:
+        break;
+      }
+
+      ++pos;
+    }
+  }
+
+  // Array: Type[], Type[10], Type<T>[], ...
   while (at(pos).kind == TKind::LEFT_BRACKET) {
     size_t depth = 1;
     ++pos;
@@ -485,4 +623,106 @@ bool Parser::looksLikeDecl() {
   }
 
   return at(pos).kind == TKind::IDENTIFIER;
+}
+
+bool Parser::isGenericArgs() {
+  if (!check(TKind::LESS)) {
+    return false;
+  }
+
+  size_t offset = 0;
+  size_t depth = 0;
+
+  while (true) {
+    if (check(TKind::END, offset)) {
+      return false;
+    }
+
+    if (check(TKind::LESS, offset)) {
+      ++depth;
+
+    } else if (check(TKind::GREATER, offset)) {
+      if (depth == 0) {
+        return false;
+      }
+
+      --depth;
+
+      if (depth == 0) {
+        return true;
+      }
+
+    } else if (check(TKind::DOUBLE_RIGHT_ANGLE_BUCKET, offset)) {
+      if (depth < 2) {
+        return false;
+      }
+
+      depth -= 2;
+
+      if (depth == 0) {
+        return true;
+      }
+    }
+
+    ++offset;
+  }
+}
+
+std::vector<TypeNode::Ptr> Parser::parseGenericArgs() {
+  std::vector<TypeNode::Ptr> args;
+
+  consume(TKind::LESS, DiagnosticCode::HRD_P041,
+          "expected '<' before generic arguments");
+
+  if (check(TKind::GREATER)) {
+    auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_P041);
+    dia.labels = {
+        {peek().span, "generic argument list cannot be empty", true},
+    };
+    engine.emit(dia);
+    recover.recover();
+  }
+
+  while (!isAtEnd()) {
+    args.push_back(parseType());
+
+    if (check(TKind::COMMA)) {
+      advance();
+
+      if (check(TKind::GREATER)) {
+        auto dia = engine.makeDiagnostic(DiagnosticCode::HRD_P041);
+        dia.labels = {
+            {peek().span, "expected type after ','", true},
+        };
+        engine.emit(dia);
+        recover.recover();
+      }
+
+      continue;
+    }
+
+    break;
+  }
+
+  consume(TKind::GREATER, DiagnosticCode::HRD_P041,
+          "expected '>' after generic arguments");
+
+  return args;
+}
+
+std::vector<Expr::Ptr> Parser::parseCallArgs() {
+  consume(TKind::LEFT_PAREN, DiagnosticCode::HRD_P046, "expected '('");
+
+  std::vector<Expr::Ptr> args;
+
+  if (!check(TKind::RIGHT_PAREN)) {
+    do {
+      args.push_back(ternary());
+    } while (match({TKind::COMMA}));
+  }
+
+  consume(TKind::RIGHT_PAREN, DiagnosticCode::HRD_P047,
+          "expected ')' to close argument list");
+
+  return args;
 }

@@ -50,6 +50,23 @@ public:
   bool isExtended = false;
 };
 
+struct GenericParamDecl {
+  Token name;
+};
+
+struct TypeName {
+  Token name;
+  vector<GenericParamDecl> genericParams;
+};
+
+class TypeDecl : public Decl {
+public:
+  TypeName typeName;
+  TypeDecl(NKind k, SourceSpan s, TypeName n,
+           AModifier modi = AModifier::PUBLIC)
+      : Decl(k, s, n.name.text, modi), typeName(n) {}
+};
+
 // 변수 선언을 표현하는 AST 노드를 나타낸다.
 // 타입, 초기화식, 가변성 및 루트 여부를 포함하며 값 심볼과 연결된다.
 // 타입은 항상 존재해야 하며 의미 분석 단계에서 symbol이 설정된다.
@@ -122,35 +139,40 @@ public:
   TypeNode::Ptr returnType;         // 반환 타입 (void면 BuiltinTypeNode void)
   StmtPtr body;
   DeclPrefix prefix;
+  vector<GenericParamDecl> genericParams;
 
   FuncDecl(SourceSpan t, const string &n, vector<shared_ptr<Param>> p,
-           TypeNode::Ptr ret, StmtPtr b, AModifier modi = AModifier::PUBLIC)
-      : Decl(NKind::FUNC_DECL, t, n, modi), params(std::move(p)),
-        returnType(std::move(ret)), body(std::move(b)) {
-    aModifier = modi;
-  }
-  FuncDecl(SourceSpan t, const string &n, vector<shared_ptr<Param>> p,
-           TypeNode::Ptr ret, StmtPtr b, DeclPrefix pre)
+           TypeNode::Ptr ret, vector<GenericParamDecl> g, StmtPtr b,
+           DeclPrefix pre)
       : Decl(NKind::FUNC_DECL, t, n, pre.modi), params(std::move(p)),
-        returnType(std::move(ret)), body(std::move(b)), prefix(pre) {
+        returnType(std::move(ret)), body(std::move(b)), prefix(pre),
+        genericParams(std::move(g)) {
     aModifier = prefix.modi;
   }
 
   void accept(ASTVisitor *visitor) override { visitor->visit(this); }
   MethodSymbol *methodSymbol = nullptr;
   ImplSymbol *isImpl = nullptr; // impl타입일 경우에만 할당
+
+protected:
+  FuncDecl(SourceSpan t, const string &n, vector<shared_ptr<Param>> p,
+           TypeNode::Ptr ret, StmtPtr b, AModifier modi = AModifier::PUBLIC)
+      : Decl(NKind::FUNC_DECL, t, n, modi), params(std::move(p)),
+        returnType(std::move(ret)), body(std::move(b)) {
+    aModifier = modi;
+  }
 };
 
 // 구조체 선언을 표현하는 AST 노드를 나타낸다.
 // 필드 목록을 보유하며 값 타입으로서의 데이터 구조를 정의한다.
 // 의미 분석 단계에서 TypeSymbol이 연결된다.
-class StructDecl : public Decl {
+class StructDecl : public TypeDecl {
 public:
   vector<shared_ptr<VarDecl>> fields;
   vector<shared_ptr<InitDecl>> inits;
-  StructDecl(SourceSpan t, const string &n, vector<shared_ptr<VarDecl>> f,
+  StructDecl(SourceSpan t, TypeName n, vector<shared_ptr<VarDecl>> f,
              vector<shared_ptr<InitDecl>> i, AModifier modi = AModifier::PUBLIC)
-      : Decl(NKind::STRUCT_DECL, t, n, modi), fields(std::move(f)),
+      : TypeDecl(NKind::STRUCT_DECL, t, n, modi), fields(std::move(f)),
         inits(std::move(i)) {
     aModifier = modi;
   }
@@ -169,23 +191,23 @@ struct StringDatum {
   StringDatum(const string &s, SourceSpan sp) : str(s), span(sp) {}
 };
 
-class ClassDecl : public Decl {
+class ClassDecl : public TypeDecl {
 public:
   vector<shared_ptr<VarDecl>> fields;
   vector<shared_ptr<FuncDecl>> methods;
-  optional<StringDatum> baseClass; // 단일 상속 (필요시 벡터로 변경)
-  vector<StringDatum> traits;      // trait/interface 목록
+  optional<TypeNode::Ptr> baseClass; // 단일 상속 (필요시 벡터로 변경)
+  vector<StringDatum> traits;        // trait/interface 목록
 
-  ClassDecl(SourceSpan t, const string &n, vector<shared_ptr<VarDecl>> f,
+  ClassDecl(SourceSpan t, TypeName n, vector<shared_ptr<VarDecl>> f,
             vector<shared_ptr<FuncDecl>> m,
-            optional<StringDatum> base = nullopt, vector<StringDatum> tr = {},
+            optional<TypeNode::Ptr> base = nullopt, vector<StringDatum> tr = {},
             AModifier modi = AModifier::PUBLIC)
-      : Decl(NKind::CLASS_DECL, t, n, modi), fields(f), methods(m),
+      : TypeDecl(NKind::CLASS_DECL, t, n, modi), fields(f), methods(m),
         baseClass(base), traits(std::move(tr)) {
     aModifier = modi;
   }
 
-  void setBaseClass(StringDatum b) { baseClass = b; }
+  void setBaseClass(TypeNode::Ptr b) { baseClass = b; }
   void accept(ASTVisitor *visitor) override { visitor->visit(this); }
   ObjectType *symbol = nullptr;
 };
@@ -193,7 +215,7 @@ public:
 // 열거형 선언을 표현하는 AST 노드를 나타낸다.
 // variant 목록과 선택적 payload를 포함하며 aliasing을 위한 baseEnum을 지원한다.
 // 각 variant는 별도의 EnumVariantSymbol과 연결된다.
-class EnumDecl : public Decl {
+class EnumDecl : public TypeDecl {
 public:
   struct Variant {
     Token token;
@@ -208,9 +230,9 @@ public:
 
   vector<shared_ptr<Variant>> variants;
 
-  EnumDecl(SourceSpan t, const string &n, vector<shared_ptr<Variant>> v = {},
+  EnumDecl(SourceSpan t, TypeName n, vector<shared_ptr<Variant>> v = {},
            AModifier modi = AModifier::PUBLIC)
-      : Decl(NKind::ENUM_DECL, t, n, modi), variants(std::move(v)) {
+      : TypeDecl(NKind::ENUM_DECL, t, n, modi), variants(std::move(v)) {
     aModifier = modi;
   }
 
@@ -223,12 +245,13 @@ public:
 // 실제 메서드 바인딩은 이후 단계에서 처리된다.
 class ImplDecl : public Decl {
 public:
-  StringDatum target;
+  TypeName target;
   vector<StringDatum> traits;
   unordered_map<TypeSymbol *, SourceSpan> traitSpan;
   vector<shared_ptr<FuncDecl>> LinkedImplMethods;
+  ImplSymbol *symbol = nullptr;
 
-  ImplDecl(SourceSpan t, StringDatum s, vector<StringDatum> tr,
+  ImplDecl(SourceSpan t, TypeName s, vector<StringDatum> tr,
            vector<shared_ptr<FuncDecl>> m, AModifier modi)
       : Decl(NKind::IMPL_DECL, t, "", modi), target(s), traits(std::move(tr)),
         LinkedImplMethods(std::move(m)) {}
@@ -262,10 +285,13 @@ public:
   string name;
   vector<shared_ptr<Param>> params;
   DeclPrefix prefix;
+  vector<GenericParamDecl> genericParams;
+
   TraitSig(SourceSpan t, TypeNode::Ptr ty, const string &n,
-           vector<shared_ptr<Param>> p, DeclPrefix pre)
+           vector<shared_ptr<Param>> p, vector<GenericParamDecl> g,
+           DeclPrefix pre)
       : Decl(NKind::TRAIT_SIG, t, n, pre.modi), type(ty), name(n),
-        params(std::move(p)), prefix(pre) {}
+        params(std::move(p)), prefix(pre), genericParams(std::move(g)) {}
   void accept(ASTVisitor *visitor) override { visitor->visit(this); }
   MethodSymbol *symbol = nullptr;
 };

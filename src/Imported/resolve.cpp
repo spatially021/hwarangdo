@@ -1,6 +1,8 @@
+#include "hrd/AST/ASTNode.h"
 #include "hrd/AST/Expr.h"
 #include "hrd/Imported/ImportedSymbolBuilder.h"
 #include "hrd/MetaData/MetaData.h"
+#include "hrd/SemanticAnalyzer/symbol/MethodSymbol.h"
 #include "hrd/SemanticAnalyzer/symbol/TypeSymbol.h"
 #include "hrd/SourceSpan.h"
 #include "hrd/Token.h"
@@ -8,11 +10,10 @@
 #include "hrd/util/Helper.h"
 #include <memory>
 #include <variant>
+#include <vector>
 
-void ImportedSymbolBuilder::resolveMethod(MethodMeta &ref) {
-  auto *symbol = getMethod(ref);
-
-  symbol->returnType = getOrCreateTypeRef(ref.returnType);
+void ImportedSymbolBuilder::resolveMethod(MethodMeta &ref, TypeSymbol *owner) {
+  auto *symbol = getMethod(owner, ref);
 
   for (size_t i = 0; i < symbol->params.size(); ++i) {
     if (!ref.params[i].defaultValue.has_value()) {
@@ -22,25 +23,28 @@ void ImportedSymbolBuilder::resolveMethod(MethodMeta &ref) {
     auto *pSymbol = symbol->params[i];
     auto &value = ref.params[i].defaultValue.value();
 
-    auto result = resolveDefault(value);
+    auto result = resolveDefault(value, symbol);
 
     if (!result) {
       Error::internal("failed to resolve default value");
     }
 
-    if (auto call = dynamic_cast<CallExpr *>(result.get())) {
+    if (auto *call = dynamic_cast<CallExpr *>(result.get())) {
       pSymbol->defaultValue = call;
       continue;
     }
-    if (auto lit = dynamic_cast<LiteralExpr *>(result.get())) {
+
+    if (auto *lit = dynamic_cast<LiteralExpr *>(result.get())) {
       pSymbol->defaultValue = lit;
       continue;
     }
+
     Error::internal("failed to resolve default value");
   }
 }
 
-Expr::Ptr ImportedSymbolBuilder::resolveDefault(DefaultValueMeta &ref) {
+Expr::Ptr ImportedSymbolBuilder::resolveDefault(DefaultValueMeta &ref,
+                                                MethodSymbol *method) {
   if (ref.kind == DefaultValueKind::Literal) {
     auto lit = make_shared<LiteralExpr>(SourceSpan(), Token(), "imported-lit");
 
@@ -49,8 +53,9 @@ Expr::Ptr ImportedSymbolBuilder::resolveDefault(DefaultValueMeta &ref) {
     }
 
     lit->resolvedLit = ref.literal.value();
-    lit->resolvedType = getOrCreateTypeRef(ref.resolvedType);
+    lit->resolvedType = getOrCreateTypeRef(ref.resolvedType, method);
 
+    lit->resolvedLit.type = lit->resolvedType;
     ast.push_back(lit);
 
     return lit;
@@ -61,17 +66,18 @@ Expr::Ptr ImportedSymbolBuilder::resolveDefault(DefaultValueMeta &ref) {
       Error::internal("default kind is init but type is nullopt");
     }
 
-    TypeSymbol *type = getOrCreateTypeRef(ref.type.value());
+    TypeSymbol *type = getOrCreateTypeRef(ref.type.value(), method);
 
     if (type == nullptr) {
       Error::internal("failed to resolve default init type");
     }
 
     std::vector<Expr::Ptr> args;
+    vector<TypeNode::Ptr> genericArgs;
     args.reserve(ref.args.size());
 
     for (auto &arg : ref.args) {
-      auto expr = resolveDefault(arg);
+      auto expr = resolveDefault(arg, method);
 
       if (!expr) {
         Error::internal("failed to resolve default init argument");
@@ -80,12 +86,12 @@ Expr::Ptr ImportedSymbolBuilder::resolveDefault(DefaultValueMeta &ref) {
       args.push_back(std::move(expr));
     }
 
-    MethodSymbol *init = resolveInit(type, ref.args);
+    MethodSymbol *init = resolveInit(type, ref.args, method);
 
-    auto call =
-        make_shared<CallExpr>(SourceSpan(), nullptr, "init", std::move(args));
+    auto call = make_shared<CallExpr>(SourceSpan(), nullptr, "init",
+                                      std::move(args), genericArgs);
 
-    call->resolvedType = getOrCreateTypeRef(ref.resolvedType);
+    call->resolvedType = getOrCreateTypeRef(ref.resolvedType, method);
     call->resolved = init;
 
     ast.push_back(call);
@@ -128,15 +134,16 @@ static bool isBetterThan(const vector<ArgMatchKind> &a,
 
 MethodSymbol *
 ImportedSymbolBuilder::resolveInit(TypeSymbol *type,
-                                   std::vector<DefaultValueMeta> &args) {
+                                   std::vector<DefaultValueMeta> &args,
+                                   MethodSymbol *method) {
   if (type == nullptr) {
     Error::internal("resolveInit: type is nullptr");
   }
-  if (!isa<ObjectType>(type)) {
+  if (!isa<ObjectType>(type->base())) {
     Error::internal("illegal kind");
   }
 
-  auto obj = dyn_cast<ObjectType>(type);
+  auto obj = dyn_cast<ObjectType>(type->base());
 
   if (obj->memberScope == nullptr) {
     Error::internal("resolveInit: type has no member scope");
@@ -173,8 +180,13 @@ ImportedSymbolBuilder::resolveInit(TypeSymbol *type,
     bool viable = true;
 
     for (size_t i = 0; i < args.size(); ++i) {
-      auto *argType = getOrCreateTypeRef(args[i].resolvedType);
+      auto *argType = getOrCreateTypeRef(args[i].resolvedType, method);
+
       auto *paramType = init->params[i]->typeSymbol;
+
+      if (auto generic = dyn_cast<GenericSymbol>(type)) {
+        paramType = substituteOwnerType(paramType, generic);
+      }
 
       if (argType == nullptr || paramType == nullptr) {
         Error::internal("resolveInit: unresolved argument or parameter type");

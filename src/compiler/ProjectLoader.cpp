@@ -1,5 +1,8 @@
 #include "hrd/compiler/ProjectLoader.h"
-#include "hrd/compiler/CompilerConfig.h"
+#include "hrd/compiler/CompilerStruct.h"
+
+#include "hrd/Inputs.h"
+
 #include <algorithm>
 #include <fstream>
 #include <iostream>
@@ -16,12 +19,9 @@ bool ProjectLoader::readTextFile(const fs::path &path, std::string &output) {
 
   std::ostringstream buffer;
   buffer << file.rdbuf();
-  output = std::move(buffer).str();
-  return true;
-}
 
-bool ProjectLoader::isProjectFile(const fs::path &path) {
-  return path.extension() == ".toml";
+  output = buffer.str();
+  return true;
 }
 
 bool ProjectLoader::isSourceFile(const fs::path &path) {
@@ -29,67 +29,91 @@ bool ProjectLoader::isSourceFile(const fs::path &path) {
 }
 
 std::optional<fs::path>
-ProjectLoader::findProjectFile(const fs::path &projectRoot) {
-  if (!fs::exists(projectRoot) || !fs::is_directory(projectRoot)) {
-    std::cerr << "project directory does not exist: " << projectRoot << '\n';
-    return std::nullopt;
-  }
+ProjectLoader::findManifest(const fs::path &projectRoot) {
+  const fs::path manifest = projectRoot / CompilerConfig::ProjectManifest;
 
-  std::vector<fs::path> candidates;
-
-  for (const auto &entry : fs::directory_iterator(projectRoot)) {
-    if (entry.is_regular_file() && isProjectFile(entry.path())) {
-      candidates.push_back(entry.path());
-    }
-  }
-
-  if (candidates.empty()) {
-    std::cerr << "project file was not found: " << projectRoot << '\n';
-    return std::nullopt;
-  }
-
-  if (candidates.size() != 1) {
-    std::cerr << "multiple project files were found:\n";
-
-    for (const auto &candidate : candidates) {
-      std::cerr << "  - " << candidate << '\n';
-    }
+  if (!fs::exists(manifest) || !fs::is_regular_file(manifest)) {
+    std::cerr << "project manifest was not found: " << manifest << '\n';
 
     return std::nullopt;
   }
 
-  return candidates.front();
+  return manifest;
 }
 
 std::optional<fs::path>
-ProjectLoader::findSourceDirectory(const fs::path &projectRoot) {
-  const fs::path sourceRoot =
-      fs::absolute(projectRoot / "src").lexically_normal();
+ProjectLoader::findSourceRoot(const fs::path &projectRoot) {
+  const fs::path sourceRoot = projectRoot / "src";
 
   if (!fs::exists(sourceRoot) || !fs::is_directory(sourceRoot)) {
     std::cerr << "source directory was not found: " << sourceRoot << '\n';
+
     return std::nullopt;
   }
 
   return sourceRoot;
 }
 
+bool ProjectLoader::loadConfig(const fs::path &manifestPath,
+                               ProjectConfig &config) {
+  try {
+    const toml::table manifest = toml::parse_file(manifestPath.string());
+
+    // Package
+    const auto *package = manifest["package"].as_table();
+
+    if (package == nullptr) {
+      std::cerr << "invalid project manifest: [package] table is missing\n";
+      return false;
+    }
+
+    const auto name = (*package)["name"].value<std::string>();
+    const auto developer = (*package)["developer"].value<std::string>();
+    const auto version = (*package)["version"].value<std::string>();
+
+    if (!name || name->empty()) {
+      std::cerr << "invalid project manifest: package.name is missing\n";
+      return false;
+    }
+
+    if (!developer || developer->empty()) {
+      std::cerr << "invalid project manifest: package.developer is missing\n";
+      return false;
+    }
+
+    if (!version || version->empty()) {
+      std::cerr << "invalid project manifest: package.version is missing\n";
+      return false;
+    }
+
+    config.package.name = *name;
+    config.package.developer = *developer;
+    config.package.version = *version;
+
+    return true;
+
+  } catch (const toml::parse_error &error) {
+    std::cerr << "invalid project manifest: " << error.description() << '\n';
+
+    return false;
+  }
+}
+
 bool ProjectLoader::collectSources(const fs::path &sourceRoot,
                                    std::vector<InputSource> &sources) {
+
   std::vector<fs::path> paths;
 
-  const fs::path normalizedSourceRoot =
-      fs::absolute(sourceRoot).lexically_normal();
+  for (const auto &entry : fs::recursive_directory_iterator(sourceRoot)) {
 
-  for (const auto &entry :
-       fs::recursive_directory_iterator(normalizedSourceRoot)) {
     if (entry.is_regular_file() && isSourceFile(entry.path())) {
       paths.push_back(entry.path().lexically_normal());
     }
   }
 
   if (paths.empty()) {
-    std::cerr << "no source files found: " << normalizedSourceRoot << '\n';
+    std::cerr << "no source files found: " << sourceRoot << '\n';
+
     return false;
   }
 
@@ -106,6 +130,7 @@ bool ProjectLoader::collectSources(const fs::path &sourceRoot,
 
     if (!readTextFile(path, source.text)) {
       std::cerr << "failed to read source file: " << path << '\n';
+
       return false;
     }
 
@@ -117,6 +142,7 @@ bool ProjectLoader::collectSources(const fs::path &sourceRoot,
 
 SourcePath ProjectLoader::makeSourcePath(const fs::path &path,
                                          const fs::path &sourceRoot) {
+
   const fs::path relative =
       path.lexically_relative(sourceRoot).replace_extension();
 
@@ -130,74 +156,40 @@ SourcePath ProjectLoader::makeSourcePath(const fs::path &path,
 }
 
 std::optional<ProjectInput> ProjectLoader::load(const fs::path &projectRoot) {
-  const auto projectFile = findProjectFile(projectRoot);
 
-  if (!projectFile) {
+  const fs::path root = fs::absolute(projectRoot).lexically_normal();
+
+  if (!fs::exists(root) || !fs::is_directory(root)) {
+    std::cerr << "project directory does not exist: " << root << '\n';
+
     return std::nullopt;
   }
 
-  const auto sourceRoot = findSourceDirectory(projectRoot);
+  const auto manifestPath = findManifest(root);
+
+  if (!manifestPath) {
+    return std::nullopt;
+  }
+
+  const auto sourceRoot = findSourceRoot(root);
 
   if (!sourceRoot) {
     return std::nullopt;
   }
 
   ProjectInput input;
-  input.rootPath = projectRoot.string();
-  input.projectFilePath = projectFile->string();
-  input.srcPath = sourceRoot->string();
 
-  if (!collectSources(*sourceRoot, input.sources)) {
+  input.rootPath = root;
+  input.manifestPath = *manifestPath;
+  input.sourceRoot = *sourceRoot;
+
+  if (!loadConfig(input.manifestPath, input.config)) {
     return std::nullopt;
   }
-  input.config = loadModuleConfig(projectRoot);
+
+  if (!collectSources(input.sourceRoot, input.sources)) {
+    return std::nullopt;
+  }
+
   return input;
-}
-
-ModuleConfigResult
-ProjectLoader::loadModuleConfig(const std::filesystem::path &rootPath) {
-  const auto path = rootPath / CompilerConfig::MoudleConfig;
-
-  if (!std::filesystem::exists(path)) {
-    return {
-        ModuleConfigStatus::Missing,
-        "module",
-        "",
-    };
-  }
-
-  try {
-    const toml::table config = toml::parse_file(path.string());
-
-    const auto *module = config["module"].as_table();
-    if (module == nullptr) {
-      return {
-          ModuleConfigStatus::Invalid,
-          "module",
-          "[module] table is missing",
-      };
-    }
-
-    const auto name = (*module)["name"].value<std::string>();
-
-    if (!name || name->empty()) {
-      return {
-          ModuleConfigStatus::Invalid,
-          "module",
-          "module.name is missing",
-      };
-    }
-
-    return {
-        ModuleConfigStatus::Loaded,
-        *name,
-        "",
-    };
-  } catch (const toml::parse_error &error) {
-    return {
-        ModuleConfigStatus::Invalid,
-        "module",
-        std::string(error.description()),
-    };
-  }
 }

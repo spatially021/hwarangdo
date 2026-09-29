@@ -4,6 +4,8 @@
 #include <string>
 #include <vector>
 
+namespace fs = std::filesystem;
+
 struct SourcePath {
   std::vector<std::string> segments;
 
@@ -28,10 +30,21 @@ struct ModuleConfigResult {
   std::string errorMessage;
 };
 
+struct PackageConfig {
+  std::string name;
+  std::string developer;
+  std::string version;
+};
+
+struct ProjectConfig {
+  PackageConfig package;
+};
+
 struct ProjectInput {
-  std::filesystem::path rootPath;
-  std::filesystem::path projectFilePath;
-  std::filesystem::path srcPath;
+  fs::path rootPath;
+  fs::path manifestPath;
+  fs::path sourceRoot;
+
+  ProjectConfig config;
   std::vector<InputSource> sources;
-  ModuleConfigResult config;
 };

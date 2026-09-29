@@ -4,31 +4,27 @@
 
 #include <filesystem>
 #include <optional>
+#include <string>
+#include <vector>
 
 namespace fs = std::filesystem;
 
 class ProjectLoader {
 public:
-  static std::optional<ProjectInput>
-  load(const std::filesystem::path &projectRoot);
+  std::optional<ProjectInput> load(const fs::path &projectRoot);
 
 private:
-  static std::optional<std::filesystem::path>
-  findProjectFile(const std::filesystem::path &projectRoot);
+  std::optional<fs::path> findManifest(const fs::path &projectRoot);
+  std::optional<fs::path> findSourceRoot(const fs::path &projectRoot);
 
-  static std::optional<std::filesystem::path>
-  findSourceDirectory(const std::filesystem::path &projectRoot);
+  bool loadConfig(const fs::path &manifestPath, ProjectConfig &config);
 
-  static bool collectSources(const std::filesystem::path &sourceRoot,
-                             std::vector<InputSource> &sources);
+  bool collectSources(const fs::path &sourceRoot,
+                      std::vector<InputSource> &sources);
 
-  static bool readTextFile(const std::filesystem::path &path,
-                           std::string &output);
+  SourcePath makeSourcePath(const fs::path &path, const fs::path &sourceRoot);
 
-  static bool isProjectFile(const std::filesystem::path &path);
-  static bool isSourceFile(const std::filesystem::path &path);
-  static ModuleConfigResult
-  loadModuleConfig(const std::filesystem::path &rootPath);
-  static SourcePath makeSourcePath(const fs::path &path,
-                                   const fs::path &sourceRoot);
+  bool readTextFile(const fs::path &path, std::string &output);
+
+  bool isSourceFile(const fs::path &path);
 };

@@ -33,6 +33,7 @@ target_link_libraries(hrd_core
     PRIVATE
         hrd_runtime_headers
         tomlplusplus::tomlplusplus
+        miniz
 )
 
 # ============================================================
